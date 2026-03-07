@@ -2,173 +2,275 @@ import streamlit as st
 import pandas as pd
 import yfinance as yf
 import plotly.express as px
+import numpy as np
 from database import get_all_transactions
 
 st.set_page_config(layout="wide", page_title="My Portfolio")
 
-# --- DATA FETCHING ---
 raw_data = get_all_transactions()
 
 if not raw_data:
     st.title("Current Portfolio")
-    st.warning("No transactions found. Go to the Transactions page to add some!")
+    st.warning("No transactions found.")
 else:
     df = pd.DataFrame(raw_data)
 
     # Defensive columns
-    for col in ["ticker", "isin", "quantity", "action", "category"]:
+    for col in ["ticker", "isin", "quantity", "action", "category", "currency", "name"]:
         if col not in df.columns:
-            df[col] = "Unknown" if col in ["ticker", "isin", "category"] else 0
+            df[col] = "Unknown" if col != "quantity" else 0
 
     df['id'] = df['ticker'].replace("", None).fillna(df['isin']).fillna("Unknown")
+    df['adj_qty'] = df.apply(lambda x: x['quantity'] if x['action'] == 'Buy' else -x['quantity'], axis=1)
 
-    # Buy/Sell Math
-    df['adj_qty'] = df.apply(
-        lambda x: x['quantity'] if x['action'] == 'Buy' else -x['quantity'],
-        axis=1
-    )
 
-    # Aggregation
+    # 1. PRE-CALCULATE AVG BUY PRICE (Weighted)
+    def calc_avg_price(group):
+        buys = group[group['action'] == 'Buy']
+        if buys.empty: return 0
+        return (buys['quantity'] * buys['price']).sum() / buys['quantity'].sum()
+
+
+    avg_prices = df.groupby('id').apply(calc_avg_price, include_groups=False).to_dict()
+
+    # 2. AGGREGATE SUMMARY
     summary = df.groupby("id").agg({
         "adj_qty": "sum",
-        "category": "first"
+        "category": "first",
+        "name": "first",
+        "ticker": "first",
+        "isin": "first",
+        "currency": "first"
     }).reset_index()
 
     summary.rename(columns={"adj_qty": "Total Shares", "id": "Asset"}, inplace=True)
     summary = summary[summary["Total Shares"] > 0]
 
-    if summary.empty:
-        st.title("💰 Current Portfolio")
-        st.info("You currently have no open positions.")
-    else:
-        # --- MARKET DATA FETCHING ---
-        asset_list = summary["Asset"].tolist()
-
+    if not summary.empty:
         try:
-            # 1. Fetch data
-            live_data_full = yf.download(asset_list, period="5d")['Close']  # Fetch 5 days to ensure we get data
+            # 1. FETCH DATA (Assets + Benchmark + FX + 10Y Treasury)
+            asset_list = summary["Asset"].tolist()
+            benchmark_ticker = "^GSPC"  # S&P 500
+            rf_ticker = "^TNX"  # 10-Year Treasury Yield
+            all_tickers = asset_list + [benchmark_ticker, rf_ticker, "EURUSD=X"]
 
-            # Fill any gaps (like weekends/holidays) by carrying the last known price forward
-            live_data_full = live_data_full.ffill()
+            # Fetch 1 year of daily data
+            market_data = yf.download(all_tickers, period="1y", progress=False)['Close'].ffill()
 
-            current_prices = live_data_full.iloc[-1]
-            prev_prices = live_data_full.iloc[-2]
+            # Current Prices & FX
+            current_prices = market_data.iloc[-1]
+            eur_usd = float(market_data["EURUSD=X"].iloc[-1])
 
-            # 2. Map to summary
-            if len(asset_list) == 1:
-                # If only 1 ticker, live_data_full is a Series.
-                # We convert to a dict to make mapping easy.
-                current_dict = {asset_list[0]: live_data_full.iloc[-1]}
-                prev_dict = {asset_list[0]: live_data_full.iloc[-2]}
-            else:
-                # If multiple tickers, it's a DataFrame
-                current_dict = live_data_full.iloc[-1].to_dict()
-                prev_dict = live_data_full.iloc[-2].to_dict()
+            # Risk-Free Rate: ^TNX returns the yield as a percentage (e.g., 4.25)
+            # We divide by 100 to get the decimal (0.0425)
+            current_rf_annual = float(market_data["^TNX"].iloc[-1]) / 100
+            # Daily risk-free rate (approximate)
+            rf_daily = current_rf_annual / 252
 
-            summary["Current Price"] = summary["Asset"].map(current_dict).astype(float)
-            summary["Prev Price"] = summary["Asset"].map(prev_dict).astype(float)
+            # 2. CALCULATE PERFORMANCE COLUMNS
+            summary["Avg Buy Price"] = summary["Asset"].map(avg_prices)
+            summary["Current Price"] = summary["Asset"].map(current_prices)
 
-            # 3. Handle potential NaNs before math
-            summary = summary.dropna(subset=["Current Price"])
 
-            summary["Market Value"] = summary["Total Shares"] * summary["Current Price"]
-            summary["Daily Change $"] = summary["Total Shares"] * (summary["Current Price"] - summary["Prev Price"])
+            def convert_to_eur(row, price_col):
+                if row['currency'] == 'USD':
+                    return row[price_col] / eur_usd
+                return row[price_col]
 
-            # --- HEADER METRICS (REINFORCED) ---
-            total_value = summary["Market Value"].sum()
-            total_daily_change = summary["Daily Change $"].sum()
 
-            # Prevent division by zero or NaN
-            denominator = total_value - total_daily_change
-            change_percent = (total_daily_change / denominator * 100) if denominator != 0 else 0
+            summary["Current Price (EUR)"] = summary.apply(lambda x: convert_to_eur(x, "Current Price"), axis=1)
+            summary["Avg Buy Price (EUR)"] = summary.apply(lambda x: convert_to_eur(x, "Avg Buy Price"), axis=1)
+            summary["Market Value (EUR)"] = summary["Total Shares"] * summary["Current Price (EUR)"]
+            summary["PnL (EUR)"] = (summary["Current Price (EUR)"] - summary["Avg Buy Price (EUR)"]) * summary[
+                "Total Shares"]
+            summary["PnL (%)"] = (summary["Current Price (EUR)"] / summary["Avg Buy Price (EUR)"] - 1) * 100
 
-            st.title("💰 Current Portfolio")
+            total_port_value = summary["Market Value (EUR)"].sum()
+            summary["Weight (%)"] = (summary["Market Value (EUR)"] / total_port_value) * 100
 
+            # 3. CALCULATE ALPHA & BETA (CAPM Model)
+            returns = market_data.pct_change().dropna()
+            betas = {}
+            alphas = {}
+
+            for ticker in asset_list:
+                try:
+                    # Excess returns (Asset - Rf and Market - Rf)
+                    asset_excess = returns[ticker] - rf_daily
+                    market_excess = returns[benchmark_ticker] - rf_daily
+
+                    # Beta = Covariance(Asset, Market) / Variance(Market)
+                    # We use excess returns for a more professional calculation
+                    covariance = np.cov(asset_excess, market_excess)[0, 1]
+                    variance = np.var(market_excess)
+                    beta = covariance / variance
+                    betas[ticker] = beta
+
+                    # Jensen's Alpha (Annualized)
+                    # Alpha = (Asset Annual Return - Rf) - Beta * (Market Annual Return - Rf)
+                    asset_ann_ret = returns[ticker].mean() * 252
+                    market_ann_ret = returns[benchmark_ticker].mean() * 252
+
+                    alpha = (asset_ann_ret - current_rf_annual) - beta * (market_ann_ret - current_rf_annual)
+                    alphas[ticker] = alpha
+                except:
+                    betas[ticker], alphas[ticker] = 0, 0
+
+            summary["Beta"] = summary["Asset"].map(betas)
+            summary["Alpha"] = summary["Asset"].map(alphas)
+
+            # --- DISPLAY DASHBOARD ---
+            st.title("Portfolio Dashboard")
+
+            # Top Metrics
             m1, m2, m3 = st.columns(3)
-            m1.metric("Total Net Worth", f"${total_value:,.2f}")
+            m1.metric("Total Value (EUR)", f"€{total_port_value:,.2f}")
 
-            # Use 'delta' only if we have a valid change
-            m2.metric("Today's Change", f"${total_daily_change:,.2f}", f"{change_percent:.2f}%")
+            total_pnl_eur = summary["PnL (EUR)"].sum()
+            m2.metric("Total PnL (EUR)", f"€{total_pnl_eur:,.2f}", f"{(total_pnl_eur / total_port_value) * 100:.2f}%")
 
-            # Only calculate 'Top Asset' if summary isn't empty after dropping NaNs
-            if not summary.empty:
-                # Calculate daily return % for each asset
-                summary["Return %"] = (summary["Current Price"] / summary["Prev Price"] - 1) * 100
-                best_asset_row = summary.loc[summary["Return %"].idxmax()]
-                m3.metric("Top Asset Today", best_asset_row["Asset"], f"{best_asset_row['Return %']:.2f}%")
+            m3.metric("Risk-Free Rate (10Y)", f"{current_rf_annual * 100:.2f}%")
 
+            # REFINED TABLE
+            st.subheader("Asset Breakdown")
+            display_cols = [
+                "category", "name", "ticker", "isin", "Avg Buy Price (EUR)",
+                "Current Price (EUR)", "Market Value (EUR)", "PnL (%)",
+                "PnL (EUR)", "Weight (%)", "Beta", "Alpha"
+            ]
+
+            st.dataframe(
+                summary[display_cols].style.format({
+                    "Avg Buy Price (EUR)": "€{:.2f}",
+                    "Current Price (EUR)": "€{:.2f}",
+                    "Market Value (EUR)": "€{:,.2f}",
+                    "PnL (%)": "{:.2f}%",
+                    "PnL (EUR)": "€{:,.2f}",
+                    "Weight (%)": "{:.2f}%",
+                    "Beta": "{:.2f}",
+                    "Alpha": "{:.4f}"
+                }).background_gradient(subset=['PnL (%)'], cmap='RdYlGn')
+                .background_gradient(subset=['Alpha'], cmap='RdYlGn'),
+                width='stretch', hide_index=True
+            )
+
+            # --- 2. ALLOCATION PIE CHART ---
             st.markdown("---")
+            st.subheader("Portfolio Diversification")
 
-            # 1. DISPLAY TABLE
-            st.subheader("Holdings Overview")
-            st.dataframe(summary[["Asset", "category", "Total Shares", "Current Price", "Market Value"]].style.format({
-                "Total Shares": "{:.2f}",
-                "Current Price": "${:.2f}",
-                "Market Value": "${:,.2f}"
-            }), width='stretch', hide_index=True)
+            # Create two equal-width columns
+            col_left, col_right = st.columns(2)
 
-            # 2. ALLOCATION PIE CHART
+            with col_left:
+                st.write("**By Category**")
+                cat_data = summary.groupby("category")["Market Value (EUR)"].sum().reset_index()
+                fig_cat = px.pie(
+                    cat_data,
+                    values='Market Value (EUR)',
+                    names='category',
+                    hole=0.4,
+                    color_discrete_sequence=px.colors.qualitative.Prism
+                )
+                # This 'width' parameter is what makes it fit inside the column
+                st.plotly_chart(fig_cat, width='stretch')
+
+            with col_right:
+                st.write("**By Asset Name**")
+                # Group by Name/Ticker
+                name_data = summary.groupby("name")["Market Value (EUR)"].sum().reset_index()
+                fig_name = px.pie(
+                    name_data,
+                    values='Market Value (EUR)',
+                    names='name',
+                    hole=0.4,
+                    color_discrete_sequence=px.colors.qualitative.Pastel
+                )
+                # Again, 'stretch' ensures it respects the column boundary
+                st.plotly_chart(fig_name, width='stretch')
+
+            # with col_stats:
+            #     st.subheader("Concentration Risk")
+            #     # Find your most heavily weighted asset
+            #     top_asset = summary.loc[summary["Weight (%)"].idxmax()]
+            #     st.write(f"**Largest Holding:** {top_asset['name'] or top_asset['Asset']}")
+            #     st.progress(top_asset["Weight (%)"] / 100)
+            #     st.write(f"This asset represents **{top_asset['Weight (%)']:.2f}%** of your total portfolio.")
+            #     # Display total count
+            #     st.write(f"**Total Positions:** {len(summary)}")
+
+            # --- 3. ALL ASSET PERFORMANCE HISTORIES ---
             st.markdown("---")
-            col_chart, col_empty = st.columns([2, 1])
+            st.subheader("Asset Performance & Transaction History")
 
-            with col_chart:
-                st.subheader("Diversification by Category")
-                cat_data = summary.groupby("category")["Market Value"].sum().reset_index()
-                fig = px.pie(cat_data, values='Market Value', names='category', hole=0.4,
-                             color_discrete_sequence=px.colors.qualitative.Prism)
-                st.plotly_chart(fig, width='stretch')
+            # We fetch all historical data in one go if possible, or iterate
+            for asset in asset_list:
+                with st.expander(f"📈 {asset} Detail Analysis", expanded=True):
+                    # Fetch 1y history
+                    hist_data = yf.download(asset, period="1y", progress=False)
 
-                # 3. HISTORICAL PRICE PLOT
-                st.markdown("---")
-                st.subheader("Asset Performance History")
-                selected_asset = st.selectbox("Select an asset to view price history:", asset_list)
+                    if not hist_data.empty:
+                        # Flatten columns and reset index for Plotly
+                        if isinstance(hist_data.columns, pd.MultiIndex):
+                            hist_data.columns = hist_data.columns.get_level_values(0)
+                        hist_plot_df = hist_data.reset_index()
 
-                # Fetch historical data
-                # ... (Inside your historical plot logic) ...
-                hist_data = yf.download(selected_asset, period="1y", progress=False)
-
-                if not hist_data.empty:
-                    # Modern column flattening
-                    if isinstance(hist_data.columns, pd.MultiIndex):
-                        hist_data.columns = hist_data.columns.get_level_values(0)
-
-                    hist_plot_df = hist_data.reset_index()
-
-                    # --- NEW: Calculate Average Buy Price for this asset ---
-                    # Filter original df for ONLY 'Buy' actions of this asset
-                    buys = df[(df['id'] == selected_asset) & (df['action'] == 'Buy')]
-                    if not buys.empty:
-                        avg_buy_price = (buys['quantity'] * buys['price']).sum() / buys['quantity'].sum()
-                    else:
-                        avg_buy_price = None
-
-                    # Create the Line Chart
-                    fig_line = px.line(
-                        hist_plot_df,
-                        x="Date",
-                        y="Close",
-                        title=f"{selected_asset} - Performance vs. Your Cost Basis",
-                        labels={"Close": "Price ($)", "Date": "Timeline"},
-                        template="plotly_white"  # Clean desktop look
-                    )
-
-                    # --- NEW: Add the Horizontal 'Cost Basis' Line ---
-                    if avg_buy_price:
-                        fig_line.add_hline(
-                            y=avg_buy_price,
-                            line_dash="dash",
-                            line_color="green",
-                            annotation_text=f"Avg Buy: ${avg_buy_price:.2f}",
-                            annotation_position="bottom right"
+                        # 1. Create the Base Line Chart
+                        fig = px.line(
+                            hist_plot_df,
+                            x="Date",
+                            y="Close",
+                            title=f"{asset} Historical Price (vs. Transactions)",
+                            labels={"Close": "Price ($)", "Date": "Timeline"},
+                            template="plotly_white"
                         )
 
-                    # Add a nice gradient/color
-                    fig_line.update_traces(line_color='#007BFF')
-                    st.plotly_chart(fig_line, width="stretch")
+                        # 2. Add "Buy" and "Sell" markers from your Firestore 'df'
+                        # Filter transactions for THIS specific asset
+                        asset_txs = df[df['id'] == asset].copy()
+                        # Ensure date is in datetime format for alignment with x-axis
+                        asset_txs['date'] = pd.to_datetime(asset_txs['date'])
 
-                else:
-                    st.error("No historical data found for this ticker.")
+                        # Add Buy Markers (Green Up-Arrows)
+                        buys = asset_txs[asset_txs['action'] == 'Buy']
+                        if not buys.empty:
+                            fig.add_trace(px.scatter(
+                                buys, x='date', y='price',
+                                color_discrete_sequence=['#2ECC71']
+                            ).data[0].update(
+                                name="Buy",
+                                marker=dict(size=12, symbol='triangle-up', line=dict(width=2, color='DarkGreen')),
+                                hovertemplate="<b>BUY</b><br>Date: %{x}<br>Price: $%{y:.2f}"
+                            ))
+
+                        # Add Sell Markers (Red Down-Arrows)
+                        sells = asset_txs[asset_txs['action'] == 'Sell']
+                        if not sells.empty:
+                            fig.add_trace(px.scatter(
+                                sells, x='date', y='price',
+                                color_discrete_sequence=['#E74C3C']
+                            ).data[0].update(
+                                name="Sell",
+                                marker=dict(size=12, symbol='triangle-down', line=dict(width=2, color='DarkRed')),
+                                hovertemplate="<b>SELL</b><br>Date: %{x}<br>Price: $%{y:.2f}"
+                            ))
+
+                        # 3. Add the Average Cost Basis Line (Break-even)
+                        asset_summary = summary[summary['Asset'] == asset].iloc[0]
+                        avg_price = asset_summary['Avg Buy Price']
+
+                        fig.add_hline(
+                            y=avg_price,
+                            line_dash="dash",
+                            line_color="rgba(46, 204, 113, 0.5)",
+                            annotation_text=f"Cost Basis: ${avg_price:.2f}",
+                            annotation_position="top left"
+                        )
+
+                        # Final styling
+                        fig.update_layout(showlegend=True, hovermode="x unified")
+                        st.plotly_chart(fig, width="stretch")
+                    else:
+                        st.error(f"Could not load historical data for {asset}")
 
         except Exception as e:
-            st.error(f"Error updating market data: {e}")
-            st.dataframe(summary)
+            st.error(f"Analysis Error: {e}")

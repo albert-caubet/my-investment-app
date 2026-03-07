@@ -2,7 +2,7 @@ import streamlit as st
 from datetime import datetime
 from database import record_transaction, get_timestamp
 
-st.title("📝 Log New Transaction")
+st.title("Log New Transaction")
 
 # Define your standard categories
 ASSET_CLASSES = [
@@ -31,6 +31,7 @@ with st.form("trade_form", clear_on_submit=True):
 
     with col2:
         action = st.selectbox("Action", ["Buy", "Sell"])
+        currency = st.selectbox("Currency", ["EUR", "USD"])
         quantity = st.number_input("Quantity", min_value=0.0, step=0.01)
         price = st.number_input("Price per Unit", min_value=0.0, step=0.01)
         fees = st.number_input("Fees", min_value=0.0, step=0.01)
@@ -57,6 +58,7 @@ with st.form("trade_form", clear_on_submit=True):
                 "date": date_input.strftime("%Y-%m-%d"),
                 "category": category,
                 "action": action,
+                "currency": currency,
                 "quantity": quantity,
                 "price": price,
                 "fees": fees,
