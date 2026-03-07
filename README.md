@@ -16,6 +16,9 @@ A modern, Streamlit-based investment portfolio dashboard. This application allow
   - Integration with `yfinance` to fetch live prices and historical performance.
 - **Cloud Database**:
   - Powered by Google Firebase for reliable, multi-device data synchronization.
+  - [Homepage](https://console.firebase.google.com/u/1/)
+  - [Project](https://console.firebase.google.com/u/1/project/my-portfolio-7d821/overview)
+  - [Database](https://console.firebase.google.com/u/1/project/my-portfolio-7d821/firestore/databases/-default-/data/~2Ftransactions~2FFNjXuqNnzeW1BQCx6D2f)
 
 ## Prerequisites
 
