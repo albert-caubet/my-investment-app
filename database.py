@@ -31,7 +31,7 @@ def record_transaction(data):
 # 3. Helper function to get all transactions
 def get_all_transactions():
     db = init_db()
-    docs = db.collection("transactions").stream()
+    docs = db.collection("transactions").order_by("date", direction="DESCENDING").stream()
     return [doc.to_dict() for doc in docs]
 
 

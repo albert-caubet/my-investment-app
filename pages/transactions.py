@@ -1,6 +1,7 @@
 import streamlit as st
 from datetime import datetime
-from database import record_transaction, get_timestamp, get_historical_fx
+from database import record_transaction, get_timestamp, get_historical_fx, get_all_transactions
+import pandas as pd
 
 st.title("Log New Transaction")
 
@@ -85,3 +86,50 @@ with st.form("trade_form", clear_on_submit=True):
                 st.success(f"Successfully recorded {ticker_clean or isin_clean}")
             except Exception as e:
                 st.error(f"Error saving to database: {e}")
+
+from database import get_all_transactions  # Ensure this is imported
+
+
+# ======================================================================================================================
+# --- 1. FETCH ALL TRANSACTIONS ---
+# ======================================================================================================================
+
+st.markdown("---")
+st.subheader("Transaction History Log")
+
+raw_logs = get_all_transactions()
+
+if not raw_logs:
+    st.info("No transactions recorded yet.")
+else:
+    # 2. CONVERT TO DATAFRAME
+    log_df = pd.DataFrame(raw_logs)
+
+    # 3. CLEAN UP FOR DISPLAY
+    # Sort by date (newest first)
+    if 'date' in log_df.columns:
+        log_df['date'] = pd.to_datetime(log_df['date'])
+        log_df = log_df.sort_values(by='date', ascending=False)
+
+    # Define the columns to show in a logical order
+    # We include 'cost_eur' and 'fx_rate_at_buy' to see the "Accounting" behind the scenes
+    cols_to_display = [
+        "date", "category", "name", "ticker", "isin", "action",
+        "quantity", "price_nominal", "currency", "fx_rate_at_buy", "cost_eur"
+    ]
+
+    # Only select columns that actually exist in the DB (defensive)
+    existing_cols = [c for c in cols_to_display if c in log_df.columns]
+
+    # 4. RENDER THE TABLE
+    st.dataframe(
+        log_df[existing_cols].style.format({
+            "date": lambda x: x.strftime('%Y-%m-%d'),
+            "quantity": "{:.2f}",
+            "price_nominal": "{:.2f}",
+            "fx_rate_at_buy": "{:.4f}",
+            "cost_eur": "€ {:.2f}"
+        }),
+        use_container_width=True,
+        hide_index=True
+    )
