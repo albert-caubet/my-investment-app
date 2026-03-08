@@ -5,9 +5,7 @@ import plotly.express as px
 import numpy as np
 from database import get_all_transactions
 
-# TODO: fix the bug regarding the currency displayed in the portfolio
-# TODO: if there is an ISIN, use that instead of the ticker
-# TODO: display the name of the asset as per yfinance in the plots (or in the table, and do not log it)
+# TODO: add the list of historical transactions in the transactions tab
 
 
 # --- CACHED FUNCTIONS ---
@@ -27,6 +25,41 @@ def fetch_historical_data(ticker, period):
     return data
 
 
+@st.cache_data(ttl=86400) # Cache for 24 hours as currency rarely changes
+def fetch_ticker_currency(tickers):
+    """Fetches the official listing currency from Yahoo Finance."""
+    currencies = {}
+    for t in tickers:
+        try:
+            # Skip benchmark/fx tickers
+            if "=" in t or "^" in t: continue
+            info = yf.Ticker(t).info
+            currencies[t] = info.get("currency", "???")
+        except:
+            currencies[t] = "Unknown"
+    return currencies
+
+
+@st.cache_data(ttl=3600)  # Refresh every hour
+def fetch_rich_metadata(tickers):
+    """Fetches Analyst Targets, Currency, and Full Name."""
+    metadata = {}
+    for t in tickers:
+        try:
+            if "^" in t or "=" in t: continue
+            ticker_obj = yf.Ticker(t)
+            info = ticker_obj.info
+
+            metadata[t] = {
+                "Market Currency": info.get("currency", "???"),
+                "Company Name": info.get("displayName", t),  # shortName, longName
+                "Current Price": info.get("currentPrice") or info.get("regularMarketPrice")
+            }
+        except Exception:
+            metadata[t] = {"Market Currency": "???", "Analyst Target": np.nan, "Company Name": t}
+    return metadata
+
+
 st.set_page_config(layout="wide", page_title="My Portfolio")
 
 raw_data = get_all_transactions()
@@ -42,7 +75,7 @@ else:
         if col not in df.columns:
             df[col] = "Unknown" if col != "quantity" else 0
 
-    df['id'] = df['ticker'].replace("", None).fillna(df['isin']).fillna("Unknown")
+    df['id'] = df['isin'].replace("", None).fillna(df['ticker']).fillna("Unknown")
     df['adj_qty'] = df.apply(lambda x: x['quantity'] if x['action'] == 'Buy' else -x['quantity'], axis=1)
 
 
@@ -88,8 +121,22 @@ else:
         try:
             # # 3. LIVE MARKET DATA (Assets + Benchmark + FX + 10Y Treasury)
             asset_list = summary["Asset"].tolist()
+
+            # Fetch official currencies
+            # official_currencies = fetch_ticker_currency(asset_list)
+            # summary["Ccy"] = summary["Asset"].map(official_currencies) # Map them to a new column
+            # or...
+            metadata = fetch_rich_metadata(asset_list)
+            # summary["Ccy"] = summary["Asset"].map(lambda x: metadata.get(x, {}).get("Market Currency"))
+            summary["Ccy"] = [metadata.get(ticker, {}).get("Market Currency") for ticker in summary["Asset"]]
+
+            # Fetch the OFFICIAL company display name
+            summary["Official Name"] = [metadata.get(ticker, {}).get("Company Name") for ticker in summary["Asset"]]
+
+            # Benchmarks
             benchmark_ticker = "^GSPC"  # S&P 500, USA
             rf_ticker = "^TNX"  # 10-Year Treasury Yield, USA
+
             all_tickers = asset_list + ["EURUSD=X", benchmark_ticker, rf_ticker]
             # all_tickers = summary["Asset"].tolist() + ["EURUSD=X", benchmark_ticker, rf_ticker]
 
@@ -197,7 +244,7 @@ else:
             # REFINED TABLE
             st.subheader("Asset Breakdown")
             display_cols = [
-                "category", "name", "ticker", "isin", "Avg Buy (Nom)",
+                "category", "name", "ticker", "isin", "Ccy", "Avg Buy (Nom)",
                 "Curr Price (Nom)", "Price Change (%)", "Cost Basis (EUR)", "Market Value (EUR)", "PnL (%)",
                 "PnL (EUR)", "Weight (%)", "Beta", "Alpha"
             ]
@@ -207,8 +254,8 @@ else:
 
             st.dataframe(
                 summary[display_cols].style.format({
-                    "Avg Buy (Nom)": "€ {:.2f}",
-                    "Curr Price (Nom)": "€ {:.2f}",
+                    "Avg Buy (Nom)": "{:.2f}",
+                    "Curr Price (Nom)": "{:.2f}",
                     "Price Change (%)": "{:.1f} %",
                     "Cost Basis (EUR)": "€ {:.2f}",
                     "Market Value (EUR)": "€ {:,.2f}",
@@ -289,12 +336,23 @@ else:
             selected_label = st.selectbox("Select Time Range", options=list(time_options.keys()), index=1)  # Default to 1 Year
             selected_period = time_options[selected_label]
 
+            # st.write(asset_list)
+
             # We fetch all historical data in one go if possible, or iterate
-            for asset in asset_list:
-                with st.expander(f"📈 {asset} Detail Analysis", expanded=True):
+            # for asset in asset_list:
+            #     asset_name = metadata.get(asset, {}).get("Company Name", asset)
+
+            for index, row in summary.iterrows():
+                asset_ticker = row["Asset"]
+                # Pull the name you wrote when logging the transaction
+                custom_name = row["name"] if row["name"] != "Unknown" else asset_ticker
+                official_name = row["Official Name"] if row["Official Name"] else asset_ticker
+                currency = row["Ccy"]
+
+                with st.expander(f"📈 {custom_name}", expanded=True):
                     # Fetch the selected period
                     # hist_data = yf.download(asset, period=selected_period, progress=False)
-                    hist_data = fetch_historical_data(asset, selected_period)
+                    hist_data = fetch_historical_data(asset_ticker, selected_period)
 
                     if not hist_data.empty:
                         # Flatten columns and reset index for Plotly
@@ -307,14 +365,14 @@ else:
                             hist_plot_df,
                             x="Date",
                             y="Close",
-                            title=f"{asset} Historical Price - {selected_label}",
+                            title=f"{official_name} ({currency}, {asset_ticker}) - {selected_label}",
                             labels={"Close": "Price", "Date": "Timeline"},
                             template="plotly_white"
                         )
 
                         # 2. Add "Buy" and "Sell" markers from your Firestore 'df'
                         # Filter transactions for THIS specific asset
-                        asset_txs = df[df['id'] == asset].copy()
+                        asset_txs = df[df['id'] == asset_ticker].copy()
                         # Ensure date is in datetime format for alignment with x-axis
                         asset_txs['date'] = pd.to_datetime(asset_txs['date'])
 
@@ -343,7 +401,7 @@ else:
                             ))
 
                         # 3. Add the Average Cost Basis Line (Break-even)
-                        asset_summary = summary[summary['Asset'] == asset].iloc[0]
+                        asset_summary = summary[summary['Asset'] == asset_ticker].iloc[0]
                         avg_price = asset_summary['Avg Buy (Nom)']
 
                         fig.add_hline(
@@ -358,7 +416,7 @@ else:
                         fig.update_layout(showlegend=True, hovermode="x unified")
                         st.plotly_chart(fig, width="stretch")
                     else:
-                        st.error(f"Could not load historical data for {asset}")
+                        st.error(f"Could not load historical data for {asset_ticker}")
 
         except Exception as e:
             st.error(f"Analysis Error: {e}")
