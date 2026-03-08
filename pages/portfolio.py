@@ -5,6 +5,28 @@ import plotly.express as px
 import numpy as np
 from database import get_all_transactions
 
+# TODO: fix the bug regarding the currency displayed in the portfolio
+# TODO: if there is an ISIN, use that instead of the ticker
+# TODO: display the name of the asset as per yfinance in the plots (or in the table, and do not log it)
+
+
+# --- CACHED FUNCTIONS ---
+
+@st.cache_data(ttl=3600)  # Cache market data for 1 hour
+def fetch_live_market_data(tickers):
+    """Fetches current prices, benchmark, and FX rates."""
+    data = yf.download(tickers, period="5d", progress=True)['Close'].ffill()
+    return data
+
+@st.cache_data(ttl=3600)
+def fetch_historical_data(ticker, period):
+    """Fetches historical data for the selected time range."""
+    data = yf.download(ticker, period=period, progress=True)
+    if not data.empty and isinstance(data.columns, pd.MultiIndex):
+        data.columns = data.columns.get_level_values(0)
+    return data
+
+
 st.set_page_config(layout="wide", page_title="My Portfolio")
 
 raw_data = get_all_transactions()
@@ -31,8 +53,10 @@ else:
     #     return (buys['quantity'] * buys['price']).sum() / buys['quantity'].sum()
     # avg_prices = df.groupby('id').apply(calc_avg_price, include_groups=False).to_dict()
 
-
+    # ==========================================================================================================
     # 1. CALCULATE WEIGHTED COST BASIS (EUR)
+    # ==========================================================================================================
+
     def calc_accounting(group):
         buys = group[group['action'] == 'Buy']
         if buys.empty: return pd.Series([0, 0], index=['avg_nom', 'total_cost_eur'])
@@ -41,23 +65,12 @@ else:
         total_cost_eur = buys['cost_eur'].sum()
         return pd.Series([avg_nominal, total_cost_eur], index=['avg_nom', 'total_cost_eur'])
 
-    acct_df = df.groupby('id').apply(calc_accounting, include_groups=False)
+    acct_df = df.groupby('id').apply(calc_accounting, include_groups=False) #
 
-
-    # # 2. AGGREGATE SUMMARY
-    # summary = df.groupby("id").agg({
-    #     "adj_qty": "sum",
-    #     "category": "first",
-    #     "name": "first",
-    #     "ticker": "first",
-    #     "isin": "first",
-    #     "currency": "first"
-    # }).reset_index()
-    #
-    # summary.rename(columns={"adj_qty": "Total Shares", "id": "Asset"}, inplace=True)
-    # summary = summary[summary["Total Shares"] > 0]
-
+    # ==========================================================================================================
     # 2. AGGREGATE SUMMARY
+    # ==========================================================================================================
+
     summary = df.groupby("id").agg({
         "adj_qty": "sum",
         "category": "first",
@@ -80,9 +93,9 @@ else:
             all_tickers = asset_list + ["EURUSD=X", benchmark_ticker, rf_ticker]
             # all_tickers = summary["Asset"].tolist() + ["EURUSD=X", benchmark_ticker, rf_ticker]
 
-            # Fetch 1 year of daily data
-            market_data = yf.download(all_tickers, period="1y", progress=False)['Close'].ffill()
+            # Fetch daily data
             # market_data = yf.download(all_tickers, period="5d", progress=False)['Close'].ffill()
+            market_data = fetch_live_market_data(all_tickers)
 
             # Current Prices & FX
             current_prices = market_data.iloc[-1]
@@ -160,7 +173,10 @@ else:
             summary["Beta"] = summary["Asset"].map(betas)
             summary["Alpha"] = summary["Asset"].map(alphas)
 
+            # ==========================================================================================================
             # --- DISPLAY DASHBOARD ---
+            # ==========================================================================================================
+
             st.title("Portfolio Dashboard")
 
             # Top Metrics
@@ -206,7 +222,10 @@ else:
                 width='stretch', hide_index=True
             )
 
+            # ==========================================================================================================
             # --- 2. ALLOCATION PIE CHART ---
+            # ==========================================================================================================
+
             st.markdown("---")
             st.subheader("Portfolio Diversification")
 
@@ -250,15 +269,32 @@ else:
             #     # Display total count
             #     st.write(f"**Total Positions:** {len(summary)}")
 
+            # ==========================================================================================================
             # --- 3. ALL ASSET PERFORMANCE HISTORIES ---
+            # ==========================================================================================================
+
             st.markdown("---")
             st.subheader("Asset Performance & Transaction History")
+
+            # Time range selector
+            time_options = {
+                "6 Months": "6mo",
+                "1 Year": "1y",
+                "5 Years": "5y",
+                "10 Years": "10y",
+                "All Time": "max"
+            }
+
+            # Add a selectbox for the user to choose the timeframe
+            selected_label = st.selectbox("Select Time Range", options=list(time_options.keys()), index=1)  # Default to 1 Year
+            selected_period = time_options[selected_label]
 
             # We fetch all historical data in one go if possible, or iterate
             for asset in asset_list:
                 with st.expander(f"📈 {asset} Detail Analysis", expanded=True):
-                    # Fetch 1y history
-                    hist_data = yf.download(asset, period="1y", progress=False)
+                    # Fetch the selected period
+                    # hist_data = yf.download(asset, period=selected_period, progress=False)
+                    hist_data = fetch_historical_data(asset, selected_period)
 
                     if not hist_data.empty:
                         # Flatten columns and reset index for Plotly
@@ -271,8 +307,8 @@ else:
                             hist_plot_df,
                             x="Date",
                             y="Close",
-                            title=f"{asset} Historical Price (vs. Transactions)",
-                            labels={"Close": "Price ($)", "Date": "Timeline"},
+                            title=f"{asset} Historical Price - {selected_label}",
+                            labels={"Close": "Price", "Date": "Timeline"},
                             template="plotly_white"
                         )
 
