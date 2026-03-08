@@ -4,3 +4,4 @@ yfinance
 plotly
 firebase-admin
 google-cloud-firestore
+matplotlib

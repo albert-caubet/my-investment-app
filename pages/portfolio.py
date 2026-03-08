@@ -24,14 +24,38 @@ else:
     df['adj_qty'] = df.apply(lambda x: x['quantity'] if x['action'] == 'Buy' else -x['quantity'], axis=1)
 
 
-    # 1. PRE-CALCULATE AVG BUY PRICE (Weighted)
-    def calc_avg_price(group):
+    # # 1. PRE-CALCULATE AVG BUY PRICE (Weighted)
+    # def calc_avg_price(group):
+    #     buys = group[group['action'] == 'Buy']
+    #     if buys.empty: return 0
+    #     return (buys['quantity'] * buys['price']).sum() / buys['quantity'].sum()
+    # avg_prices = df.groupby('id').apply(calc_avg_price, include_groups=False).to_dict()
+
+
+    # 1. CALCULATE WEIGHTED COST BASIS (EUR)
+    def calc_accounting(group):
         buys = group[group['action'] == 'Buy']
-        if buys.empty: return 0
-        return (buys['quantity'] * buys['price']).sum() / buys['quantity'].sum()
+        if buys.empty: return pd.Series([0, 0], index=['avg_nom', 'total_cost_eur'])
+
+        avg_nominal = (buys['quantity'] * buys['price_nominal']).sum() / buys['quantity'].sum()
+        total_cost_eur = buys['cost_eur'].sum()
+        return pd.Series([avg_nominal, total_cost_eur], index=['avg_nom', 'total_cost_eur'])
+
+    acct_df = df.groupby('id').apply(calc_accounting, include_groups=False)
 
 
-    avg_prices = df.groupby('id').apply(calc_avg_price, include_groups=False).to_dict()
+    # # 2. AGGREGATE SUMMARY
+    # summary = df.groupby("id").agg({
+    #     "adj_qty": "sum",
+    #     "category": "first",
+    #     "name": "first",
+    #     "ticker": "first",
+    #     "isin": "first",
+    #     "currency": "first"
+    # }).reset_index()
+    #
+    # summary.rename(columns={"adj_qty": "Total Shares", "id": "Asset"}, inplace=True)
+    # summary = summary[summary["Total Shares"] > 0]
 
     # 2. AGGREGATE SUMMARY
     summary = df.groupby("id").agg({
@@ -43,50 +67,67 @@ else:
         "currency": "first"
     }).reset_index()
 
-    summary.rename(columns={"adj_qty": "Total Shares", "id": "Asset"}, inplace=True)
-    summary = summary[summary["Total Shares"] > 0]
+    summary = summary.merge(acct_df, on='id')
+    summary.rename(columns={"adj_qty": "Shares", "id": "Asset", "avg_nom": "Avg Buy (Nom)"}, inplace=True)
+    summary = summary[summary["Shares"] > 0]
 
     if not summary.empty:
         try:
-            # 1. FETCH DATA (Assets + Benchmark + FX + 10Y Treasury)
+            # # 3. LIVE MARKET DATA (Assets + Benchmark + FX + 10Y Treasury)
             asset_list = summary["Asset"].tolist()
-            benchmark_ticker = "^GSPC"  # S&P 500
-            rf_ticker = "^TNX"  # 10-Year Treasury Yield
-            all_tickers = asset_list + [benchmark_ticker, rf_ticker, "EURUSD=X"]
+            benchmark_ticker = "^GSPC"  # S&P 500, USA
+            rf_ticker = "^TNX"  # 10-Year Treasury Yield, USA
+            all_tickers = asset_list + ["EURUSD=X", benchmark_ticker, rf_ticker]
+            # all_tickers = summary["Asset"].tolist() + ["EURUSD=X", benchmark_ticker, rf_ticker]
 
             # Fetch 1 year of daily data
             market_data = yf.download(all_tickers, period="1y", progress=False)['Close'].ffill()
+            # market_data = yf.download(all_tickers, period="5d", progress=False)['Close'].ffill()
 
             # Current Prices & FX
             current_prices = market_data.iloc[-1]
             eur_usd = float(market_data["EURUSD=X"].iloc[-1])
+            # curr_fx = float(market_data["EURUSD=X"].iloc[-1])
 
             # Risk-Free Rate: ^TNX returns the yield as a percentage (e.g., 4.25)
             # We divide by 100 to get the decimal (0.0425)
-            current_rf_annual = float(market_data["^TNX"].iloc[-1]) / 100
+            current_rf_annual = float(market_data[rf_ticker].iloc[-1]) / 100
             # Daily risk-free rate (approximate)
             rf_daily = current_rf_annual / 252
 
-            # 2. CALCULATE PERFORMANCE COLUMNS
-            summary["Avg Buy Price"] = summary["Asset"].map(avg_prices)
-            summary["Current Price"] = summary["Asset"].map(current_prices)
+            # 4. CALCULATE PERFORMANCE COLUMNS
+            # summary["Avg Buy Price"] = summary["Asset"].map(avg_prices)
+            # summary["Current Price"] = summary["Asset"].map(current_prices)
+
+            summary["Curr Price (Nom)"] = summary["Asset"].map(market_data.iloc[-1]).astype(float)
+            summary["Price Change (%)"] = (summary["Curr Price (Nom)"] / summary["Avg Buy (Nom)"] - 1) * 100
+            summary["Cost Basis (EUR)"] = summary["total_cost_eur"]
+            # summary["Cost Basis (EUR)"] = summary["total_cost_eur"]  / summary["Shares"] # Cost Basis (EUR) per share = Total EUR Spent / Total Shares
+            # Market Value (EUR) = (Shares * Nominal Price) / Current FX (if USD)
+            summary["Market Value (EUR)"] = summary.apply(
+                lambda x: (x['Shares'] * x['Curr Price (Nom)']) / eur_usd if x['currency'] == 'USD'
+                else (x['Shares'] * x['Curr Price (Nom)']), axis=1
+            )
+            # Total PnL (EUR) = Market Value (EUR) - Cost Basis EUR
+            summary["PnL (EUR)"] = summary["Market Value (EUR)"] - summary["Cost Basis (EUR)"]
+            summary["PnL (%)"] = summary["PnL (EUR)"] / summary["Cost Basis (EUR)"] * 100
 
 
-            def convert_to_eur(row, price_col):
-                if row['currency'] == 'USD':
-                    return row[price_col] / eur_usd
-                return row[price_col]
+            # def convert_to_eur(row, price_col):
+            #     if row['currency'] == 'USD':
+            #         return row[price_col] / eur_usd
+            #     return row[price_col]
+            # summary["Current Price (EUR)"] = summary.apply(lambda x: convert_to_eur(x, "Current Price"), axis=1)
+            # summary["Avg Buy Price (EUR)"] = summary.apply(lambda x: convert_to_eur(x, "Avg Buy Price"), axis=1)
+            # summary["Market Value (EUR)"] = summary["Total Shares"] * summary["Current Price (EUR)"]
+            # summary["PnL (EUR)"] = (summary["Current Price (EUR)"] - summary["Avg Buy Price (EUR)"]) * summary[
+            #     "Total Shares"]
+            # summary["PnL (%)"] = (summary["Current Price (EUR)"] / summary["Avg Buy Price (EUR)"] - 1) * 100
 
 
-            summary["Current Price (EUR)"] = summary.apply(lambda x: convert_to_eur(x, "Current Price"), axis=1)
-            summary["Avg Buy Price (EUR)"] = summary.apply(lambda x: convert_to_eur(x, "Avg Buy Price"), axis=1)
-            summary["Market Value (EUR)"] = summary["Total Shares"] * summary["Current Price (EUR)"]
-            summary["PnL (EUR)"] = (summary["Current Price (EUR)"] - summary["Avg Buy Price (EUR)"]) * summary[
-                "Total Shares"]
-            summary["PnL (%)"] = (summary["Current Price (EUR)"] / summary["Avg Buy Price (EUR)"] - 1) * 100
-
-            total_port_value = summary["Market Value (EUR)"].sum()
-            summary["Weight (%)"] = (summary["Market Value (EUR)"] / total_port_value) * 100
+            total_portfolio_value = summary["Market Value (EUR)"].sum()
+            total_cost_basis = summary["Cost Basis (EUR)"].sum()
+            summary["Weight (%)"] = (summary["Market Value (EUR)"] / total_portfolio_value) * 100
 
             # 3. CALCULATE ALPHA & BETA (CAPM Model)
             returns = market_data.pct_change().dropna()
@@ -123,34 +164,45 @@ else:
             st.title("Portfolio Dashboard")
 
             # Top Metrics
-            m1, m2, m3 = st.columns(3)
-            m1.metric("Total Value (EUR)", f"€{total_port_value:,.2f}")
+            m1, m2, m3, m4, m5 = st.columns(5)
+
+            m1.metric("Total Cost Basis (EUR)", f"€{total_cost_basis:,.0f}")
+
+            m2.metric("Total Value (EUR)", f"€{total_portfolio_value:,.0f}")
 
             total_pnl_eur = summary["PnL (EUR)"].sum()
-            m2.metric("Total PnL (EUR)", f"€{total_pnl_eur:,.2f}", f"{(total_pnl_eur / total_port_value) * 100:.2f}%")
+            m3.metric("Total PnL (EUR)", f"€{total_pnl_eur:,.1f}", f"{(total_pnl_eur / total_cost_basis) * 100:.2f}%")
 
-            m3.metric("Risk-Free Rate (10Y)", f"{current_rf_annual * 100:.2f}%")
+            total_pnl_pc = total_pnl_eur / total_cost_basis * 100
+            m4.metric("Total PnL (%)", f"{total_pnl_pc:.1f}%")
+
+            m5.metric("Risk-Free Rate (" + rf_ticker + ")", f"{current_rf_annual * 100:.2f}%")
 
             # REFINED TABLE
             st.subheader("Asset Breakdown")
             display_cols = [
-                "category", "name", "ticker", "isin", "Avg Buy Price (EUR)",
-                "Current Price (EUR)", "Market Value (EUR)", "PnL (%)",
+                "category", "name", "ticker", "isin", "Avg Buy (Nom)",
+                "Curr Price (Nom)", "Price Change (%)", "Cost Basis (EUR)", "Market Value (EUR)", "PnL (%)",
                 "PnL (EUR)", "Weight (%)", "Beta", "Alpha"
             ]
 
+            pnl_pc_limit = max(abs(summary['PnL (%)'].min()), abs(summary['PnL (%)'].max()), 0.1)
+            alpha_limit = max(abs(summary['Alpha'].min()), abs(summary['Alpha'].max()), 0.1)
+
             st.dataframe(
                 summary[display_cols].style.format({
-                    "Avg Buy Price (EUR)": "€{:.2f}",
-                    "Current Price (EUR)": "€{:.2f}",
-                    "Market Value (EUR)": "€{:,.2f}",
-                    "PnL (%)": "{:.2f}%",
-                    "PnL (EUR)": "€{:,.2f}",
-                    "Weight (%)": "{:.2f}%",
+                    "Avg Buy (Nom)": "€ {:.2f}",
+                    "Curr Price (Nom)": "€ {:.2f}",
+                    "Price Change (%)": "{:.1f} %",
+                    "Cost Basis (EUR)": "€ {:.2f}",
+                    "Market Value (EUR)": "€ {:,.2f}",
+                    "PnL (%)": "{:.1f} %",
+                    "PnL (EUR)": "€ {:,.2f}",
+                    "Weight (%)": "{:.1f} %",
                     "Beta": "{:.2f}",
                     "Alpha": "{:.4f}"
-                }).background_gradient(subset=['PnL (%)'], cmap='RdYlGn')
-                .background_gradient(subset=['Alpha'], cmap='RdYlGn'),
+                }).background_gradient(subset=['PnL (%)'], cmap='RdYlGn', vmin=-pnl_pc_limit, vmax=pnl_pc_limit)
+                .background_gradient(subset=['Alpha'], cmap='RdYlGn', vmin=-alpha_limit, vmax=alpha_limit),
                 width='stretch', hide_index=True
             )
 
@@ -234,7 +286,7 @@ else:
                         buys = asset_txs[asset_txs['action'] == 'Buy']
                         if not buys.empty:
                             fig.add_trace(px.scatter(
-                                buys, x='date', y='price',
+                                buys, x='date', y='price_nominal',
                                 color_discrete_sequence=['#2ECC71']
                             ).data[0].update(
                                 name="Buy",
@@ -246,7 +298,7 @@ else:
                         sells = asset_txs[asset_txs['action'] == 'Sell']
                         if not sells.empty:
                             fig.add_trace(px.scatter(
-                                sells, x='date', y='price',
+                                sells, x='date', y='price_nominal',
                                 color_discrete_sequence=['#E74C3C']
                             ).data[0].update(
                                 name="Sell",
@@ -256,7 +308,7 @@ else:
 
                         # 3. Add the Average Cost Basis Line (Break-even)
                         asset_summary = summary[summary['Asset'] == asset].iloc[0]
-                        avg_price = asset_summary['Avg Buy Price']
+                        avg_price = asset_summary['Avg Buy (Nom)']
 
                         fig.add_hline(
                             y=avg_price,
