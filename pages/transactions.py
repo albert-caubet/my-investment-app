@@ -2,6 +2,7 @@ import streamlit as st
 from datetime import datetime
 from database import record_transaction, get_timestamp, get_historical_fx, get_all_transactions
 import pandas as pd
+import yfinance as yf
 
 st.title("Log New Transaction")
 
@@ -19,21 +20,69 @@ ASSET_CLASSES = [
 ]
 
 # Create the form
-with st.form("trade_form", clear_on_submit=True):
+# Create the form
+with st.form("trade_form", clear_on_submit=False):  # Changed to False so data stays while fetching
     col1, col2 = st.columns(2)
     with col1:
-        # User can now select a past date
         date_input = st.date_input("Transaction Date", value=datetime.now())
         category = st.selectbox("Asset Category", options=ASSET_CLASSES)
         ticker = st.text_input("Ticker").upper().strip()
         isin = st.text_input("ISIN").upper().strip()
-        name = st.text_input("Asset Name").strip()
+
+        # --- NEW: Fetch Name Button ---
+        if st.form_submit_button("Fetch Name"):
+            identifier = ticker if ticker else isin
+            if identifier:
+                try:
+                    info = yf.Ticker(identifier).info
+                    # Try different name keys provided by Yahoo Finance
+                    fetched_name = info.get("displayName") or info.get("shortName") or info.get("longName")
+                    if fetched_name:
+                        st.session_state["fetched_name"] = fetched_name
+                    else:
+                        st.warning("No name found for this ticker.")
+                except Exception:
+                    st.error("Could not reach Yahoo Finance.")
+            else:
+                st.error("Please enter a Ticker or ISIN first.")
+
+        # Use session state to persist the name across form reruns
+        name = st.text_input("Asset Name", value=st.session_state.get("fetched_name", ""))
 
     with col2:
         action = st.selectbox("Action", ["Buy", "Sell"])
         currency = st.selectbox("Nominal Currency", ["EUR", "USD"], index=0)
         quantity = st.number_input("Quantity", min_value=0.0, step=0.01)
-        price = st.number_input("Price (Nominal)", min_value=0.0, step=0.01)
+
+        # Fetch Historical Price for the Specific Date Selected ---
+        if st.form_submit_button("Fetch Price"):
+            identifier = ticker if ticker else isin
+            if identifier:
+                try:
+                    # Logic: Look back 7 days from the date_input to handle holidays/weekends
+                    target_date = pd.to_datetime(date_input)
+                    start_search = target_date - pd.Timedelta(days=7)
+                    end_search = target_date + pd.Timedelta(days=1)
+
+                    hist = yf.download(
+                        identifier,
+                        start=start_search.strftime('%Y-%m-%d'),
+                        end=end_search.strftime('%Y-%m-%d'),
+                        progress=False
+                    )
+
+                    if not hist.empty:
+                        st.session_state["fetched_price"] = float(hist['Close'].values[-1])
+                        st.success(f"Price for {target_date.strftime('%Y-%m-%d')} fetched.")
+                    else:
+                        st.warning("No historical data found for that period.")
+                except Exception as e:
+                    st.error(f"Error fetching historical price: {e}")
+            else:
+                st.error("Please enter a Ticker or ISIN first.")
+
+        price = st.number_input("Price (Nominal)", min_value=0.0, step=0.01,
+                                value=st.session_state.get("fetched_price", 0.0))
         fees = st.number_input("Fees (Optional)", min_value=0.0, step=0.01)
 
     submitted = st.form_submit_button("Save Transaction")
@@ -84,6 +133,10 @@ with st.form("trade_form", clear_on_submit=True):
             try:
                 record_transaction(trade_data)
                 st.success(f"Successfully recorded {ticker_clean or isin_clean}")
+                # Clear session state after successful save
+                for key in ["fetched_name", "fetched_price"]:
+                    if key in st.session_state:
+                        del st.session_state[key]
             except Exception as e:
                 st.error(f"Error saving to database: {e}")
 
@@ -130,6 +183,6 @@ else:
             "fx_rate_at_buy": "{:.4f}",
             "cost_eur": "€ {:.2f}"
         }),
-        use_container_width=True,
+        width='stretch',
         hide_index=True
     )
