@@ -3,6 +3,7 @@ from datetime import datetime
 from database import record_transaction, get_timestamp, get_historical_fx, get_all_transactions
 import pandas as pd
 import yfinance as yf
+import numpy as np
 
 st.title("Log New Transaction")
 
@@ -89,7 +90,19 @@ with st.form("trade_form", clear_on_submit=False):
                                        end=end_search.strftime('%Y-%m-%d'), progress=False)
 
                     if not hist.empty:
-                        st.session_state["fetched_price"] = float(hist['Close'].values[-1])
+                        # 1. Handle MultiIndex columns (often happens with ISINs or multiple downloads)
+                        if isinstance(hist.columns, pd.MultiIndex):
+                            hist.columns = hist.columns.get_level_values(0)
+
+                        # 2. Get the last available 'Close' price
+                        last_close = hist['Close'].iloc[-1]
+
+                        # 3. Handle cases where 'Close' itself might still be a Series/Array
+                        if isinstance(last_close, (pd.Series, np.ndarray)):
+                            st.session_state["fetched_price"] = float(last_close[0])
+                        else:
+                            st.session_state["fetched_price"] = float(last_close)
+
                         st.success(f"Price for {target_date.strftime('%Y-%m-%d')} fetched.")
                     else:
                         st.warning("No historical data found.")
@@ -101,72 +114,74 @@ with st.form("trade_form", clear_on_submit=False):
         fees = st.number_input("Fees (Optional)", min_value=0.0, step=0.01)
 
     submitted = st.form_submit_button("🚀 Save Transaction", use_container_width=True)
-    # Final check during submission
+
     if submitted:
-        if detected:
-            if detected != currency:
-                st.error(f"Save blocked: Currency mismatch. Asset is {detected}, but form is {currency}. Please correct it.")
+        # 1. Final Attempt at Currency Detection (if not already detected)
+        identifier = ticker.strip().upper() if ticker else isin.strip().upper()
+
+        if not st.session_state.get("detected_ccy") and identifier:
+            try:
+                # Quick check to help the user avoid errors
+                info = yf.Ticker(identifier).info
+                det_ccy = info.get("currency", "").upper()
+                if det_ccy:
+                    st.session_state["detected_ccy"] = det_ccy
+            except:
+                pass  # Silently fail detection so we don't block the user
+
+        # 2. Re-grab the detected currency from state
+        detected = st.session_state.get("detected_ccy")
+
+        # 3. Validation Logic
+        ticker_clean = ticker.strip().upper()
+        isin_clean = isin.strip().upper()
+
+        if not ticker_clean and not isin_clean:
+            st.error("ERROR: You must provide at least a Ticker or an ISIN.")
+        elif quantity <= 0:
+            st.error("ERROR: Quantity must be greater than 0.")
+        elif detected and detected != currency:
+            # Strictly block only if we KNOW there is a mismatch
+            st.error(
+                f"Save blocked: Currency mismatch. Asset is {detected}, but form is {currency}. Please correct it.")
         else:
-            ticker_obj = yf.Ticker(identifier)
-            info = ticker_obj.info
-            fetched_name = info.get("displayName") or info.get("shortName") or info.get("longName")
-            # Store detected currency for validation
-            st.session_state["detected_ccy"] = info.get("currency", "").upper()
-            detected = st.session_state.get("detected_ccy")
-            if detected and detected != currency:
-                st.error(f"Save blocked: Currency mismatch. Asset is {detected}, but form is {currency}. Please correct it.")
-            else:
+            # 4. Success Path: Proceed with Accounting & Saving
+            try:
+                # Fetch FX Rate
+                fx_rate = get_historical_fx(date_input.strftime('%Y-%m-%d'), "EUR", "USD")
 
-                ticker_clean = ticker.strip().upper()
-                isin_clean = isin.strip().upper()
-                if not ticker_clean and not isin_clean:
-                    st.error("ERROR: You must provide at least a Ticker or an ISIN.")
-                elif quantity <= 0:
-                    st.error("ERROR: Quantity must be greater than 0.")
+                # Calculate cost in EUR
+                cost_eur = (price * quantity) / fx_rate if currency == "USD" else (price * quantity)
 
-                else:
-                    # FETCH FX RATE FOR THAT DATE
-                    # We want to know: 1 EUR = X USD on that day
-                    fx_rate = get_historical_fx(date_input.strftime('%Y-%m-%d'), "EUR", "USD")
+                # Build Data Object
+                trade_data = {
+                    "date": date_input.strftime("%Y-%m-%d"),
+                    "category": category,
+                    "action": action,
+                    "currency": currency,
+                    "quantity": quantity,
+                    "price_nominal": price,
+                    "fx_rate_at_buy": fx_rate,
+                    "cost_eur": cost_eur,
+                    "timestamp": get_timestamp()
+                }
 
-                    # Calculate cost in EUR at time of purchase
-                    # If price is in USD, we divide by fx_rate (EURUSD) to get EUR
-                    cost_eur = (price * quantity) / fx_rate if currency == "USD" else (price * quantity)
+                if ticker_clean: trade_data["ticker"] = ticker_clean
+                if isin_clean: trade_data["isin"] = isin_clean
+                if name: trade_data["name"] = name.strip()
+                if fees: trade_data["fees"] = fees
 
-                    # BUILD THE DATA OBJECT
-                    # We only add fields if they aren't empty strings
-                    trade_data = {
-                        "date": date_input.strftime("%Y-%m-%d"),
-                        "category": category,
-                        "action": action,
-                        "currency": currency,
-                        "quantity": quantity,
-                        "price_nominal": price,
-                        "fx_rate_at_buy": fx_rate,
-                        "cost_eur": cost_eur,  # Fixed historical cost
-                        "timestamp": get_timestamp()  # The "Handshake" with Google
-                    }
+                # Save to Database
+                record_transaction(trade_data)
+                st.success(f"Successfully recorded {ticker_clean or isin_clean}")
 
-                    # Only add the identifier fields if they were filled out
-                    if ticker_clean:
-                        trade_data["ticker"] = ticker_clean
-                    if isin_clean:
-                        trade_data["isin"] = isin_clean
-                    if name:
-                        trade_data["name"] = name.strip()
-                    if fees:
-                        trade_data["fees"] = fees
+                # 5. Reset Form State
+                for key in ["fetched_name", "fetched_price", "detected_ccy"]:
+                    if key in st.session_state:
+                        del st.session_state[key]
 
-                    # SAVE TO FIRESTORE
-                    try:
-                        record_transaction(trade_data)
-                        st.success(f"Successfully recorded {ticker_clean or isin_clean}")
-                        # Clear session state after successful save
-                        for key in ["fetched_name", "fetched_price"]:
-                            if key in st.session_state:
-                                del st.session_state[key]
-                    except Exception as e:
-                        st.error(f"Error saving to database: {e}")
+            except Exception as e:
+                st.error(f"Error processing transaction: {e}")
 
 
 from database import get_all_transactions  # Ensure this is imported
