@@ -100,8 +100,7 @@ with st.form("trade_form", clear_on_submit=False):
                                 value=st.session_state.get("fetched_price", 0.0))
         fees = st.number_input("Fees (Optional)", min_value=0.0, step=0.01)
 
-    submitted = st.form_submit_button("🚀 Save Transaction")
-
+    submitted = st.form_submit_button("🚀 Save Transaction", use_container_width=True)
     # Final check during submission
     if submitted:
         if detected:

@@ -101,8 +101,11 @@ else:
     acct_df = df.groupby('id').apply(calc_accounting, include_groups=False) #
 
     # ==========================================================================================================
-    # 2. AGGREGATE SUMMARY
+    # 2. AGGREGATE SUMMARY (Sorted by Latest Activity)
     # ==========================================================================================================
+
+    # First, ensure 'date' is a datetime object for accurate sorting
+    df['date'] = pd.to_datetime(df['date'])
 
     summary = df.groupby("id").agg({
         "adj_qty": "sum",
@@ -110,12 +113,17 @@ else:
         "name": "first",
         "ticker": "first",
         "isin": "first",
-        "currency": "first"
+        "currency": "first",
+        "date": "max"  # We capture the LATEST transaction date for each asset
     }).reset_index()
 
     summary = summary.merge(acct_df, on='id')
     summary.rename(columns={"adj_qty": "Shares", "id": "Asset", "avg_nom": "Avg Buy (Nom)"}, inplace=True)
     summary = summary[summary["Shares"] > 0]
+
+    # Sort the summary by the latest transaction date (Newest at the top)
+    # This matches the "First in, Last out" feel of your transaction log
+    summary = summary.sort_values(by="date", ascending=False)
 
     if not summary.empty:
         try:
