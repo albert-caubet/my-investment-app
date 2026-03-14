@@ -51,5 +51,5 @@ def get_historical_fx(date_str, base="EUR", quote="USD"):
         # Flatten if MultiIndex
         if isinstance(data.columns, pd.MultiIndex):
             data.columns = data.columns.get_level_values(0)
-        return float(data['Close'].iloc[0])
+        return float(data['Close'].values[0])
     return 1.0  # Fallback
