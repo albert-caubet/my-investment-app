@@ -335,13 +335,14 @@ else:
             time_options = {
                 "6 Months": "6mo",
                 "1 Year": "1y",
+                "3 Years": "3y",
                 "5 Years": "5y",
                 "10 Years": "10y",
                 "All Time": "max"
             }
 
             # Add a selectbox for the user to choose the timeframe
-            selected_label = st.selectbox("Select Time Range", options=list(time_options.keys()), index=1)  # Default to 1 Year
+            selected_label = st.selectbox("Select Time Range", options=list(time_options.keys()), index=2)  # Default to 3 Years
             selected_period = time_options[selected_label]
 
             # st.write(asset_list)
