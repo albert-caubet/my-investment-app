@@ -13,7 +13,7 @@ from database import get_all_transactions
 @st.cache_data(ttl=3600)  # Cache market data for 1 hour
 def fetch_live_market_data(tickers):
     """Fetches current prices, benchmark, and FX rates."""
-    data = yf.download(tickers, period="5d", progress=True)['Close'].ffill()
+    data = yf.download(tickers, period="7d", progress=True)['Close'].ffill()
     return data
 
 @st.cache_data(ttl=3600)
