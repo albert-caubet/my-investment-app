@@ -186,14 +186,72 @@ def _row(aid):
     }
 
 
+def _sign_scaled_colours(series: pd.Series) -> list[str]:
+    """Red shades for losses, green for gains, each scaled within its own sign.
+
+    A single symmetric gradient across the column washes losses out: with one
+    holding at +74%, a -8% loss lands almost dead centre of a -74..+74 scale and
+    renders nearly white. Scaling each sign against its own extreme keeps every
+    loss visibly red however large the biggest gain happens to be.
+    """
+    values = pd.to_numeric(series, errors="coerce")
+    worst = abs(values[values < 0].min()) if (values < 0).any() else 0.0
+    best = values[values > 0].max() if (values > 0).any() else 0.0
+
+    styles = []
+    for value in values:
+        if pd.isna(value) or value == 0:
+            styles.append("")
+            continue
+        if value < 0:
+            share = abs(value) / worst if worst else 1.0
+            rgb = "214, 39, 40"
+        else:
+            share = value / best if best else 1.0
+            rgb = "44, 160, 44"
+        # Floored so the mildest move is still unmistakably coloured.
+        alpha = 0.18 + 0.62 * share
+        text = " color: #ffffff;" if alpha > 0.55 else ""
+        styles.append(f"background-color: rgba({rgb}, {alpha:.3f});{text}")
+    return styles
+
+
+CAPM_HELP = {
+    "Beta": (
+        "How much this holding moves when the benchmark moves. 1.0 tracks the S&P 500 "
+        "one-for-one, 0.5 moves half as much, negative moves the opposite way. "
+        "Measured on EUR returns over 2 years."
+    ),
+    "R²": (
+        "How much of this holding's movement the benchmark actually explains, from 0 to "
+        "1. Low R² means Beta and Alpha describe a relationship that is barely there — "
+        "for European or Japanese funds measured against the S&P 500, expect it to be low."
+    ),
+    "n": (
+        "Daily observations behind Beta, Alpha and R². Below 60 the estimate is "
+        "suppressed rather than shown, because a handful of days annualises into nonsense."
+    ),
+    "Alpha": (
+        "Annualised return beyond what Beta alone would predict — the part not explained "
+        "by simply riding the benchmark. Only meaningful when R² is high enough for Beta "
+        "to mean anything in the first place."
+    ),
+    "PnL (%)": "Unrealised gain or loss on what you still hold, against its cost basis.",
+    "PnL (EUR)": "Unrealised gain or loss in euros on what you still hold.",
+    "Realised (EUR)": "Gain or loss already banked by selling. Zero until you sell.",
+    "Note": "Why a position could not be valued. Empty means it valued cleanly.",
+}
+
+
 if open_ids:
     ordered = sorted(
         open_ids, key=lambda a: valuations[a].market_value_eur or -1, reverse=True
     )
     summary = pd.DataFrame([_row(aid) for aid in ordered])
 
-    pnl_series = summary["PnL (%)"].dropna()
-    pnl_limit = max(abs(pnl_series.min()), abs(pnl_series.max()), 0.1) if len(pnl_series) else 0.1
+    # The Note column is pure noise when nothing is wrong, which is the normal case.
+    if not summary["Note"].astype(bool).any():
+        summary = summary.drop(columns=["Note"])
 
     st.dataframe(
         summary.style.format(
@@ -212,11 +270,17 @@ if open_ids:
                 "Alpha": "{:+.1%}",
             },
             na_rep="–",
-        ).background_gradient(
-            subset=["PnL (%)"], cmap="RdYlGn", vmin=-pnl_limit, vmax=pnl_limit
+        ).apply(
+            _sign_scaled_colours,
+            subset=[c for c in ("PnL (%)", "PnL (EUR)", "Realised (EUR)") if c in summary],
         ),
-        # Alpha deliberately has no colour gradient: a red/green ramp reads as a
+        # Alpha deliberately has no colour scale: a red/green ramp reads as a
         # finding, and an alpha estimate is far noisier than a measured P&L.
+        column_config={
+            col: st.column_config.Column(col, help=text)
+            for col, text in CAPM_HELP.items()
+            if col in summary.columns
+        },
         width="stretch",
         hide_index=True,
     )
