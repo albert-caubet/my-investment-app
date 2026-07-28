@@ -1,16 +1,22 @@
-import firebase_admin
-from firebase_admin import credentials, firestore
 import os
+
+import firebase_admin
+import streamlit as st
+from firebase_admin import credentials, firestore
 from google.cloud import firestore as google_firestore
-import yfinance as yf
-import pandas as pd
+
+#: Overridable so the app is not tied to being launched from the repo root.
+CREDENTIALS_PATH = os.environ.get(
+    "FIREBASE_CREDENTIALS",
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "firebaseServiceAccountKey.json"),
+)
 
 
 # 1. Initialize the App (Singleton Pattern)
 def init_db():
     # Check if the app is already initialized to avoid errors on Streamlit reruns
     if not firebase_admin._apps:
-        cred = credentials.Certificate("firebaseServiceAccountKey.json")
+        cred = credentials.Certificate(CREDENTIALS_PATH)
         firebase_admin.initialize_app(cred)
 
     return firestore.client()
@@ -26,30 +32,23 @@ def record_transaction(data):
     db = init_db()
     # This creates a new document with an auto-generated ID in the 'transactions' collection
     db.collection("transactions").add(data)
+    # Otherwise a freshly saved trade stays invisible until the cache expires.
+    clear_transaction_cache()
 
 
 # 3. Helper function to get all transactions
+@st.cache_data(ttl=60, show_spinner=False)
 def get_all_transactions():
+    """Every transaction document, each carrying its Firestore id as ``_doc_id``.
+
+    Cached because this used to re-stream the whole collection on every widget
+    interaction. Ordering is left to the caller: the chronological replay needs
+    ``(date, timestamp)`` anyway, which Firestore cannot express without an index.
+    """
     db = init_db()
-    docs = db.collection("transactions").order_by("date", direction="DESCENDING").stream()
-    return [doc.to_dict() for doc in docs]
+    docs = db.collection("transactions").stream()
+    return [{**doc.to_dict(), "_doc_id": doc.id} for doc in docs]
 
 
-def get_historical_fx(date_str, base="EUR", quote="USD"):
-    """Fetches the FX rate for a specific historical date."""
-    if base == quote:
-        return 1.0
-    ticker = f"{base}{quote}=X"
-    # Fetch 3 days around the date to handle weekends/holidays
-    start_date = pd.to_datetime(date_str)
-    end_date = start_date + pd.Timedelta(days=3)
-
-    data = yf.download(ticker, start=start_date.strftime('%Y-%m-%d'),
-                       end=end_date.strftime('%Y-%m-%d'), progress=False)
-
-    if not data.empty:
-        # Flatten if MultiIndex
-        if isinstance(data.columns, pd.MultiIndex):
-            data.columns = data.columns.get_level_values(0)
-        return float(data['Close'].values[0])
-    return 1.0  # Fallback
+def clear_transaction_cache():
+    get_all_transactions.clear()

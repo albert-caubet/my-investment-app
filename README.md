@@ -1,32 +1,49 @@
 # My Investment App
 
-A modern, Streamlit-based investment portfolio dashboard. This application allows users to track their investments across different asset classes, log transactions (buys and sells), and visualize their portfolio performance in real-time.
+A Streamlit investment portfolio dashboard. Track holdings across asset classes, log buys
+and sells, and see valuation and performance in EUR.
 
 ## Features
 
-- **Portfolio Dashboard**:
-  - View total net worth and daily performance metrics.
-  - Track asset distribution via interactive pie charts.
-  - Analyze asset performance history with cost basis comparison (Average Buy Price).
-- **Transaction Logging**:
-  - Record trades for various asset classes (Stocks, ETFs, Funds, Crypto, etc.).
-  - Support for Tickers and ISIN identifiers.
-  - Automatic timestamping and secure storage in Firebase Firestore.
-- **Real-Time Market Data**:
-  - Integration with `yfinance` to fetch live prices and historical performance.
-- **Cloud Database**:
-  - Powered by Google Firebase for reliable, multi-device data synchronization.
-  - [Homepage](https://console.firebase.google.com/u/1/)
-  - [Project](https://console.firebase.google.com/u/1/project/my-portfolio-7d821/overview)
-  - [Database](https://console.firebase.google.com/u/1/project/my-portfolio-7d821/firestore/databases/-default-/data/~2Ftransactions~2FFNjXuqNnzeW1BQCx6D2f)
+- **Portfolio Dashboard**
+  - Cost basis, market value, and unrealised / realised / total P&L, all in EUR.
+  - Open positions with per-asset weight, plus a separate table of closed positions.
+  - Asset distribution by category and by holding.
+  - Per-asset price history with buy/sell markers and an average-cost line.
+  - Beta, Alpha and R² against the S&P 500, estimated in EUR over two years.
+- **Transaction Logging**
+  - Buys and sells across Stocks, ETFs, Funds, Crypto and more.
+  - Ticker or ISIN, with ISINs resolved to a Yahoo symbol once at entry.
+  - Historical FX captured on the trade date; fees included in the cost basis.
+- **Cloud Database**
+  - Firebase Firestore, for multi-device sync.
+
+## Accounting model
+
+Worth knowing, because these choices decide what the numbers mean:
+
+- **Base currency is EUR.** Cost basis converts at the FX rate *on the trade date*;
+  market value converts at *today's* rate. The difference between the two is your
+  currency gain or loss, and it belongs in P&L.
+- **Transaction currency and listing currency are different things.** The first is what
+  left your bank account and drives cost basis. The second is what the asset is quoted
+  in and drives market value. Paying euros for a USD-listed stock is normal, and the two
+  are tracked separately.
+- **Average cost.** A sell releases a proportional share of the running cost basis and
+  books the difference as realised P&L. A closed position keeps its realised P&L and
+  drops out of the open table. FIFO is not implemented.
+- **Fees are capitalised** into the cost basis on a buy, and net off proceeds on a sell.
+- **An FX rate that cannot be established blocks the save.** It is never defaulted to
+  1.0 — that would silently understate a USD cost basis by whatever the rate was, and
+  freeze the error into the database.
+- **Charts use unadjusted closes**, so the line is on the same scale as the raw trade
+  prices plotted on it. The CAPM series uses adjusted prices, which is correct for returns.
 
 ## Prerequisites
 
-Before you begin, ensure you have the following:
-
-- **Python 3.13** installed.
-- A **Google Firebase** project with Firestore enabled.
-- A Firebase Service Account Key (JSON file).
+- **Python 3.13**
+- A **Google Firebase** project with Firestore enabled
+- A Firebase service account key (JSON)
 
 ## Installation & Setup
 
@@ -42,25 +59,39 @@ Before you begin, ensure you have the following:
    ```
 
 3. **Firebase Configuration**:
-   - Place your Firebase Service Account JSON file in the project root.
-   - Rename it to `firebaseServiceAccountKey.json`.
+   - Place your Firebase service account JSON in the project root as
+     `firebaseServiceAccountKey.json`, or point `FIREBASE_CREDENTIALS` at it.
 
 ## How to Run
-
-Launch the application using Streamlit:
 
 ```bash
 streamlit run app.py
 ```
 
-The app will open in your default web browser (usually at `http://localhost:8501`).
+The app opens at `http://localhost:8501`.
+
+## Tests
+
+The money math lives in `portfolio_math.py`, which imports no Streamlit, no Firestore and
+no network, so it can be tested directly:
+
+```bash
+pip install -r requirements-dev.txt
+```
+
+```bash
+python -m pytest -q
+```
 
 ## Project Structure
 
-- `app.py`: Main entry point and navigation setup.
-- `database.py`: Firebase initialization and Firestore helper functions.
-- `pages/`:
-  - `portfolio.py`: The main dashboard logic and visualizations.
-  - `transactions.py`: The interface for logging new trades.
-- `requirements.txt`: List of Python dependencies.
-- `firebaseServiceAccountKey.json`: (Not included in repo) Your private Firebase credentials.
+- `app.py`: Entry point and navigation.
+- `portfolio_math.py`: Pure calculation engine — positions, cost basis, valuation, CAPM.
+  No I/O, so every figure it produces is unit-testable.
+- `market_data.py`: All network access and caching (prices, FX, metadata, ISIN lookup).
+- `database.py`: Firestore initialisation and helpers.
+- `pages/portfolio.py`: Dashboard — loads, computes, renders.
+- `pages/transactions.py`: Trade entry and history log.
+- `tests/`: pytest suite over `portfolio_math.py`, including a golden fixture.
+- `requirements.txt` / `requirements-dev.txt`: Runtime and test dependencies.
+- `firebaseServiceAccountKey.json`: (Not in repo) Your private Firebase credentials.

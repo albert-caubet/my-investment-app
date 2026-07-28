@@ -1,64 +1,13 @@
-import streamlit as st
-import pandas as pd
-import yfinance as yf
-import plotly.express as px
 import numpy as np
+import pandas as pd
+import plotly.express as px
+import streamlit as st
+
+import market_data as md
+import portfolio_math as pm
 from database import get_all_transactions
 
-# TODO: add the list of historical transactions in the transactions tab
-
-
-# --- CACHED FUNCTIONS ---
-
-@st.cache_data(ttl=3600)  # Cache market data for 1 hour
-def fetch_live_market_data(tickers):
-    """Fetches current prices, benchmark, and FX rates."""
-    data = yf.download(tickers, period="7d", progress=True)['Close'].ffill()
-    return data
-
-@st.cache_data(ttl=3600)
-def fetch_historical_data(ticker, period):
-    """Fetches historical data for the selected time range."""
-    data = yf.download(ticker, period=period, progress=True)
-    if not data.empty and isinstance(data.columns, pd.MultiIndex):
-        data.columns = data.columns.get_level_values(0)
-    return data
-
-
-@st.cache_data(ttl=86400) # Cache for 24 hours as currency rarely changes
-def fetch_ticker_currency(tickers):
-    """Fetches the official listing currency from Yahoo Finance."""
-    currencies = {}
-    for t in tickers:
-        try:
-            # Skip benchmark/fx tickers
-            if "=" in t or "^" in t: continue
-            info = yf.Ticker(t).info
-            currencies[t] = info.get("currency", "???")
-        except:
-            currencies[t] = "Unknown"
-    return currencies
-
-
-@st.cache_data(ttl=3600)  # Refresh every hour
-def fetch_rich_metadata(tickers):
-    """Fetches Analyst Targets, Currency, and Full Name."""
-    metadata = {}
-    for t in tickers:
-        try:
-            if "^" in t or "=" in t: continue
-            ticker_obj = yf.Ticker(t)
-            info = ticker_obj.info
-
-            metadata[t] = {
-                "Market Currency": info.get("currency", "???"),
-                "Company Name": info.get("displayName", t),  # shortName, longName
-                "Current Price": info.get("currentPrice") or info.get("regularMarketPrice")
-            }
-        except Exception:
-            metadata[t] = {"Market Currency": "???", "Analyst Target": np.nan, "Company Name": t}
-    return metadata
-
+CURRENCY_SYMBOL = {"EUR": "€", "USD": "$"}
 
 st.set_page_config(layout="wide", page_title="My Portfolio")
 
@@ -67,365 +16,370 @@ raw_data = get_all_transactions()
 if not raw_data:
     st.title("Current Portfolio")
     st.warning("No transactions found.")
+    st.stop()
+
+# ==========================================================================================================
+# 1. LOAD AND REPLAY TRANSACTIONS
+# ==========================================================================================================
+
+transactions, problems = pm.load_transactions(raw_data)
+
+if not transactions:
+    st.title("Current Portfolio")
+    st.error("No usable transactions.")
+    for problem in problems:
+        st.write("- ", problem)
+    st.stop()
+
+positions = pm.build_positions(transactions)
+
+# The pricing symbol is not the identity: assets are keyed by ISIN so that grouping
+# stays stable, but a resolved ticker is the better thing to send to Yahoo.
+price_symbol = {aid: pos.price_symbol for aid, pos in positions.items()}
+symbols = tuple(sorted(set(price_symbol.values())))
+
+# ==========================================================================================================
+# 2. MARKET DATA
+# ==========================================================================================================
+
+listing_info = md.fetch_listing_info(symbols)
+listing_ccy = {sym: (listing_info.get(sym, {}).get("currency") or pm.BASE_CCY) for sym in symbols}
+
+spot = md.fetch_spot_prices(symbols)
+rates = md.fetch_spot_fx(tuple(listing_ccy.values()))
+
+quotes = {
+    aid: pm.Quote(
+        asset_id=aid,
+        price=spot.get(price_symbol[aid]),
+        listing_ccy=listing_ccy.get(price_symbol[aid]),
+    )
+    for aid in positions
+}
+
+valuations = {aid: pm.value_position(pos, quotes[aid], rates) for aid, pos in positions.items()}
+open_ids = [aid for aid, pos in positions.items() if pos.is_open]
+closed_ids = [aid for aid, pos in positions.items() if not pos.is_open]
+
+totals = pm.portfolio_totals([valuations[aid] for aid in positions])
+asset_weights = pm.weights([valuations[aid] for aid in open_ids])
+
+# ==========================================================================================================
+# 3. ALPHA & BETA (CAPM)
+# ==========================================================================================================
+# Estimated from a dedicated 2-year history, in EUR, and never from the spot fetch.
+# Reusing one frame for both is how these became six-observation noise.
+
+capm: dict[str, pm.CapmResult] = {aid: pm.CapmResult() for aid in positions}
+rf_annual = md.RF_ANNUAL_DEFAULT
+
+try:
+    hist = md.fetch_price_history(symbols + (md.BENCHMARK_TICKER,), md.CAPM_PERIOD)
+    if not hist.empty and md.BENCHMARK_TICKER in hist.columns:
+        capm_ccy = dict(listing_ccy)
+        capm_ccy[md.BENCHMARK_TICKER] = md.BENCHMARK_CCY
+        fx_hist = md.fetch_fx_history(tuple(capm_ccy.values()), md.CAPM_PERIOD)
+        eur_panel = md.to_eur_panel(hist, capm_ccy, fx_hist)
+        returns = eur_panel.pct_change()
+
+        for aid in positions:
+            column = price_symbol[aid]
+            if column not in returns.columns:
+                continue
+            pair = (
+                pd.concat([returns[column], returns[md.BENCHMARK_TICKER]], axis=1)
+                .replace([np.inf, -np.inf], np.nan)
+                .dropna()
+            )
+            capm[aid] = pm.estimate_capm(
+                pair.iloc[:, 0].to_numpy(),
+                pair.iloc[:, 1].to_numpy(),
+                rf_annual=rf_annual,
+            )
+except Exception as exc:  # analytics must never take the dashboard down
+    st.warning(f"Could not estimate Beta/Alpha: {exc}")
+
+# ==========================================================================================================
+# --- DISPLAY DASHBOARD ---
+# ==========================================================================================================
+
+st.title("Portfolio Dashboard")
+
+if problems:
+    with st.expander(f"⚠️ {len(problems)} data quality note(s)"):
+        for problem in problems:
+            st.write("- ", problem)
+
+position_warnings = [(aid, w) for aid, pos in positions.items() for w in pos.warnings]
+if position_warnings:
+    with st.expander(f"⚠️ {len(position_warnings)} position warning(s)"):
+        for aid, warning in position_warnings:
+            st.write(f"- **{aid}**: {warning}")
+
+if totals.n_unvalued:
+    st.warning(
+        f"{totals.n_unvalued} position(s) could not be valued and are excluded from the "
+        f"totals: {', '.join(totals.unvalued_ids)}"
+    )
+
+m1, m2, m3, m4, m5 = st.columns(5)
+m1.metric("Total Cost Basis (EUR)", f"€{totals.cost_basis_eur:,.0f}")
+m2.metric("Total Value (EUR)", f"€{totals.market_value_eur:,.0f}")
+m3.metric("Unrealised PnL (EUR)", f"€{totals.unrealised_pnl_eur:,.0f}")
+m4.metric("Realised PnL (EUR)", f"€{totals.realised_pnl_eur:,.0f}")
+m5.metric(
+    "Total PnL (EUR)",
+    f"€{totals.total_pnl_eur:,.0f}",
+    f"{totals.pnl_pct:.2f}%" if totals.pnl_pct is not None else None,
+)
+
+# ==========================================================================================================
+# --- 1. ASSET BREAKDOWN ---
+# ==========================================================================================================
+
+st.subheader("Asset Breakdown")
+
+
+def _row(aid):
+    pos, val, cap = positions[aid], valuations[aid], capm[aid]
+    return {
+        "category": pos.category or "Unknown",
+        "name": pos.name or aid,
+        "ticker": pos.ticker or "",
+        "isin": pos.isin or "",
+        "Ccy": val.listing_ccy or "?",
+        "Shares": pos.quantity,
+        "Avg Cost (EUR)": pos.avg_cost_eur,
+        "Curr Price (Nom)": val.price,
+        "Cost Basis (EUR)": val.cost_basis_eur,
+        "Market Value (EUR)": val.market_value_eur,
+        "PnL (%)": val.unrealised_pnl_pct,
+        "PnL (EUR)": val.unrealised_pnl_eur,
+        "Realised (EUR)": pos.realised_pnl_eur,
+        "Weight (%)": asset_weights.get(aid),
+        "Beta": cap.beta,
+        "R²": cap.r_squared,
+        "n": cap.n_obs,
+        "Alpha": cap.alpha_annual,
+        "Note": val.error or "",
+    }
+
+
+if open_ids:
+    ordered = sorted(
+        open_ids, key=lambda a: valuations[a].market_value_eur or -1, reverse=True
+    )
+    summary = pd.DataFrame([_row(aid) for aid in ordered])
+
+    pnl_series = summary["PnL (%)"].dropna()
+    pnl_limit = max(abs(pnl_series.min()), abs(pnl_series.max()), 0.1) if len(pnl_series) else 0.1
+
+    st.dataframe(
+        summary.style.format(
+            {
+                "Shares": "{:,.4f}",
+                "Avg Cost (EUR)": "€ {:,.2f}",
+                "Curr Price (Nom)": "{:,.2f}",
+                "Cost Basis (EUR)": "€ {:,.2f}",
+                "Market Value (EUR)": "€ {:,.2f}",
+                "PnL (%)": "{:.1f} %",
+                "PnL (EUR)": "€ {:,.2f}",
+                "Realised (EUR)": "€ {:,.2f}",
+                "Weight (%)": "{:.1f} %",
+                "Beta": "{:.2f}",
+                "R²": "{:.2f}",
+                "Alpha": "{:+.1%}",
+            },
+            na_rep="–",
+        ).background_gradient(
+            subset=["PnL (%)"], cmap="RdYlGn", vmin=-pnl_limit, vmax=pnl_limit
+        ),
+        # Alpha deliberately has no colour gradient: a red/green ramp reads as a
+        # finding, and an alpha estimate is far noisier than a measured P&L.
+        width="stretch",
+        hide_index=True,
+    )
+
+    weak = [
+        f"{positions[a].name or a} ({capm[a].note})" for a in ordered if not capm[a].credible
+    ]
+    caption = (
+        f"Beta/Alpha vs {md.BENCHMARK_TICKER} in EUR over {md.CAPM_PERIOD}, "
+        f"risk-free {rf_annual:.1%}. R² is how much of the asset's movement the "
+        f"benchmark actually explains — a low R² means Beta and Alpha carry little meaning."
+    )
+    if weak:
+        caption += "  \nNot estimated: " + "; ".join(weak)
+    st.caption(caption)
 else:
-    df = pd.DataFrame(raw_data)
+    st.info("No open positions.")
 
-    # Defensive columns
-    for col in ["ticker", "isin", "quantity", "action", "category", "currency", "name"]:
-        if col not in df.columns:
-            df[col] = "Unknown" if col != "quantity" else 0
-
-    df['id'] = df['isin'].replace("", None).fillna(df['ticker']).fillna("Unknown")
-    df['adj_qty'] = df.apply(lambda x: x['quantity'] if x['action'] == 'Buy' else -x['quantity'], axis=1)
-
-
-    # # 1. PRE-CALCULATE AVG BUY PRICE (Weighted)
-    # def calc_avg_price(group):
-    #     buys = group[group['action'] == 'Buy']
-    #     if buys.empty: return 0
-    #     return (buys['quantity'] * buys['price']).sum() / buys['quantity'].sum()
-    # avg_prices = df.groupby('id').apply(calc_avg_price, include_groups=False).to_dict()
-
-    # ==========================================================================================================
-    # 1. CALCULATE WEIGHTED COST BASIS (EUR)
-    # ==========================================================================================================
-
-    def calc_accounting(group):
-        buys = group[group['action'] == 'Buy']
-        if buys.empty: return pd.Series([0, 0], index=['avg_nom', 'total_cost_eur'])
-
-        avg_nominal = (buys['quantity'] * buys['price_nominal']).sum() / buys['quantity'].sum()
-        total_cost_eur = buys['cost_eur'].sum()
-        return pd.Series([avg_nominal, total_cost_eur], index=['avg_nom', 'total_cost_eur'])
-
-    acct_df = df.groupby('id').apply(calc_accounting, include_groups=False) #
-
-    # ==========================================================================================================
-    # 2. AGGREGATE SUMMARY (Sorted by Latest Activity)
-    # ==========================================================================================================
-
-    # First, ensure 'date' is a datetime object for accurate sorting
-    df['date'] = pd.to_datetime(df['date'])
-
-    summary = df.groupby("id").agg({
-        "adj_qty": "sum",
-        "category": "first",
-        "name": "first",
-        "ticker": "first",
-        "isin": "first",
-        "currency": "first",
-        "date": "max"  # We capture the LATEST transaction date for each asset
-    }).reset_index()
-
-    summary = summary.merge(acct_df, on='id')
-    summary.rename(columns={"adj_qty": "Shares", "id": "Asset", "avg_nom": "Avg Buy (Nom)"}, inplace=True)
-    summary = summary[summary["Shares"] > 0]
-
-    # Sort the summary by the latest transaction date (Newest at the top)
-    # This matches the "First in, Last out" feel of your transaction log
-    summary = summary.sort_values(by="date", ascending=False)
-
-    if not summary.empty:
-        try:
-            # # 3. LIVE MARKET DATA (Assets + Benchmark + FX + 10Y Treasury)
-            asset_list = summary["Asset"].tolist()
-
-            # Fetch official currencies
-            # official_currencies = fetch_ticker_currency(asset_list)
-            # summary["Ccy"] = summary["Asset"].map(official_currencies) # Map them to a new column
-            # or...
-            metadata = fetch_rich_metadata(asset_list)
-            # summary["Ccy"] = summary["Asset"].map(lambda x: metadata.get(x, {}).get("Market Currency"))
-            summary["Ccy"] = [metadata.get(ticker, {}).get("Market Currency") for ticker in summary["Asset"]]
-
-            # Fetch the OFFICIAL company display name
-            summary["Official Name"] = [metadata.get(ticker, {}).get("Company Name") for ticker in summary["Asset"]]
-
-            # Benchmarks
-            benchmark_ticker = "^GSPC"  # S&P 500, USA
-            rf_ticker = "^TNX"  # 10-Year Treasury Yield, USA
-
-            all_tickers = asset_list + ["EURUSD=X", benchmark_ticker, rf_ticker]
-            # all_tickers = summary["Asset"].tolist() + ["EURUSD=X", benchmark_ticker, rf_ticker]
-
-            # Fetch daily data
-            # market_data = yf.download(all_tickers, period="5d", progress=False)['Close'].ffill()
-            market_data = fetch_live_market_data(all_tickers)
-
-            # Current Prices & FX
-            current_prices = market_data.iloc[-1]
-            eur_usd = float(market_data["EURUSD=X"].iloc[-1])
-            # curr_fx = float(market_data["EURUSD=X"].iloc[-1])
-
-            # Risk-Free Rate: ^TNX returns the yield as a percentage (e.g., 4.25)
-            # We divide by 100 to get the decimal (0.0425)
-            current_rf_annual = float(market_data[rf_ticker].iloc[-1]) / 100
-            # Daily risk-free rate (approximate)
-            rf_daily = current_rf_annual / 252
-
-            # 4. CALCULATE PERFORMANCE COLUMNS
-            # summary["Avg Buy Price"] = summary["Asset"].map(avg_prices)
-            # summary["Current Price"] = summary["Asset"].map(current_prices)
-
-            summary["Curr Price (Nom)"] = summary["Asset"].map(market_data.iloc[-1]).astype(float)
-            summary["Price Change (%)"] = (summary["Curr Price (Nom)"] / summary["Avg Buy (Nom)"] - 1) * 100
-            summary["Cost Basis (EUR)"] = summary["total_cost_eur"]
-            # summary["Cost Basis (EUR)"] = summary["total_cost_eur"]  / summary["Shares"] # Cost Basis (EUR) per share = Total EUR Spent / Total Shares
-            # Market Value (EUR) = (Shares * Nominal Price) / Current FX (if USD)
-            summary["Market Value (EUR)"] = summary.apply(
-                lambda x: (x['Shares'] * x['Curr Price (Nom)']) / eur_usd if x['currency'] == 'USD'
-                else (x['Shares'] * x['Curr Price (Nom)']), axis=1
-            )
-            # Total PnL (EUR) = Market Value (EUR) - Cost Basis EUR
-            summary["PnL (EUR)"] = summary["Market Value (EUR)"] - summary["Cost Basis (EUR)"]
-            summary["PnL (%)"] = summary["PnL (EUR)"] / summary["Cost Basis (EUR)"] * 100
-
-
-            # def convert_to_eur(row, price_col):
-            #     if row['currency'] == 'USD':
-            #         return row[price_col] / eur_usd
-            #     return row[price_col]
-            # summary["Current Price (EUR)"] = summary.apply(lambda x: convert_to_eur(x, "Current Price"), axis=1)
-            # summary["Avg Buy Price (EUR)"] = summary.apply(lambda x: convert_to_eur(x, "Avg Buy Price"), axis=1)
-            # summary["Market Value (EUR)"] = summary["Total Shares"] * summary["Current Price (EUR)"]
-            # summary["PnL (EUR)"] = (summary["Current Price (EUR)"] - summary["Avg Buy Price (EUR)"]) * summary[
-            #     "Total Shares"]
-            # summary["PnL (%)"] = (summary["Current Price (EUR)"] / summary["Avg Buy Price (EUR)"] - 1) * 100
-
-
-            total_portfolio_value = summary["Market Value (EUR)"].sum()
-            total_cost_basis = summary["Cost Basis (EUR)"].sum()
-            summary["Weight (%)"] = (summary["Market Value (EUR)"] / total_portfolio_value) * 100
-
-            # 3. CALCULATE ALPHA & BETA (CAPM Model)
-            returns = market_data.pct_change().dropna()
-            betas = {}
-            alphas = {}
-
-            for ticker in asset_list:
-                try:
-                    # Excess returns (Asset - Rf and Market - Rf)
-                    asset_excess = returns[ticker] - rf_daily
-                    market_excess = returns[benchmark_ticker] - rf_daily
-
-                    # Beta = Covariance(Asset, Market) / Variance(Market)
-                    # We use excess returns for a more professional calculation
-                    covariance = np.cov(asset_excess, market_excess)[0, 1]
-                    variance = np.var(market_excess)
-                    beta = covariance / variance
-                    betas[ticker] = beta
-
-                    # Jensen's Alpha (Annualized)
-                    # Alpha = (Asset Annual Return - Rf) - Beta * (Market Annual Return - Rf)
-                    asset_ann_ret = returns[ticker].mean() * 252
-                    market_ann_ret = returns[benchmark_ticker].mean() * 252
-
-                    alpha = (asset_ann_ret - current_rf_annual) - beta * (market_ann_ret - current_rf_annual)
-                    alphas[ticker] = alpha
-                except:
-                    betas[ticker], alphas[ticker] = 0, 0
-
-            summary["Beta"] = summary["Asset"].map(betas)
-            summary["Alpha"] = summary["Asset"].map(alphas)
-
-            # ==========================================================================================================
-            # --- DISPLAY DASHBOARD ---
-            # ==========================================================================================================
-
-            st.title("Portfolio Dashboard")
-
-            # Top Metrics
-            m1, m2, m3, m4, m5 = st.columns(5)
-
-            m1.metric("Total Cost Basis (EUR)", f"€{total_cost_basis:,.0f}")
-
-            m2.metric("Total Value (EUR)", f"€{total_portfolio_value:,.0f}")
-
-            total_pnl_eur = summary["PnL (EUR)"].sum()
-            m3.metric("Total PnL (EUR)", f"€{total_pnl_eur:,.1f}", f"{(total_pnl_eur / total_cost_basis) * 100:.2f}%")
-
-            total_pnl_pc = total_pnl_eur / total_cost_basis * 100
-            m4.metric("Total PnL (%)", f"{total_pnl_pc:.1f}%")
-
-            m5.metric("Risk-Free Rate (" + rf_ticker + ")", f"{current_rf_annual * 100:.2f}%")
-
-            # REFINED TABLE
-            st.subheader("Asset Breakdown")
-            display_cols = [
-                "category", "name", "ticker", "isin", "Ccy", "Avg Buy (Nom)",
-                "Curr Price (Nom)", "Price Change (%)", "Cost Basis (EUR)", "Market Value (EUR)", "PnL (%)",
-                "PnL (EUR)", "Weight (%)", "Beta", "Alpha"
-            ]
-
-            pnl_pc_limit = max(abs(summary['PnL (%)'].min()), abs(summary['PnL (%)'].max()), 0.1)
-            alpha_limit = max(abs(summary['Alpha'].min()), abs(summary['Alpha'].max()), 0.1)
-
-            st.dataframe(
-                summary[display_cols].style.format({
-                    "Avg Buy (Nom)": "{:.2f}",
-                    "Curr Price (Nom)": "{:.2f}",
-                    "Price Change (%)": "{:.1f} %",
-                    "Cost Basis (EUR)": "€ {:.2f}",
-                    "Market Value (EUR)": "€ {:,.2f}",
-                    "PnL (%)": "{:.1f} %",
-                    "PnL (EUR)": "€ {:,.2f}",
-                    "Weight (%)": "{:.1f} %",
-                    "Beta": "{:.2f}",
-                    "Alpha": "{:.4f}"
-                }).background_gradient(subset=['PnL (%)'], cmap='RdYlGn', vmin=-pnl_pc_limit, vmax=pnl_pc_limit)
-                .background_gradient(subset=['Alpha'], cmap='RdYlGn', vmin=-alpha_limit, vmax=alpha_limit),
-                width='stretch', hide_index=True
-            )
-
-            # ==========================================================================================================
-            # --- 2. ALLOCATION PIE CHART ---
-            # ==========================================================================================================
-
-            st.markdown("---")
-            st.subheader("Portfolio Diversification")
-
-            # Create two equal-width columns
-            col_left, col_right = st.columns(2)
-
-            with col_left:
-                st.write("**By Category**")
-                cat_data = summary.groupby("category")["Market Value (EUR)"].sum().reset_index()
-                fig_cat = px.pie(
-                    cat_data,
-                    values='Market Value (EUR)',
-                    names='category',
-                    hole=0.4,
-                    color_discrete_sequence=px.colors.qualitative.Prism
-                )
-                # This 'width' parameter is what makes it fit inside the column
-                st.plotly_chart(fig_cat, width='stretch')
-
-            with col_right:
-                st.write("**By Asset Name**")
-                # Group by Name/Ticker
-                name_data = summary.groupby("name")["Market Value (EUR)"].sum().reset_index()
-                fig_name = px.pie(
-                    name_data,
-                    values='Market Value (EUR)',
-                    names='name',
-                    hole=0.4,
-                    color_discrete_sequence=px.colors.qualitative.Pastel
-                )
-                # Again, 'stretch' ensures it respects the column boundary
-                st.plotly_chart(fig_name, width='stretch')
-
-            # with col_stats:
-            #     st.subheader("Concentration Risk")
-            #     # Find your most heavily weighted asset
-            #     top_asset = summary.loc[summary["Weight (%)"].idxmax()]
-            #     st.write(f"**Largest Holding:** {top_asset['name'] or top_asset['Asset']}")
-            #     st.progress(top_asset["Weight (%)"] / 100)
-            #     st.write(f"This asset represents **{top_asset['Weight (%)']:.2f}%** of your total portfolio.")
-            #     # Display total count
-            #     st.write(f"**Total Positions:** {len(summary)}")
-
-            # ==========================================================================================================
-            # --- 3. ALL ASSET PERFORMANCE HISTORIES ---
-            # ==========================================================================================================
-
-            st.markdown("---")
-            st.subheader("Asset Performance & Transaction History")
-
-            # Time range selector
-            time_options = {
-                "6 Months": "6mo",
-                "1 Year": "1y",
-                "3 Years": "3y",
-                "5 Years": "5y",
-                "10 Years": "10y",
-                "All Time": "max"
+if closed_ids:
+    st.subheader("Closed Positions")
+    closed = pd.DataFrame(
+        [
+            {
+                "name": positions[aid].name or aid,
+                "isin": positions[aid].isin or "",
+                "ticker": positions[aid].ticker or "",
+                "Bought": positions[aid].qty_bought_lifetime,
+                "Sold": positions[aid].qty_sold_lifetime,
+                "Realised PnL (EUR)": positions[aid].realised_pnl_eur,
+                "Last trade": positions[aid].last_trade_date,
             }
+            for aid in closed_ids
+        ]
+    )
+    st.dataframe(
+        closed.style.format(
+            {"Bought": "{:,.4f}", "Sold": "{:,.4f}", "Realised PnL (EUR)": "€ {:,.2f}"}
+        ),
+        width="stretch",
+        hide_index=True,
+    )
 
-            # Add a selectbox for the user to choose the timeframe
-            selected_label = st.selectbox("Select Time Range", options=list(time_options.keys()), index=2)  # Default to 3 Years
-            selected_period = time_options[selected_label]
+# ==========================================================================================================
+# --- 2. ALLOCATION PIE CHARTS ---
+# ==========================================================================================================
 
-            # st.write(asset_list)
+if open_ids:
+    st.markdown("---")
+    st.subheader("Portfolio Diversification")
 
-            # We fetch all historical data in one go if possible, or iterate
-            # for asset in asset_list:
-            #     asset_name = metadata.get(asset, {}).get("Company Name", asset)
+    pie_df = pd.DataFrame(
+        [
+            {
+                "category": positions[aid].category or "Unknown",
+                "name": positions[aid].name or aid,
+                "Market Value (EUR)": valuations[aid].market_value_eur,
+            }
+            for aid in open_ids
+            if valuations[aid].market_value_eur
+        ]
+    )
 
-            for index, row in summary.iterrows():
-                asset_ticker = row["Asset"]
-                # Pull the name you wrote when logging the transaction
-                custom_name = row["name"] if row["name"] != "Unknown" else asset_ticker
-                official_name = row["Official Name"] if row["Official Name"] else asset_ticker
-                currency = row["Ccy"]
+    if not pie_df.empty:
+        col_left, col_right = st.columns(2)
+        with col_left:
+            st.write("**By Category**")
+            st.plotly_chart(
+                px.pie(
+                    pie_df.groupby("category", as_index=False)["Market Value (EUR)"].sum(),
+                    values="Market Value (EUR)",
+                    names="category",
+                    hole=0.4,
+                    color_discrete_sequence=px.colors.qualitative.Prism,
+                ),
+                width="stretch",
+            )
+        with col_right:
+            st.write("**By Asset Name**")
+            st.plotly_chart(
+                px.pie(
+                    pie_df.groupby("name", as_index=False)["Market Value (EUR)"].sum(),
+                    values="Market Value (EUR)",
+                    names="name",
+                    hole=0.4,
+                    color_discrete_sequence=px.colors.qualitative.Pastel,
+                ),
+                width="stretch",
+            )
 
-                with st.expander(f"📈 {custom_name}", expanded=True):
-                    # Fetch the selected period
-                    # hist_data = yf.download(asset, period=selected_period, progress=False)
-                    hist_data = fetch_historical_data(asset_ticker, selected_period)
+# ==========================================================================================================
+# --- 3. ASSET PERFORMANCE HISTORIES ---
+# ==========================================================================================================
 
-                    if not hist_data.empty:
-                        # Flatten columns and reset index for Plotly
-                        if isinstance(hist_data.columns, pd.MultiIndex):
-                            hist_data.columns = hist_data.columns.get_level_values(0)
-                        hist_plot_df = hist_data.reset_index()
+if open_ids:
+    st.markdown("---")
+    st.subheader("Asset Performance & Transaction History")
 
-                        # 1. Create the Base Line Chart
-                        fig = px.line(
-                            hist_plot_df,
-                            x="Date",
-                            y="Close",
-                            title=f"{official_name} ({currency}, {asset_ticker}) - {selected_label}",
-                            labels={"Close": "Price", "Date": "Timeline"},
-                            template="plotly_white"
-                        )
+    time_options = {
+        "6 Months": "6mo",
+        "1 Year": "1y",
+        "3 Years": "3y",
+        "5 Years": "5y",
+        "10 Years": "10y",
+        "All Time": "max",
+    }
+    selected_label = st.selectbox("Select Time Range", options=list(time_options.keys()), index=2)
+    selected_period = time_options[selected_label]
 
-                        # 2. Add "Buy" and "Sell" markers from your Firestore 'df'
-                        # Filter transactions for THIS specific asset
-                        asset_txs = df[df['id'] == asset_ticker].copy()
-                        # Ensure date is in datetime format for alignment with x-axis
-                        asset_txs['date'] = pd.to_datetime(asset_txs['date'])
+    txs_by_asset: dict[str, list] = {}
+    for tx in transactions:
+        txs_by_asset.setdefault(tx.asset_id, []).append(tx)
 
-                        # Add Buy Markers (Green Up-Arrows)
-                        buys = asset_txs[asset_txs['action'] == 'Buy']
-                        if not buys.empty:
-                            fig.add_trace(px.scatter(
-                                buys, x='date', y='price_nominal',
-                                color_discrete_sequence=['#2ECC71']
-                            ).data[0].update(
-                                name="Buy",
-                                marker=dict(size=12, symbol='triangle-up', line=dict(width=2, color='DarkGreen')),
-                                hovertemplate="<b>BUY</b><br>Date: %{x}<br>Price: $%{y:.2f}"
-                            ))
+    for aid in sorted(open_ids, key=lambda a: valuations[a].market_value_eur or -1, reverse=True):
+        pos, val = positions[aid], valuations[aid]
+        symbol = price_symbol[aid]
+        # Your own label first: for funds, Yahoo's "name" is an internal code like
+        # 0P0001EI1P.F, which is less useful than what you typed when logging.
+        official = pos.name or listing_info.get(symbol, {}).get("name") or aid
+        ccy = val.listing_ccy or pm.BASE_CCY
+        sym = CURRENCY_SYMBOL.get(ccy, "")
 
-                        # Add Sell Markers (Red Down-Arrows)
-                        sells = asset_txs[asset_txs['action'] == 'Sell']
-                        if not sells.empty:
-                            fig.add_trace(px.scatter(
-                                sells, x='date', y='price_nominal',
-                                color_discrete_sequence=['#E74C3C']
-                            ).data[0].update(
-                                name="Sell",
-                                marker=dict(size=12, symbol='triangle-down', line=dict(width=2, color='DarkRed')),
-                                hovertemplate="<b>SELL</b><br>Date: %{x}<br>Price: $%{y:.2f}"
-                            ))
+        with st.expander(f"📈 {pos.name or aid}", expanded=True):
+            # Unadjusted, so the series is on the same scale as the raw trade prices
+            # plotted on top of it. An adjusted series would sit below them and drift
+            # further apart with every dividend, and jump by the split ratio.
+            hist = md.fetch_price_history((symbol,), selected_period, adjusted=False)
+            if hist.empty or symbol not in hist.columns:
+                st.error(f"Could not load historical data for {symbol}")
+                continue
 
-                        # 3. Add the Average Cost Basis Line (Break-even)
-                        asset_summary = summary[summary['Asset'] == asset_ticker].iloc[0]
-                        avg_price = asset_summary['Avg Buy (Nom)']
+            plot_df = hist[[symbol]].rename(columns={symbol: "Close"}).reset_index()
+            date_col = plot_df.columns[0]
 
-                        fig.add_hline(
-                            y=avg_price,
-                            line_dash="dash",
-                            line_color="rgba(46, 204, 113, 0.5)",
-                            annotation_text=f"Cost Basis: ${avg_price:.2f}",
-                            annotation_position="top left"
-                        )
+            fig = px.line(
+                plot_df,
+                x=date_col,
+                y="Close",
+                title=f"{official} ({ccy}, {symbol}) — {selected_label}, unadjusted close",
+                labels={"Close": f"Price ({ccy})", date_col: "Timeline"},
+                template="plotly_white",
+            )
 
-                        # Final styling
-                        fig.update_layout(showlegend=True, hovermode="x unified")
-                        st.plotly_chart(fig, width="stretch")
-                    else:
-                        st.error(f"Could not load historical data for {asset_ticker}")
+            asset_txs = txs_by_asset.get(aid, [])
+            for action, colour, symbol_shape, edge in (
+                ("Buy", "#2ECC71", "triangle-up", "DarkGreen"),
+                ("Sell", "#E74C3C", "triangle-down", "DarkRed"),
+            ):
+                rows = [t for t in asset_txs if t.action == action]
+                if not rows:
+                    continue
+                fig.add_scatter(
+                    x=[t.trade_date for t in rows],
+                    y=[t.price_nominal for t in rows],
+                    mode="markers",
+                    name=action,
+                    marker=dict(
+                        size=12,
+                        color=colour,
+                        symbol=symbol_shape,
+                        line=dict(width=2, color=edge),
+                    ),
+                    hovertemplate=(
+                        f"<b>{action.upper()}</b><br>Date: %{{x}}<br>"
+                        f"Price: {sym}%{{y:.2f}}<extra></extra>"
+                    ),
+                )
 
-        except Exception as e:
-            st.error(f"Analysis Error: {e}")
+            # The cost basis is held in EUR; show it in the chart's currency.
+            try:
+                avg_in_chart_ccy = pm.from_base(pos.avg_cost_eur, ccy, rates)
+            except pm.MissingRate:
+                avg_in_chart_ccy = None
+
+            if avg_in_chart_ccy:
+                label = f"Avg cost: {sym}{avg_in_chart_ccy:,.2f}"
+                if ccy != pm.BASE_CCY:
+                    label += f" (€{pos.avg_cost_eur:,.2f} at today's FX)"
+                fig.add_hline(
+                    y=avg_in_chart_ccy,
+                    line_dash="dash",
+                    line_color="rgba(46, 204, 113, 0.7)",
+                    annotation_text=label,
+                    annotation_position="top left",
+                )
+
+            fig.update_layout(showlegend=True, hovermode="x unified")
+            st.plotly_chart(fig, width="stretch")

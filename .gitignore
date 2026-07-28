@@ -1,1 +1,10 @@
 firebaseServiceAccountKey.json
+backup*.json
+
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+
+.idea/workspace.xml
+.idea/misc.xml

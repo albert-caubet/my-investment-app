@@ -1,0 +1,613 @@
+"""Pure portfolio arithmetic.
+
+Deliberately free of Streamlit, Firestore, yfinance and any network access, so that
+every euro figure the dashboard shows can be unit-tested in isolation.
+
+Two conventions are stated once here and never re-derived elsewhere:
+
+1. ``rates[X]`` is *units of X per 1 EUR* -- the Yahoo ``EURX=X`` quote. So
+   ``rates["USD"] == 1.17`` means 1 EUR buys 1.17 USD, and a USD amount is
+   converted to EUR by *dividing* by it.
+2. A position is built by replaying its transactions in chronological order.
+   Average cost with sells is order-dependent, so it cannot be expressed as a
+   groupby aggregate.
+"""
+
+from __future__ import annotations
+
+import math
+from dataclasses import dataclass, field
+from datetime import date, datetime
+from typing import Iterable, Mapping, Sequence
+
+BASE_CCY = "EUR"
+
+# The dashboard can only value assets whose listing currency it can convert.
+SUPPORTED_CCY = frozenset({"EUR", "USD"})
+
+# Quantity tolerance is *relative* to lifetime volume, so it behaves for both
+# 0.5 BTC and 12,000 fund units.
+QTY_REL_EPS = 1e-9
+MONEY_EPS = 0.01  # one cent
+
+# Below this many observations a CAPM estimate is not worth showing.
+MIN_CAPM_OBS = 60
+TRADING_DAYS = 252
+
+
+class MissingRate(LookupError):
+    """Raised instead of silently defaulting an FX rate to 1.0.
+
+    A silent 1.0 is how a USD cost basis quietly ends up ~15% too low.
+    """
+
+
+# ---------------------------------------------------------------------------
+# Currency
+# ---------------------------------------------------------------------------
+
+def to_base(amount: float, ccy: str | None, rates: Mapping[str, float]) -> float:
+    """Convert `amount`, expressed in `ccy`, into EUR. See module docstring."""
+    code = (ccy or "").upper()
+    if not code:
+        raise MissingRate("no currency given")
+    if code == BASE_CCY:
+        return float(amount)
+    rate = rates.get(code)
+    if rate is None or not math.isfinite(rate) or rate <= 0:
+        raise MissingRate(f"no usable {BASE_CCY}{code} rate")
+    return float(amount) / float(rate)
+
+
+def from_base(amount_eur: float, ccy: str | None, rates: Mapping[str, float]) -> float:
+    """Inverse of :func:`to_base` -- EUR into `ccy`."""
+    code = (ccy or "").upper()
+    if code == BASE_CCY:
+        return float(amount_eur)
+    rate = rates.get(code)
+    if rate is None or not math.isfinite(rate) or rate <= 0:
+        raise MissingRate(f"no usable {BASE_CCY}{code} rate")
+    return float(amount_eur) * float(rate)
+
+
+# ---------------------------------------------------------------------------
+# Transactions
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class Transaction:
+    """One logged trade, already normalised out of its Firestore shape.
+
+    `fx_rate` is units of `currency` per 1 EUR *on the trade date*, and is always
+    1.0 when `currency` is EUR. Cost basis uses this historical rate; only market
+    value uses a live one.
+    """
+
+    asset_id: str
+    trade_date: date
+    action: str
+    quantity: float
+    price_nominal: float
+    currency: str
+    fx_rate: float
+    fees: float = 0.0
+    seq: int = 0
+    doc_id: str | None = None
+    # Display metadata, carried through so the UI does not need a second pass.
+    category: str | None = None
+    name: str | None = None
+    ticker: str | None = None
+    isin: str | None = None
+    #: Yahoo symbol an ISIN resolved to, captured once at entry time so the pricing
+    #: path never has to run a live ISIN search.
+    resolved_ticker: str | None = None
+
+    @property
+    def is_buy(self) -> bool:
+        return self.action == "Buy"
+
+    @property
+    def gross_nominal(self) -> float:
+        return self.quantity * self.price_nominal
+
+    @property
+    def gross_eur(self) -> float:
+        return self.gross_nominal / self.fx_rate
+
+    @property
+    def fees_eur(self) -> float:
+        return self.fees / self.fx_rate
+
+
+# ---------------------------------------------------------------------------
+# Positions
+# ---------------------------------------------------------------------------
+
+@dataclass
+class PositionState:
+    """Running state of one holding after replaying its transactions."""
+
+    asset_id: str
+    quantity: float = 0.0
+    cost_basis_eur: float = 0.0
+    #: Same basis in the transaction currency. ``None`` once an asset has been
+    #: traded in more than one currency, where a nominal average is meaningless.
+    cost_basis_nominal: float | None = 0.0
+    nominal_ccy: str | None = None
+    realised_pnl_eur: float = 0.0
+    fees_eur_total: float = 0.0
+    proceeds_eur_total: float = 0.0
+    qty_bought_lifetime: float = 0.0
+    qty_sold_lifetime: float = 0.0
+    first_trade_date: date | None = None
+    last_trade_date: date | None = None
+    n_transactions: int = 0
+    category: str | None = None
+    name: str | None = None
+    ticker: str | None = None
+    isin: str | None = None
+    resolved_ticker: str | None = None
+    warnings: list[str] = field(default_factory=list)
+
+    @property
+    def price_symbol(self) -> str:
+        """What to send to the price provider, as opposed to the grouping identity."""
+        return self.resolved_ticker or self.ticker or self.asset_id
+
+    @property
+    def is_open(self) -> bool:
+        return self.quantity > 0.0
+
+    @property
+    def avg_cost_eur(self) -> float:
+        """EUR cost per share still held, fees included."""
+        return self.cost_basis_eur / self.quantity if self.quantity > 0 else 0.0
+
+    @property
+    def avg_cost_nominal(self) -> float | None:
+        if self.cost_basis_nominal is None or self.quantity <= 0:
+            return None
+        return self.cost_basis_nominal / self.quantity
+
+
+def _qty_eps(pos: PositionState) -> float:
+    return max(1e-9, QTY_REL_EPS * pos.qty_bought_lifetime)
+
+
+def _sweep_residue(pos: PositionState) -> None:
+    """Snap a float-dust quantity to zero and move any stranded basis to realised.
+
+    Without this, selling everything can leave ~1e-15 shares carrying the full
+    cost basis, which renders as a single enormous negative-P&L row.
+    """
+    if abs(pos.quantity) > _qty_eps(pos):
+        return
+    pos.quantity = 0.0
+    if abs(pos.cost_basis_eur) > MONEY_EPS:
+        pos.warnings.append(
+            f"swept residual cost basis of EUR {pos.cost_basis_eur:.2f} into realised P&L "
+            f"when the position closed"
+        )
+    # Keeps the identity total == unrealised + realised exactly true.
+    pos.realised_pnl_eur -= pos.cost_basis_eur
+    pos.cost_basis_eur = 0.0
+    if pos.cost_basis_nominal is not None:
+        pos.cost_basis_nominal = 0.0
+
+
+def _apply(pos: PositionState, tx: Transaction) -> None:
+    pos.n_transactions += 1
+    if pos.first_trade_date is None or tx.trade_date < pos.first_trade_date:
+        pos.first_trade_date = tx.trade_date
+    if pos.last_trade_date is None or tx.trade_date >= pos.last_trade_date:
+        pos.last_trade_date = tx.trade_date
+        # Latest non-empty metadata wins, matching the old agg("first") on a
+        # date-descending frame.
+        pos.category = tx.category or pos.category
+        pos.name = tx.name or pos.name
+        pos.ticker = tx.ticker or pos.ticker
+        pos.isin = tx.isin or pos.isin
+        pos.resolved_ticker = tx.resolved_ticker or pos.resolved_ticker
+
+    if pos.nominal_ccy is None and pos.n_transactions == 1:
+        pos.nominal_ccy = tx.currency
+    elif pos.nominal_ccy != tx.currency:
+        pos.nominal_ccy = None
+        pos.cost_basis_nominal = None
+
+    fees_eur = tx.fees_eur
+    pos.fees_eur_total += fees_eur
+
+    if tx.is_buy:
+        pos.cost_basis_eur += tx.gross_eur + fees_eur
+        if pos.cost_basis_nominal is not None:
+            pos.cost_basis_nominal += tx.gross_nominal + tx.fees
+        pos.quantity += tx.quantity
+        pos.qty_bought_lifetime += tx.quantity
+        _sweep_residue(pos)
+        return
+
+    # --- sell -------------------------------------------------------------
+    pos.qty_sold_lifetime += tx.quantity
+    proceeds_eur = tx.gross_eur - fees_eur
+    pos.proceeds_eur_total += proceeds_eur
+
+    if pos.quantity <= _qty_eps(pos):
+        pos.warnings.append(
+            f"sell of {tx.quantity:g} on {tx.trade_date} with no open position; "
+            f"booked as pure gain against zero basis"
+        )
+        pos.realised_pnl_eur += proceeds_eur
+        pos.quantity = 0.0
+        return
+
+    sell_qty = min(tx.quantity, pos.quantity)
+    if tx.quantity > sell_qty + _qty_eps(pos):
+        pos.warnings.append(
+            f"oversell on {tx.trade_date}: {tx.quantity:g} requested but only "
+            f"{pos.quantity:g} held"
+        )
+
+    # Release a *fraction of the running total* rather than avg_cost * qty, so a
+    # full exit lands on exactly 0.0 with no rounding drift.
+    frac = sell_qty / pos.quantity
+    released_eur = pos.cost_basis_eur * frac
+    pos.realised_pnl_eur += proceeds_eur - released_eur
+    pos.cost_basis_eur -= released_eur
+    if pos.cost_basis_nominal is not None:
+        pos.cost_basis_nominal *= 1.0 - frac
+    pos.quantity -= sell_qty
+    _sweep_residue(pos)
+
+
+def build_position(txs: Sequence[Transaction]) -> PositionState:
+    """Replay one asset's transactions chronologically. Never raises."""
+    if not txs:
+        raise ValueError("build_position requires at least one transaction")
+    pos = PositionState(asset_id=txs[0].asset_id)
+    for tx in sorted(txs, key=lambda t: (t.trade_date, t.seq)):
+        _apply(pos, tx)
+    return pos
+
+
+def build_positions(txs: Iterable[Transaction]) -> dict[str, PositionState]:
+    grouped: dict[str, list[Transaction]] = {}
+    for tx in txs:
+        grouped.setdefault(tx.asset_id, []).append(tx)
+    return {aid: build_position(rows) for aid, rows in grouped.items()}
+
+
+# ---------------------------------------------------------------------------
+# Valuation
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class Quote:
+    """A live price, in whatever currency the asset is *listed* in."""
+
+    asset_id: str
+    price: float | None
+    listing_ccy: str | None
+    as_of: date | None = None
+
+
+@dataclass
+class Valuation:
+    asset_id: str
+    quantity: float
+    cost_basis_eur: float
+    realised_pnl_eur: float
+    market_value_eur: float | None = None
+    unrealised_pnl_eur: float | None = None
+    unrealised_pnl_pct: float | None = None
+    total_pnl_eur: float | None = None
+    price: float | None = None
+    listing_ccy: str | None = None
+    error: str | None = None
+
+
+def value_position(
+    pos: PositionState,
+    quote: Quote | None,
+    rates: Mapping[str, float],
+) -> Valuation:
+    """Mark a position to market. Never raises -- failures land in ``.error``.
+
+    Conversion keys off the *listing* currency, because that is the currency the
+    quoted price is denominated in. The transaction currency says what left your
+    bank account and is already baked into ``cost_basis_eur``; the two are
+    different things and only coincide by accident.
+    """
+    val = Valuation(
+        asset_id=pos.asset_id,
+        quantity=pos.quantity,
+        cost_basis_eur=pos.cost_basis_eur,
+        realised_pnl_eur=pos.realised_pnl_eur,
+        total_pnl_eur=pos.realised_pnl_eur,
+    )
+
+    if quote is None or quote.price is None or not math.isfinite(quote.price):
+        val.error = "no price available"
+        return val
+
+    val.price = quote.price
+    val.listing_ccy = quote.listing_ccy
+    code = (quote.listing_ccy or "").upper()
+    if code not in SUPPORTED_CCY:
+        val.error = f"unsupported listing currency {quote.listing_ccy!r}"
+        return val
+
+    try:
+        val.market_value_eur = to_base(pos.quantity * quote.price, code, rates)
+    except MissingRate as exc:
+        val.error = str(exc)
+        return val
+
+    val.unrealised_pnl_eur = val.market_value_eur - pos.cost_basis_eur
+    if pos.cost_basis_eur > MONEY_EPS:
+        val.unrealised_pnl_pct = val.unrealised_pnl_eur / pos.cost_basis_eur * 100.0
+    val.total_pnl_eur = val.unrealised_pnl_eur + pos.realised_pnl_eur
+    return val
+
+
+@dataclass
+class PortfolioTotals:
+    market_value_eur: float = 0.0
+    cost_basis_eur: float = 0.0
+    unrealised_pnl_eur: float = 0.0
+    realised_pnl_eur: float = 0.0
+    total_pnl_eur: float = 0.0
+    pnl_pct: float | None = None
+    n_valued: int = 0
+    n_unvalued: int = 0
+    unvalued_ids: list[str] = field(default_factory=list)
+
+
+def portfolio_totals(vals: Sequence[Valuation]) -> PortfolioTotals:
+    """Aggregate. Positions that failed to value are counted, never silently zeroed."""
+    tot = PortfolioTotals()
+    for v in vals:
+        tot.realised_pnl_eur += v.realised_pnl_eur
+        if v.market_value_eur is None:
+            tot.n_unvalued += 1
+            tot.unvalued_ids.append(v.asset_id)
+            continue
+        tot.n_valued += 1
+        tot.market_value_eur += v.market_value_eur
+        tot.cost_basis_eur += v.cost_basis_eur
+        tot.unrealised_pnl_eur += v.unrealised_pnl_eur or 0.0
+    tot.total_pnl_eur = tot.unrealised_pnl_eur + tot.realised_pnl_eur
+    if tot.cost_basis_eur > MONEY_EPS:
+        tot.pnl_pct = tot.total_pnl_eur / tot.cost_basis_eur * 100.0
+    return tot
+
+
+def weights(vals: Sequence[Valuation]) -> dict[str, float]:
+    """Percent of total market value per asset. Empty when nothing could be valued."""
+    total = sum(v.market_value_eur for v in vals if v.market_value_eur is not None)
+    if total <= 0:
+        return {}
+    return {
+        v.asset_id: v.market_value_eur / total * 100.0
+        for v in vals
+        if v.market_value_eur is not None
+    }
+
+
+# ---------------------------------------------------------------------------
+# Firestore document loading
+# ---------------------------------------------------------------------------
+
+def _coerce_date(value) -> date | None:
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    if isinstance(value, str):
+        try:
+            return datetime.strptime(value[:10], "%Y-%m-%d").date()
+        except ValueError:
+            return None
+    return None
+
+
+def _coerce_float(value) -> float | None:
+    try:
+        out = float(value)
+    except (TypeError, ValueError):
+        return None
+    return out if math.isfinite(out) else None
+
+
+def transaction_from_doc(doc: Mapping) -> tuple[Transaction | None, list[str]]:
+    """Turn one Firestore document into a :class:`Transaction`.
+
+    Deliberately ignores the stored ``cost_eur`` and recomputes it from
+    quantity x price / fx. That single choice makes the read path immune to a
+    denormalised field drifting out of sync with the values it was derived from,
+    and removes any dependence on which schema version wrote the document.
+    """
+    problems: list[str] = []
+
+    ticker = (doc.get("ticker") or "").strip() or None
+    isin = (doc.get("isin") or "").strip() or None
+    # Identity stays ISIN-first, matching the existing grouping so historical
+    # positions do not split when this loader is introduced.
+    asset_id = isin or ticker
+    if not asset_id:
+        return None, ["no ticker and no ISIN"]
+
+    trade_date = _coerce_date(doc.get("date"))
+    if trade_date is None:
+        return None, [f"unparseable date {doc.get('date')!r}"]
+
+    action = doc.get("action")
+    if action not in ("Buy", "Sell"):
+        problems.append(f"unknown action {action!r}, treated as Sell")
+        action = "Sell"
+
+    quantity = _coerce_float(doc.get("quantity"))
+    if quantity is None or quantity <= 0:
+        return None, [f"unusable quantity {doc.get('quantity')!r}"]
+
+    # price_nominal is current; `price` is the pre-69753eb field name.
+    price = _coerce_float(doc.get("price_nominal"))
+    if price is None:
+        price = _coerce_float(doc.get("price"))
+        if price is not None:
+            problems.append("legacy `price` field used; no `price_nominal`")
+    if price is None:
+        return None, ["no usable price_nominal or price"]
+
+    currency = (doc.get("currency") or BASE_CCY).upper()
+    if "currency" not in doc:
+        problems.append(f"no currency field; assumed {BASE_CCY}")
+
+    if currency == BASE_CCY:
+        # The writer calls get_historical_fx(date, "EUR", "USD") unconditionally,
+        # so EUR documents carry a stored EURUSD rate that was never applied to
+        # cost_eur. Honouring it here would understate every EUR cost basis.
+        fx_rate = 1.0
+    else:
+        fx_rate = _coerce_float(doc.get("fx_rate"))
+        if fx_rate is None:
+            fx_rate = _coerce_float(doc.get("fx_rate_at_buy"))
+        if fx_rate is None or fx_rate <= 0:
+            return None, [f"no usable FX rate for a {currency} transaction"]
+        if fx_rate == 1.0:
+            problems.append(
+                f"FX rate is exactly 1.0 on a {currency} transaction -- almost "
+                f"certainly the silent fallback, so this cost basis is too low"
+            )
+
+    fees = _coerce_float(doc.get("fees")) or 0.0
+
+    # Firestore SERVER_TIMESTAMP gives a stable intra-day ordering.
+    stamp = doc.get("timestamp")
+    seq = int(stamp.timestamp()) if isinstance(stamp, datetime) else 0
+
+    tx = Transaction(
+        asset_id=asset_id,
+        trade_date=trade_date,
+        action=action,
+        quantity=quantity,
+        price_nominal=price,
+        currency=currency,
+        fx_rate=fx_rate,
+        fees=fees,
+        seq=seq,
+        doc_id=doc.get("_doc_id"),
+        category=(doc.get("category") or None),
+        name=(doc.get("name") or None),
+        ticker=ticker,
+        isin=isin,
+        resolved_ticker=(doc.get("resolved_ticker") or "").strip() or None,
+    )
+    return tx, problems
+
+
+def load_transactions(docs: Iterable[Mapping]) -> tuple[list[Transaction], list[str]]:
+    """Bulk loader. Returns usable transactions plus human-readable problems."""
+    txs: list[Transaction] = []
+    problems: list[str] = []
+    for doc in docs:
+        tx, issues = transaction_from_doc(doc)
+        label = doc.get("_doc_id") or doc.get("isin") or doc.get("ticker") or "?"
+        for issue in issues:
+            problems.append(f"{label}: {issue}")
+        if tx is None:
+            problems.append(f"{label}: skipped")
+        else:
+            txs.append(tx)
+    return txs, problems
+
+
+def audit_transaction(doc: Mapping) -> list[str]:
+    """Red flags for a stored document, including denormalised-field drift."""
+    notes: list[str] = []
+    tx, problems = transaction_from_doc(doc)
+    notes.extend(problems)
+    if tx is None:
+        return notes
+
+    stored = _coerce_float(doc.get("cost_eur"))
+    if stored is not None:
+        expected = tx.gross_eur
+        if abs(stored - expected) > max(MONEY_EPS, abs(expected) * 1e-6):
+            notes.append(
+                f"stored cost_eur {stored:.2f} disagrees with quantity x price / fx "
+                f"= {expected:.2f} (difference {stored - expected:+.2f})"
+            )
+    if doc.get("fees") is None and "fees" not in doc:
+        notes.append("no fees recorded")
+    return notes
+
+
+# ---------------------------------------------------------------------------
+# CAPM
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class CapmResult:
+    beta: float | None = None
+    alpha_annual: float | None = None
+    r_squared: float | None = None
+    n_obs: int = 0
+    credible: bool = False
+    note: str = ""
+
+
+def estimate_capm(
+    asset_returns,
+    market_returns,
+    *,
+    rf_annual: float,
+    min_obs: int = MIN_CAPM_OBS,
+    periods_per_year: int = TRADING_DAYS,
+) -> CapmResult:
+    """Jensen's alpha and beta from aligned return arrays.
+
+    Both moments use ddof=1. Mixing numpy's defaults -- ``np.cov`` normalises by
+    n-1, ``np.var`` by n -- inflates beta by exactly n/(n-1).
+    """
+    import numpy as np
+
+    a = np.asarray(asset_returns, dtype=float)
+    m = np.asarray(market_returns, dtype=float)
+    if a.shape != m.shape:
+        return CapmResult(note="asset and market series are not aligned")
+
+    ok = np.isfinite(a) & np.isfinite(m)
+    a, m = a[ok], m[ok]
+    n = int(a.size)
+    if n < min_obs:
+        return CapmResult(n_obs=n, note=f"only {n} observations (minimum {min_obs})")
+
+    rf_period = rf_annual / periods_per_year
+    a_ex, m_ex = a - rf_period, m - rf_period
+
+    # A constant series does not give exactly zero variance in floating point --
+    # it gives denormal dust, and dividing by that yields a garbage beta. Real
+    # daily-return volatility is ~1e-2, so anything near 1e-12 is degenerate.
+    market_sd = float(np.std(m_ex, ddof=1))
+    if not math.isfinite(market_sd) or market_sd < 1e-12:
+        return CapmResult(n_obs=n, note="benchmark has no variance over this window")
+
+    beta = float(np.cov(a_ex, m_ex, ddof=1)[0, 1] / market_sd**2)
+    alpha = (a.mean() * periods_per_year - rf_annual) - beta * (
+        m.mean() * periods_per_year - rf_annual
+    )
+
+    asset_sd = float(np.std(a_ex, ddof=1))
+    r_squared = (
+        float(np.corrcoef(a_ex, m_ex)[0, 1] ** 2) if asset_sd > 1e-12 else 0.0
+    )
+
+    return CapmResult(
+        beta=beta,
+        alpha_annual=float(alpha),
+        r_squared=r_squared,
+        n_obs=n,
+        credible=True,
+        note=f"{n} observations",
+    )
