@@ -35,6 +35,10 @@ if not transactions:
 
 positions = pm.build_positions(transactions)
 
+txs_by_asset: dict[str, list[pm.Transaction]] = {}
+for tx in transactions:
+    txs_by_asset.setdefault(tx.asset_id, []).append(tx)
+
 # The pricing symbol is not the identity: assets are keyed by ISIN so that grouping
 # stays stable, but a resolved ticker is the better thing to send to Yahoo.
 price_symbol = {aid: pos.price_symbol for aid, pos in positions.items()}
@@ -129,12 +133,36 @@ if totals.n_unvalued:
 # benchmark's annual return; this can.
 mwr = pm.xirr(pm.build_cashflows(transactions, totals.market_value_eur, date.today()))
 
-m1, m2, m3, m4, m5, m6 = st.columns(6)
-m1.metric("Total Cost Basis (EUR)", f"€{totals.cost_basis_eur:,.0f}")
-m2.metric("Total Value (EUR)", f"€{totals.market_value_eur:,.0f}")
-m3.metric("Unrealised PnL (EUR)", f"€{totals.unrealised_pnl_eur:,.0f}")
-m4.metric("Realised PnL (EUR)", f"€{totals.realised_pnl_eur:,.0f}")
-m5.metric(
+# --- Inflation -------------------------------------------------------------
+# The HICP series does not reach the present day, so every figure derived from it
+# is labelled with the month it actually covers. A stale rate presented as current
+# would understate exactly the thing this section exists to measure.
+hicp_index = md.fetch_hicp_index()
+hicp_latest = md.fetch_hicp_annual_rate()
+hicp_area = md.HICP_AREA_LABEL.get(md.HICP_AREA, md.HICP_AREA)
+ref_month = max(hicp_index) if hicp_index else None
+months_stale = (
+    (date.today().year - int(ref_month[:4])) * 12 + date.today().month - int(ref_month[5:7])
+    if ref_month
+    else 0
+)
+
+real_positions: dict[str, pm.PositionState] = {}
+uncovered_months: set[str] = set()
+if ref_month:
+    for aid, rows in txs_by_asset.items():
+        adjusted, uncovered = pm.to_real_terms(rows, ref_month, hicp_index)
+        real_positions[aid] = pm.build_position(adjusted)
+        uncovered_months.update(m for m in uncovered if "no index" not in m)
+
+r1 = st.columns(4)
+r1[0].metric("Total Cost Basis (EUR)", f"€{totals.cost_basis_eur:,.0f}")
+r1[1].metric("Total Value (EUR)", f"€{totals.market_value_eur:,.0f}")
+r1[2].metric("Unrealised PnL (EUR)", f"€{totals.unrealised_pnl_eur:,.0f}")
+r1[3].metric("Realised PnL (EUR)", f"€{totals.realised_pnl_eur:,.0f}")
+
+r2 = st.columns(4)
+r2[0].metric(
     "Total PnL (EUR)",
     f"€{totals.total_pnl_eur:,.0f}",
     f"{totals.pnl_pct:.2f}%" if totals.pnl_pct is not None else None,
@@ -148,11 +176,39 @@ mwr_help = (
 )
 if totals.n_unvalued:
     mwr_help += " Understated: some positions could not be valued."
-m6.metric(
+r2[1].metric(
     "Money-Weighted Return",
     f"{mwr.rate * 100:.2f}%" if mwr.credible else "–",
     help=mwr_help,
 )
+
+if hicp_latest:
+    rate, month = hicp_latest
+    r2[2].metric(
+        f"Inflation ({hicp_area} HICP)",
+        f"{rate * 100:.1f}%",
+        f"as of {month}",
+        delta_color="off",
+        help=(
+            f"Annual change in the {hicp_area} Harmonised Index of Consumer Prices, "
+            f"from the ECB. This is the most recent published figure — the series ends "
+            f"at {month}, {months_stale} month(s) ago, so it is not a live number the "
+            f"way the prices above are."
+        ),
+    )
+    r2[3].metric(
+        "Real Return",
+        f"{pm.real_rate(mwr.rate, rate) * 100:.2f}%" if mwr.credible else "–",
+        help=(
+            "Money-weighted return with inflation stripped out, via the Fisher "
+            "relation rather than simple subtraction. What your money actually gained "
+            f"in purchasing power. Uses the {month} inflation rate; the months since "
+            f"are not yet published, so the true figure is likely a little lower."
+        ),
+    )
+else:
+    r2[2].metric(f"Inflation ({hicp_area} HICP)", "–", help="Could not reach the ECB Data Portal.")
+    r2[3].metric("Real Return", "–")
 
 # ==========================================================================================================
 # --- 1. ASSET BREAKDOWN ---
@@ -163,6 +219,13 @@ st.subheader("Asset Breakdown")
 
 def _row(aid):
     pos, val, cap = positions[aid], valuations[aid], capm[aid]
+    real = real_positions.get(aid)
+    real_basis = real.cost_basis_eur if real else None
+    real_pnl = (
+        val.market_value_eur - real_basis
+        if real_basis is not None and val.market_value_eur is not None
+        else None
+    )
     return {
         "category": pos.category or "Unknown",
         "name": pos.name or aid,
@@ -173,9 +236,11 @@ def _row(aid):
         "Avg Cost (EUR)": pos.avg_cost_eur,
         "Curr Price (Nom)": val.price,
         "Cost Basis (EUR)": val.cost_basis_eur,
+        "Real Cost Basis (EUR)": real_basis,
         "Market Value (EUR)": val.market_value_eur,
         "PnL (%)": val.unrealised_pnl_pct,
         "PnL (EUR)": val.unrealised_pnl_eur,
+        "Real PnL (EUR)": real_pnl,
         "Realised (EUR)": pos.realised_pnl_eur,
         "Weight (%)": asset_weights.get(aid),
         "Beta": cap.beta,
@@ -240,6 +305,16 @@ CAPM_HELP = {
     "PnL (EUR)": "Unrealised gain or loss in euros on what you still hold.",
     "Realised (EUR)": "Gain or loss already banked by selling. Zero until you sell.",
     "Note": "Why a position could not be valued. Empty means it valued cleanly.",
+    "Real Cost Basis (EUR)": (
+        "What you paid, restated into the purchasing power of the most recent month "
+        "the inflation index covers. Higher than the nominal cost basis because those "
+        "euros bought more back then."
+    ),
+    "Real PnL (EUR)": (
+        "Gain or loss after inflation — market value against the restated cost basis. "
+        "A position that merely kept pace with inflation shows near zero here while "
+        "still showing a nominal profit."
+    ),
 }
 
 
@@ -260,9 +335,11 @@ if open_ids:
                 "Avg Cost (EUR)": "€ {:,.2f}",
                 "Curr Price (Nom)": "{:,.2f}",
                 "Cost Basis (EUR)": "€ {:,.2f}",
+                "Real Cost Basis (EUR)": "€ {:,.2f}",
                 "Market Value (EUR)": "€ {:,.2f}",
                 "PnL (%)": "{:.1f} %",
                 "PnL (EUR)": "€ {:,.2f}",
+                "Real PnL (EUR)": "€ {:,.2f}",
                 "Realised (EUR)": "€ {:,.2f}",
                 "Weight (%)": "{:.1f} %",
                 "Beta": "{:.2f}",
@@ -272,7 +349,11 @@ if open_ids:
             na_rep="–",
         ).apply(
             _sign_scaled_colours,
-            subset=[c for c in ("PnL (%)", "PnL (EUR)", "Realised (EUR)") if c in summary],
+            subset=[
+                c
+                for c in ("PnL (%)", "PnL (EUR)", "Real PnL (EUR)", "Realised (EUR)")
+                if c in summary
+            ],
         ),
         # Alpha deliberately has no colour scale: a red/green ramp reads as a
         # finding, and an alpha estimate is far noisier than a measured P&L.
@@ -296,6 +377,20 @@ if open_ids:
     if weak:
         caption += "  \nNot estimated: " + "; ".join(weak)
     st.caption(caption)
+
+    if ref_month:
+        inflation_note = (
+            f"Real figures restate cost into **{ref_month}** purchasing power using "
+            f"{hicp_area} HICP — the latest month the index covers. Inflation over the "
+            f"{months_stale} month(s) since is not yet published, so real gains here are "
+            f"flattered by that much."
+        )
+        if uncovered_months:
+            inflation_note += (
+                f"  \nNot adjusted at all (bought after the index ends): "
+                f"{', '.join(sorted(uncovered_months))}."
+            )
+        st.caption(inflation_note)
 else:
     st.info("No open positions.")
 
@@ -389,10 +484,6 @@ if open_ids:
     selected_label = st.selectbox("Select Time Range", options=list(time_options.keys()), index=2)
     selected_period = time_options[selected_label]
 
-    txs_by_asset: dict[str, list] = {}
-    for tx in transactions:
-        txs_by_asset.setdefault(tx.asset_id, []).append(tx)
-
     for aid in sorted(open_ids, key=lambda a: valuations[a].market_value_eur or -1, reverse=True):
         pos, val = positions[aid], valuations[aid]
         symbol = price_symbol[aid]
@@ -465,6 +556,27 @@ if open_ids:
                     annotation_text=label,
                     annotation_position="top left",
                 )
+
+                # Inflation hurdle: where the price must be to have merely preserved
+                # purchasing power. Between the two lines is nominal profit that
+                # bought nothing extra.
+                real_pos = real_positions.get(aid)
+                if real_pos and real_pos.cost_basis_eur > pos.cost_basis_eur:
+                    try:
+                        hurdle = pm.from_base(real_pos.avg_cost_eur, ccy, rates)
+                    except pm.MissingRate:
+                        hurdle = None
+                    if hurdle:
+                        fig.add_hline(
+                            y=hurdle,
+                            line_dash="dot",
+                            line_color="rgba(230, 126, 34, 0.9)",
+                            annotation_text=(
+                                f"Break-even after inflation: {sym}{hurdle:,.2f} "
+                                f"(to {ref_month})"
+                            ),
+                            annotation_position="bottom left",
+                        )
 
             fig.update_layout(showlegend=True, hovermode="x unified")
             st.plotly_chart(fig, width="stretch")

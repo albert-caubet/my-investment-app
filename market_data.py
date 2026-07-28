@@ -10,6 +10,10 @@ Cached functions take **tuples**, not lists, so the cache key is immutable.
 
 from __future__ import annotations
 
+import csv
+import io
+import urllib.request
+
 import numpy as np
 import pandas as pd
 import streamlit as st
@@ -244,3 +248,61 @@ def fetch_us_10y() -> float | None:
     spot = fetch_spot_prices((US_10Y_TICKER,))
     value = spot.get(US_10Y_TICKER)
     return value / 100.0 if value else None
+
+
+# ---------------------------------------------------------------------------
+# Inflation (ECB Data Portal, no API key required)
+# ---------------------------------------------------------------------------
+
+#: Harmonised Index of Consumer Prices. "ES" is Spain, "U2" the euro area.
+HICP_AREA = "ES"
+HICP_AREA_LABEL = {"ES": "Spain", "U2": "euro area"}
+
+_ECB_ICP = "https://data-api.ecb.europa.eu/service/data/ICP"
+
+
+def _fetch_icp(key: str) -> dict[str, float]:
+    """One ICP series as ``{"YYYY-MM": value}``. Empty dict on any failure.
+
+    Note the series does not necessarily reach the present day: at the time of
+    writing it ends in 2025-12, and the data carries a notice about
+    methodological changes from February 2026. Callers must treat the coverage as
+    a fact to be checked, not assumed -- presenting a months-old figure as though
+    it were current is the whole failure mode this is guarding against.
+    """
+    url = f"{_ECB_ICP}/{key}?startPeriod=2000-01&format=csvdata"
+    try:
+        request = urllib.request.Request(url, headers={"User-Agent": "my-investment-app"})
+        with urllib.request.urlopen(request, timeout=20) as response:
+            text = response.read().decode("utf-8", "replace")
+    except Exception:
+        return {}
+
+    series: dict[str, float] = {}
+    for row in csv.DictReader(io.StringIO(text)):
+        period = (row.get("TIME_PERIOD") or "").strip()
+        try:
+            series[period] = float(row.get("OBS_VALUE"))
+        except (TypeError, ValueError):
+            continue
+    return series
+
+
+@st.cache_data(ttl=86_400, show_spinner=False)
+def fetch_hicp_index(area: str = HICP_AREA) -> dict[str, float]:
+    """Monthly HICP index levels, for restating past amounts in later euros."""
+    return _fetch_icp(f"M.{area}.N.000000.4.INX")
+
+
+@st.cache_data(ttl=86_400, show_spinner=False)
+def fetch_hicp_annual_rate(area: str = HICP_AREA) -> tuple[float, str] | None:
+    """Latest annual inflation as a decimal, with the month it refers to.
+
+    The month is returned alongside deliberately: this figure is only honest when
+    displayed with its date.
+    """
+    series = _fetch_icp(f"M.{area}.N.000000.4.ANR")
+    if not series:
+        return None
+    month = max(series)
+    return series[month] / 100.0, month

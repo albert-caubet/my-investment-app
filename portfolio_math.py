@@ -16,7 +16,7 @@ Two conventions are stated once here and never re-derived elsewhere:
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, datetime
 from typing import Iterable, Mapping, Sequence
 
@@ -721,3 +721,65 @@ def xirr(
         credible=True,
         note=f"{len(flows)} cash flows over {span} days",
     )
+
+
+# ---------------------------------------------------------------------------
+# Inflation adjustment
+# ---------------------------------------------------------------------------
+
+def real_rate(nominal_rate: float, inflation_rate: float) -> float:
+    """Strip inflation out of a nominal rate (Fisher relation).
+
+    Subtracting inflation is only an approximation; it drifts as either rate
+    grows, and a rate is exactly the kind of figure where that matters.
+    """
+    return (1.0 + nominal_rate) / (1.0 + inflation_rate) - 1.0
+
+
+def month_of(day: date) -> str:
+    """The ``YYYY-MM`` key a price index is published against."""
+    return f"{day.year:04d}-{day.month:02d}"
+
+
+def to_real_terms(
+    txs: Sequence[Transaction],
+    to_month: str,
+    index: Mapping[str, float],
+) -> tuple[list[Transaction], list[str]]:
+    """Restate transactions into the purchasing power of ``to_month``.
+
+    Scales price and fees by the ratio of index levels, so replaying the result
+    through :func:`build_position` yields a cost basis in constant euros -- with
+    sells and averaging handled by exactly the same tested code path.
+
+    Transactions in months the index does not cover are passed through unchanged
+    and named in the returned list. A partial adjustment must never be presented
+    as a complete one: the uncovered months are precisely where unmeasured
+    inflation would flatter the result.
+    """
+    target = index.get(to_month)
+    if not target:
+        return list(txs), [f"no index value for {to_month}"]
+
+    adjusted: list[Transaction] = []
+    uncovered: list[str] = []
+    for tx in txs:
+        month = month_of(tx.trade_date)
+        source = index.get(month)
+        if not source:
+            adjusted.append(tx)
+            uncovered.append(month)
+            continue
+        factor = target / source
+        adjusted.append(
+            replace(tx, price_nominal=tx.price_nominal * factor, fees=tx.fees * factor)
+        )
+    return adjusted, sorted(set(uncovered))
+
+
+def inflation_between(from_month: str, to_month: str, index: Mapping[str, float]) -> float | None:
+    """Cumulative inflation between two months, as a decimal. None if uncovered."""
+    start, end = index.get(from_month), index.get(to_month)
+    if not start or not end:
+        return None
+    return end / start - 1.0
