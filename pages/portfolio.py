@@ -1,3 +1,5 @@
+from datetime import date
+
 import numpy as np
 import pandas as pd
 import plotly.express as px
@@ -122,7 +124,12 @@ if totals.n_unvalued:
         f"totals: {', '.join(totals.unvalued_ids)}"
     )
 
-m1, m2, m3, m4, m5 = st.columns(5)
+# Money-weighted return over every cash flow ever logged, closed with today's
+# value. Total PnL % is a ratio with no time in it, so it cannot be compared to a
+# benchmark's annual return; this can.
+mwr = pm.xirr(pm.build_cashflows(transactions, totals.market_value_eur, date.today()))
+
+m1, m2, m3, m4, m5, m6 = st.columns(6)
 m1.metric("Total Cost Basis (EUR)", f"€{totals.cost_basis_eur:,.0f}")
 m2.metric("Total Value (EUR)", f"€{totals.market_value_eur:,.0f}")
 m3.metric("Unrealised PnL (EUR)", f"€{totals.unrealised_pnl_eur:,.0f}")
@@ -131,6 +138,20 @@ m5.metric(
     "Total PnL (EUR)",
     f"€{totals.total_pnl_eur:,.0f}",
     f"{totals.pnl_pct:.2f}%" if totals.pnl_pct is not None else None,
+)
+
+mwr_help = (
+    "Money-weighted return (XIRR): the annual rate that turns your actual deposits, "
+    "on their actual dates, into today's value. Total PnL % is a plain ratio — it "
+    "treats a euro invested last month the same as one invested two years ago. "
+    f"{mwr.note}."
+)
+if totals.n_unvalued:
+    mwr_help += " Understated: some positions could not be valued."
+m6.metric(
+    "Money-Weighted Return",
+    f"{mwr.rate * 100:.2f}%" if mwr.credible else "–",
+    help=mwr_help,
 )
 
 # ==========================================================================================================

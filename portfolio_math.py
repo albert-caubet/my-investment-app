@@ -34,6 +34,11 @@ MONEY_EPS = 0.01  # one cent
 MIN_CAPM_OBS = 60
 TRADING_DAYS = 252
 
+# Annualising a few weeks of return produces enormous meaningless figures -- the
+# same failure mode as a 252x annualised alpha off six observations.
+MIN_XIRR_DAYS = 90
+DAYS_PER_YEAR = 365.0
+
 
 class MissingRate(LookupError):
     """Raised instead of silently defaulting an FX rate to 1.0.
@@ -610,4 +615,109 @@ def estimate_capm(
         n_obs=n,
         credible=True,
         note=f"{n} observations",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Money-weighted return (XIRR)
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class XirrResult:
+    rate: float | None = None
+    n_flows: int = 0
+    days: int = 0
+    credible: bool = False
+    note: str = ""
+
+
+def build_cashflows(
+    txs: Sequence[Transaction],
+    terminal_value_eur: float,
+    as_of: date,
+) -> list[tuple[date, float]]:
+    """Transactions as signed EUR cash flows, closed with today's portfolio value.
+
+    Buys are money leaving (negative), sells money arriving (positive), each at the
+    FX rate that applied on its own trade date. Fees are part of the flow because
+    they genuinely left the account.
+    """
+    flows = [
+        (
+            tx.trade_date,
+            -(tx.gross_eur + tx.fees_eur) if tx.is_buy else (tx.gross_eur - tx.fees_eur),
+        )
+        for tx in txs
+    ]
+    flows.append((as_of, float(terminal_value_eur)))
+    return sorted(flows)
+
+
+def xirr(
+    cashflows: Sequence[tuple[date, float]],
+    *,
+    min_days: int = MIN_XIRR_DAYS,
+    max_iter: int = 200,
+) -> XirrResult:
+    """Annualised money-weighted return: the IRR of dated cash flows.
+
+    Answers "what rate did *my money* earn", which is a different question from
+    ``(value - cost) / cost``: that ratio contains no time at all, so it treats a
+    euro invested last month the same as one invested two years ago.
+
+    Solved by bisection -- no scipy needed. Returns a result with ``credible=False``
+    rather than a number whenever the answer would not mean anything.
+    """
+    flows = sorted((d, float(cf)) for d, cf in cashflows if cf)
+    if len(flows) < 2:
+        return XirrResult(n_flows=len(flows), note="need at least two non-zero cash flows")
+
+    if not (any(cf < 0 for _, cf in flows) and any(cf > 0 for _, cf in flows)):
+        return XirrResult(
+            n_flows=len(flows), note="need both an outflow and an inflow"
+        )
+
+    start = flows[0][0]
+    span = (flows[-1][0] - start).days
+    if span < min_days:
+        return XirrResult(
+            n_flows=len(flows),
+            days=span,
+            note=f"only {span} days of history (minimum {min_days})",
+        )
+
+    def npv(rate: float) -> float:
+        return sum(
+            cf / (1.0 + rate) ** ((d - start).days / DAYS_PER_YEAR) for d, cf in flows
+        )
+
+    # A rate at or below -100% is meaningless, so the lower bound sits just above
+    # it -- far enough down that even a near-total loss still brackets. The upper
+    # bound is deliberately generous so genuinely large returns bracket too.
+    low, high = -0.999999, 10.0
+    npv_low, npv_high = npv(low), npv(high)
+    if npv_low * npv_high > 0:
+        # No sign change over the bracket. When flows change sign more than once --
+        # buy, exit completely, buy again -- the IRR may be non-unique or may not
+        # exist at all. Reporting nothing beats reporting a plausible fiction.
+        return XirrResult(
+            n_flows=len(flows),
+            days=span,
+            note="no unique solution for these cash flows",
+        )
+
+    for _ in range(max_iter):
+        mid = (low + high) / 2.0
+        npv_mid = npv(mid)
+        if npv_low * npv_mid <= 0:
+            high = mid
+        else:
+            low, npv_low = mid, npv_mid
+
+    return XirrResult(
+        rate=(low + high) / 2.0,
+        n_flows=len(flows),
+        days=span,
+        credible=True,
+        note=f"{len(flows)} cash flows over {span} days",
     )
