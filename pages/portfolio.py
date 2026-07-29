@@ -281,6 +281,23 @@ def _sign_scaled_colours(series: pd.Series) -> list[str]:
     return styles
 
 
+def _warm_scaled_colours(series: pd.Series) -> list[str]:
+    """Warm tan shades scaled independently from the largest value."""
+    values = pd.to_numeric(series, errors="coerce")
+    largest = values[values > 0].max() if (values > 0).any() else 0.0
+
+    styles = []
+    for value in values:
+        if pd.isna(value) or value <= 0:
+            styles.append("")
+            continue
+        share = value / largest if largest else 1.0
+        alpha = 0.18 + 0.62 * share
+        text = " color: #ffffff;" if alpha > 0.55 else ""
+        styles.append(f"background-color: rgba(181, 126, 71, {alpha:.3f});{text}")
+    return styles
+
+
 CAPM_HELP = {
     "Beta": (
         "How much this holding moves when the benchmark moves. 1.0 tracks the S&P 500 "
@@ -353,6 +370,11 @@ if open_ids:
                 c
                 for c in ("PnL (%)", "PnL (EUR)", "Real PnL (EUR)", "Realised (EUR)")
                 if c in summary
+            ],
+        ).apply(
+            _warm_scaled_colours,
+            subset=[
+                c for c in ("Market Value (EUR)", "Weight (%)") if c in summary
             ],
         ),
         # Alpha deliberately has no colour scale: a red/green ramp reads as a
