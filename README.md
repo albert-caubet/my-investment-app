@@ -33,6 +33,10 @@ Worth knowing, because these choices decide what the numbers mean:
   books the difference as realised P&L. A closed position keeps its realised P&L and
   drops out of the open table. FIFO is not implemented.
 - **Fees are capitalised** into the cost basis on a buy, and net off proceeds on a sell.
+- **Each P&L percentage is on the cost it was earned on.** Unrealised is on the open
+  cost basis, realised on the cost of what was sold, and total on the two together,
+  which is every euro of cost ever deployed. None of them carries time; the
+  money-weighted return does.
 - **An FX rate that cannot be established blocks the save.** It is never defaulted to
   1.0 — that would silently understate a USD cost basis by whatever the rate was, and
   freeze the error into the database.

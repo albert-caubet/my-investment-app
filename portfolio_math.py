@@ -149,6 +149,10 @@ class PositionState:
     asset_id: str
     quantity: float = 0.0
     cost_basis_eur: float = 0.0
+    #: Cost basis released by sells (and by the closing sweep). Open basis plus
+    #: released basis is every euro of cost ever deployed in this asset, and
+    #: released basis is the denominator realised P&L was earned on.
+    cost_released_eur: float = 0.0
     #: Same basis in the transaction currency. ``None`` once an asset has been
     #: traded in more than one currency, where a nominal average is meaningless.
     cost_basis_nominal: float | None = 0.0
@@ -210,6 +214,7 @@ def _sweep_residue(pos: PositionState) -> None:
         )
     # Keeps the identity total == unrealised + realised exactly true.
     pos.realised_pnl_eur -= pos.cost_basis_eur
+    pos.cost_released_eur += pos.cost_basis_eur
     pos.cost_basis_eur = 0.0
     if pos.cost_basis_nominal is not None:
         pos.cost_basis_nominal = 0.0
@@ -275,6 +280,7 @@ def _apply(pos: PositionState, tx: Transaction) -> None:
     released_eur = pos.cost_basis_eur * frac
     pos.realised_pnl_eur += proceeds_eur - released_eur
     pos.cost_basis_eur -= released_eur
+    pos.cost_released_eur += released_eur
     if pos.cost_basis_nominal is not None:
         pos.cost_basis_nominal *= 1.0 - frac
     pos.quantity -= sell_qty
@@ -318,6 +324,7 @@ class Valuation:
     quantity: float
     cost_basis_eur: float
     realised_pnl_eur: float
+    cost_released_eur: float = 0.0
     market_value_eur: float | None = None
     unrealised_pnl_eur: float | None = None
     unrealised_pnl_pct: float | None = None
@@ -346,6 +353,7 @@ def value_position(
         quantity=pos.quantity,
         cost_basis_eur=pos.cost_basis_eur,
         realised_pnl_eur=pos.realised_pnl_eur,
+        cost_released_eur=pos.cost_released_eur,
         total_pnl_eur=pos.realised_pnl_eur,
     )
 
@@ -381,21 +389,41 @@ def value_position(
 @dataclass
 class PortfolioTotals:
     market_value_eur: float = 0.0
+    #: Open cost basis of the positions that could be valued.
     cost_basis_eur: float = 0.0
+    #: Cost basis released by sells across every position, valued or not.
+    cost_released_eur: float = 0.0
     unrealised_pnl_eur: float = 0.0
     realised_pnl_eur: float = 0.0
     total_pnl_eur: float = 0.0
+    #: Each percentage is against the cost it was earned on: unrealised on the open
+    #: basis, realised on the released basis, total on the two together. Total is
+    #: therefore the cost-weighted blend of the other two, and carries no time.
+    unrealised_pnl_pct: float | None = None
+    realised_pnl_pct: float | None = None
     pnl_pct: float | None = None
     n_valued: int = 0
     n_unvalued: int = 0
     unvalued_ids: list[str] = field(default_factory=list)
 
+    @property
+    def invested_eur(self) -> float:
+        """Every euro of cost ever deployed: still open, or since sold."""
+        return self.cost_basis_eur + self.cost_released_eur
+
 
 def portfolio_totals(vals: Sequence[Valuation]) -> PortfolioTotals:
-    """Aggregate. Positions that failed to value are counted, never silently zeroed."""
+    """Aggregate. Positions that failed to value are counted, never silently zeroed.
+
+    Realised P&L and released basis are summed over every position, because money
+    already banked is real whether or not today's price is available. Open basis
+    and unrealised P&L are summed over valued positions only, so a position with a
+    cost and no value against it cannot drag the totals.
+    """
     tot = PortfolioTotals()
     for v in vals:
         tot.realised_pnl_eur += v.realised_pnl_eur
+        tot.cost_released_eur += v.cost_released_eur
         if v.market_value_eur is None:
             tot.n_unvalued += 1
             tot.unvalued_ids.append(v.asset_id)
@@ -406,7 +434,14 @@ def portfolio_totals(vals: Sequence[Valuation]) -> PortfolioTotals:
         tot.unrealised_pnl_eur += v.unrealised_pnl_eur or 0.0
     tot.total_pnl_eur = tot.unrealised_pnl_eur + tot.realised_pnl_eur
     if tot.cost_basis_eur > MONEY_EPS:
-        tot.pnl_pct = tot.total_pnl_eur / tot.cost_basis_eur * 100.0
+        tot.unrealised_pnl_pct = tot.unrealised_pnl_eur / tot.cost_basis_eur * 100.0
+    if tot.cost_released_eur > MONEY_EPS:
+        tot.realised_pnl_pct = tot.realised_pnl_eur / tot.cost_released_eur * 100.0
+    # Against every euro of cost ever deployed. Dividing by the open basis alone
+    # measured gains on capital already withdrawn against capital still at work,
+    # which overstated the ratio by however much had been sold.
+    if tot.invested_eur > MONEY_EPS:
+        tot.pnl_pct = tot.total_pnl_eur / tot.invested_eur * 100.0
     return tot
 
 

@@ -37,9 +37,13 @@ def test_missing_or_bogus_rate_raises_never_defaults_to_one(rates):
         to_base(117.0, "USD", rates)
 
 
-def _pos(qty=100.0, basis=1000.0, realised=0.0):
+def _pos(qty=100.0, basis=1000.0, realised=0.0, released=0.0):
     return PositionState(
-        asset_id="X", quantity=qty, cost_basis_eur=basis, realised_pnl_eur=realised
+        asset_id="X",
+        quantity=qty,
+        cost_basis_eur=basis,
+        realised_pnl_eur=realised,
+        cost_released_eur=released,
     )
 
 
@@ -123,3 +127,52 @@ def test_unknown_listing_currency_is_not_assumed_to_be_eur():
 def test_empty_string_listing_currency_is_also_unknown():
     val = value_position(_pos(), Quote("X", price=11.70, listing_ccy=""), RATES)
     assert val.market_value_eur is None
+
+
+def test_total_pnl_pct_is_on_every_euro_of_cost_deployed():
+    """Regression: total P&L was divided by the open cost basis alone.
+
+    Buy 1000, sell it all for 1500, then buy another 1000 now worth 1000. That is
+    500 earned on 2000 deployed, 25% -- not 500 on the 1000 still open, 50%.
+    """
+    closed = value_position(
+        _pos(qty=0.0, basis=0.0, realised=500.0, released=1000.0), Quote("A", 1.0, "EUR"), RATES
+    )
+    still_open = value_position(_pos(qty=100.0, basis=1000.0), Quote("B", 10.0, "EUR"), RATES)
+    closed.asset_id, still_open.asset_id = "A", "B"
+
+    tot = portfolio_totals([closed, still_open])
+    assert tot.invested_eur == pytest.approx(2000.0)
+    assert tot.unrealised_pnl_pct == pytest.approx(0.0)
+    assert tot.realised_pnl_pct == pytest.approx(50.0)
+    assert tot.pnl_pct == pytest.approx(25.0)
+
+
+def test_total_pnl_pct_is_the_cost_weighted_blend():
+    """Open 3000 at +10%, sold 1000 at +50%: total is (300 + 500) / 4000 = 20%."""
+    a = value_position(_pos(qty=300.0, basis=3000.0, realised=500.0, released=1000.0),
+                       Quote("A", 11.0, "EUR"), RATES)
+    tot = portfolio_totals([a])
+    assert tot.unrealised_pnl_pct == pytest.approx(10.0)
+    assert tot.realised_pnl_pct == pytest.approx(50.0)
+    assert tot.pnl_pct == pytest.approx(20.0)
+
+
+def test_realised_pct_is_none_when_nothing_was_sold():
+    tot = portfolio_totals([value_position(_pos(), Quote("A", 12.0, "EUR"), RATES)])
+    assert tot.realised_pnl_pct is None
+    assert tot.unrealised_pnl_pct == pytest.approx(20.0)
+    assert tot.pnl_pct == pytest.approx(20.0)  # nothing sold, so total equals unrealised
+
+
+def test_unvalued_position_contributes_released_basis_but_not_open_basis():
+    """Money already banked is real whether or not today's price is available."""
+    good = value_position(_pos(), Quote("A", 12.0, "EUR"), RATES)
+    bad = value_position(_pos(realised=100.0, released=500.0), None, RATES)
+    good.asset_id, bad.asset_id = "A", "B"
+
+    tot = portfolio_totals([good, bad])
+    assert tot.cost_basis_eur == pytest.approx(1000.0)  # B's open basis excluded
+    assert tot.cost_released_eur == pytest.approx(500.0)  # B's released basis included
+    assert tot.realised_pnl_pct == pytest.approx(20.0)
+    assert tot.pnl_pct == pytest.approx((200.0 + 100.0) / 1500.0 * 100.0)

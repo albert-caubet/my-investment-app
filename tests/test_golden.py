@@ -99,6 +99,17 @@ def test_portfolio_totals_are_stable(positions):
     )
     assert tot.n_unvalued == 0
 
+    # Released basis: 750 from the partial sell (25% of 3000) + 1000 from the exit.
+    assert tot.cost_released_eur == pytest.approx(1750.0)
+    assert tot.invested_eur == pytest.approx(8590.9265 + 1750.0, abs=1e-3)
+    assert tot.realised_pnl_pct == pytest.approx(700.0 / 1750.0 * 100.0)
+    assert tot.unrealised_pnl_pct == pytest.approx(
+        tot.unrealised_pnl_eur / tot.cost_basis_eur * 100.0
+    )
+    # On every euro deployed, not on the open basis alone (which would be ~44.6%).
+    assert tot.pnl_pct == pytest.approx(tot.total_pnl_eur / tot.invested_eur * 100.0)
+    assert tot.pnl_pct < tot.total_pnl_eur / tot.cost_basis_eur * 100.0
+
 
 def test_closed_position_contributes_no_market_value(positions):
     pos, _ = positions

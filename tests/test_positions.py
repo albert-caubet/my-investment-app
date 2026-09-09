@@ -40,6 +40,7 @@ def test_partial_sell_releases_basis_proportionally(tx):
     assert pos.quantity == 150
     # 50 of 200 units sold -> 25% of the 3000 basis released.
     assert pos.cost_basis_eur == pytest.approx(2250.0)
+    assert pos.cost_released_eur == pytest.approx(750.0)
     assert pos.avg_cost_eur == pytest.approx(15.0)
     assert pos.realised_pnl_eur == pytest.approx(50 * (25 - 15))
 
@@ -57,6 +58,7 @@ def test_full_exit_zeroes_basis(tx):
     )
     assert pos.quantity == 0.0
     assert pos.cost_basis_eur == 0.0
+    assert pos.cost_released_eur == pytest.approx(1000.0)
     assert not pos.is_open
     assert pos.realised_pnl_eur == pytest.approx(200.0)
 
@@ -161,6 +163,12 @@ def test_total_equals_unrealised_plus_realised_invariant(tx):
     unrealised = pos.quantity * mark - pos.cost_basis_eur
     total = unrealised + pos.realised_pnl_eur
 
+    # Every euro of cost ever deployed is either still open or has been released.
+    # Unlike the cash identity below this holds even through oversells, which
+    # release the whole basis, and no-position sells, which release nothing.
+    deployed = sum(t.net_eur for t in txs if t.is_buy)
+    assert pos.cost_basis_eur + pos.cost_released_eur == pytest.approx(deployed, abs=1e-6)
+
     cash = sum(
         (-t.gross_eur - t.fees_eur) if t.is_buy else (t.gross_eur - t.fees_eur) for t in txs
     )
@@ -178,3 +186,24 @@ def test_position_carries_listing_currency_latest_non_empty_wins(tx):
     pos = build_position([tx(day=1, listing_ccy="USD"), tx(day=2, listing_ccy="EUR")])
     assert pos.listing_ccy == "EUR"
     assert build_position([tx()]).listing_ccy is None
+
+
+def test_closing_sweep_releases_the_residual_basis(tx):
+    """Three thirds in, one whole out: the dust basis swept into realised must
+    also count as released, or open + released stops adding up to what was bought."""
+    third = 1.0 / 3.0
+    pos = build_position(
+        [
+            tx(qty=third, price=30, day=1),
+            tx(qty=third, price=30, day=2),
+            tx(qty=third, price=30, day=3),
+            tx(action="Sell", qty=1.0, price=30, day=4),
+        ]
+    )
+    assert pos.cost_released_eur == pytest.approx(30.0)
+    assert pos.cost_basis_eur + pos.cost_released_eur == pytest.approx(30.0)
+
+
+def test_sell_with_no_position_releases_nothing(tx):
+    pos = build_position([tx(action="Sell", qty=10, price=5, day=1)])
+    assert pos.cost_released_eur == 0.0

@@ -169,17 +169,49 @@ if ref_month:
         real_positions[aid] = pm.build_position(adjusted)
         uncovered_months.update(m for m in uncovered if "no index" not in m)
 
+
+def _pct_delta(pct: float | None) -> str | None:
+    return f"{pct:+.2f}%" if pct is not None else None
+
+
+# Each P&L figure is shown in euros with its percentage as the delta, and each
+# percentage is against the cost it was actually earned on. Dividing everything by
+# the open cost basis, as before, measured realised gains on capital already
+# withdrawn against capital still at work.
 r1 = st.columns(4)
 r1[0].metric("Total Cost Basis (EUR)", f"€{totals.cost_basis_eur:,.0f}")
 r1[1].metric("Total Value (EUR)", f"€{totals.market_value_eur:,.0f}")
-r1[2].metric("Unrealised PnL (EUR)", f"€{totals.unrealised_pnl_eur:,.0f}")
-r1[3].metric("Realised PnL (EUR)", f"€{totals.realised_pnl_eur:,.0f}")
+r1[2].metric(
+    "Unrealised PnL (EUR)",
+    f"€{totals.unrealised_pnl_eur:,.0f}",
+    _pct_delta(totals.unrealised_pnl_pct),
+    help=(
+        "Market value of what you still hold against what it cost, fees included. "
+        "The percentage is on that open cost basis."
+    ),
+)
+r1[3].metric(
+    "Realised PnL (EUR)",
+    f"€{totals.realised_pnl_eur:,.0f}",
+    _pct_delta(totals.realised_pnl_pct),
+    help=(
+        "Banked by selling, net of fees. The percentage is on the cost of what was "
+        f"sold (€{totals.cost_released_eur:,.0f}), not on what you still hold."
+    ),
+)
 
 r2 = st.columns(4)
 r2[0].metric(
     "Total PnL (EUR)",
     f"€{totals.total_pnl_eur:,.0f}",
-    f"{totals.pnl_pct:.2f}%" if totals.pnl_pct is not None else None,
+    _pct_delta(totals.pnl_pct),
+    help=(
+        "Unrealised plus realised. The percentage is on every euro of cost ever "
+        f"deployed (€{totals.invested_eur:,.0f}: the open cost basis plus the cost "
+        "of what has since been sold), so it is the cost-weighted blend of the two "
+        "percentages above. It carries no time; the money-weighted return next to "
+        "it does."
+    ),
 )
 
 mwr_help = (
