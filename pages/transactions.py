@@ -128,7 +128,7 @@ with st.form("trade_form", clear_on_submit=False):
             min_value=0.0, step=0.0001, format="%.4f", value=0.0,
         )
 
-    submitted = st.form_submit_button("🚀 Save Transaction", use_container_width=True)
+    submitted = st.form_submit_button("🚀 Save Transaction", width="stretch")
 
     if submitted:
         ticker_clean = ticker.strip().upper()

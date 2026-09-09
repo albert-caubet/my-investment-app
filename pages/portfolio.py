@@ -11,8 +11,6 @@ from database import get_all_transactions
 
 CURRENCY_SYMBOL = {"EUR": "€", "USD": "$"}
 
-st.set_page_config(layout="wide", page_title="My Portfolio")
-
 raw_data = get_all_transactions()
 
 if not raw_data:
