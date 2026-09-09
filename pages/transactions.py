@@ -26,10 +26,9 @@ ASSET_CLASSES = [
 SUPPORTED_CCY = ["EUR", "USD"]
 
 
-def _detect(identifier: str) -> dict:
-    """Listing currency and name for a ticker or ISIN, cached for the session."""
-    info = md.fetch_listing_info((identifier,)).get(identifier, {})
-    return {"currency": info.get("currency"), "name": info.get("name")}
+def _detect_currency(identifier: str) -> str | None:
+    """Listing currency for a ticker or ISIN; cached per symbol for a day."""
+    return md.fetch_listing_currency((identifier,)).get(identifier)
 
 
 # Create the form
@@ -51,11 +50,11 @@ with st.form("trade_form", clear_on_submit=False):
         # --- Fetch Name & Detect Currency ---
         if st.form_submit_button("Fetch Name"):
             if identifier:
-                found = _detect(identifier)
                 st.session_state["detected_for"] = identifier
-                st.session_state["detected_ccy"] = found["currency"]
-                if found["name"]:
-                    st.session_state["fetched_name"] = found["name"]
+                st.session_state["detected_ccy"] = _detect_currency(identifier)
+                found_name = md.fetch_listing_name(identifier)
+                if found_name:
+                    st.session_state["fetched_name"] = found_name
                 else:
                     st.warning("No name found.")
             else:
@@ -90,9 +89,8 @@ with st.form("trade_form", clear_on_submit=False):
             if identifier:
                 try:
                     if not st.session_state.get("detected_ccy"):
-                        found = _detect(identifier)
                         st.session_state["detected_for"] = identifier
-                        st.session_state["detected_ccy"] = found["currency"]
+                        st.session_state["detected_ccy"] = _detect_currency(identifier)
 
                     target = pd.to_datetime(date_input)
                     hist = yf.download(

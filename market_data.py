@@ -135,27 +135,60 @@ def fetch_historical_fx(date_iso: str, quote_ccy: str) -> float | None:
 # ---------------------------------------------------------------------------
 
 @st.cache_data(ttl=86_400, show_spinner=False)
-def fetch_listing_info(tickers: tuple[str, ...]) -> dict[str, dict]:
-    """Listing currency and display name per ticker.
+def _listing_currency(symbol: str) -> str:
+    """Listing currency for one symbol, from the chart metadata.
+
+    ``fast_info`` reads the same chart endpoint the price download uses: one light
+    request, and available for anything that has a price history at all. The
+    quote-summary ``.info`` endpoint is slow, rate-limited and fails routinely, so
+    it is the fallback, not the first call.
+
+    Raises rather than returning ``None`` so that a failure is never cached: the
+    next run retries it, while a success stays cached for a day. Caching per
+    symbol also means a new holding does not refetch every other one.
+    """
+    ticker = yf.Ticker(symbol)
+    try:
+        ccy = ticker.fast_info["currency"]
+    except Exception:
+        ccy = None
+    if not ccy:
+        ccy = (ticker.info or {}).get("currency")
+    code = (ccy or "").upper()
+    if not code:
+        raise LookupError(f"no listing currency for {symbol}")
+    return code
+
+
+def fetch_listing_currency(tickers: tuple[str, ...]) -> dict[str, str | None]:
+    """``{symbol: listing currency}``, ``None`` where it could not be established.
 
     The listing currency is what the quoted price is denominated in, and is the only
-    currency valuation may key off.
+    currency valuation may key off. Unknown is reported as ``None``, never as EUR.
     """
-    out: dict[str, dict] = {}
+    out: dict[str, str | None] = {}
     for symbol in tickers:
         if "^" in symbol or "=" in symbol:
             continue
         try:
-            info = yf.Ticker(symbol).info or {}
-            out[symbol] = {
-                "currency": (info.get("currency") or "").upper() or None,
-                "name": info.get("displayName")
-                or info.get("shortName")
-                or info.get("longName"),
-            }
+            out[symbol] = _listing_currency(symbol)
         except Exception:
-            out[symbol] = {"currency": None, "name": None}
+            out[symbol] = None
     return out
+
+
+def fetch_listing_name(symbol: str) -> str | None:
+    """Display name from the quote summary.
+
+    This is the slow, flaky ``.info`` call. It is only made when the user presses
+    "Fetch Name" for one symbol, never on the dashboard path, and it is not cached
+    so that a transient failure can simply be retried by pressing again.
+    """
+    try:
+        info = yf.Ticker(symbol).info or {}
+    except Exception:
+        return None
+    return info.get("displayName") or info.get("shortName") or info.get("longName")
 
 
 @st.cache_data(ttl=86_400, show_spinner=False)

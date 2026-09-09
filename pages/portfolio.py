@@ -46,18 +46,18 @@ symbols = tuple(sorted(set(price_symbol.values())))
 # 2. MARKET DATA
 # ==========================================================================================================
 
-listing_info = md.fetch_listing_info(symbols)
+live_ccy = md.fetch_listing_currency(symbols)
 
 # Live metadata first, the currency detected when the trade was logged as the
-# fallback. Never EUR by default: Yahoo's metadata endpoint fails routinely and the
-# failure is cached for a day, so a default would value a USD price one-for-one as
-# euros -- the same silent error as an FX fallback of 1.0.
+# fallback. Never EUR by default: a lookup can still fail, and a default would
+# value a USD price one-for-one as euros -- the same silent error as an FX
+# fallback of 1.0.
 stored_ccy: dict[str, str] = {}
 for aid, pos in positions.items():
     if pos.listing_ccy:
         stored_ccy.setdefault(price_symbol[aid], pos.listing_ccy)
 listing_ccy: dict[str, str | None] = {
-    sym: listing_info.get(sym, {}).get("currency") or stored_ccy.get(sym) for sym in symbols
+    sym: live_ccy.get(sym) or stored_ccy.get(sym) for sym in symbols
 }
 
 spot = md.fetch_spot_prices(symbols)
@@ -553,9 +553,10 @@ if open_ids:
     for aid in sorted(open_ids, key=lambda a: valuations[a].market_value_eur or -1, reverse=True):
         pos, val = positions[aid], valuations[aid]
         symbol = price_symbol[aid]
-        # Your own label first: for funds, Yahoo's "name" is an internal code like
-        # 0P0001EI1P.F, which is less useful than what you typed when logging.
-        official = pos.name or listing_info.get(symbol, {}).get("name") or aid
+        # The name you typed when logging. Yahoo's name is not fetched here: it
+        # comes from the slow quote-summary endpoint, and for funds it is an
+        # internal code like 0P0001EI1P.F anyway.
+        official = pos.name or aid
         listing = val.listing_ccy  # None when unknown; no cost line is drawn then
         ccy = listing or "unknown currency"
         sym = CURRENCY_SYMBOL.get(listing, "")
