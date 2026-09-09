@@ -126,6 +126,17 @@ class Transaction:
     def fees_eur(self) -> float:
         return self.fees / self.fx_rate
 
+    @property
+    def net_eur(self) -> float:
+        """Cash that actually moved, in EUR.
+
+        Cost including fees on a buy, proceeds net of fees on a sell. The one
+        figure a stored ``cost_eur`` has to agree with.
+        """
+        if self.is_buy:
+            return self.gross_eur + self.fees_eur
+        return self.gross_eur - self.fees_eur
+
 
 # ---------------------------------------------------------------------------
 # Positions
@@ -550,10 +561,16 @@ def audit_transaction(doc: Mapping) -> list[str]:
 
     stored = _coerce_float(doc.get("cost_eur"))
     if stored is not None:
-        expected = tx.gross_eur
+        # The writer stores the cash that moved, fees included, so that is what a
+        # consistent document must reproduce. Comparing against gross alone flagged
+        # every fee-bearing trade, which teaches the reader to ignore the column.
+        expected = tx.net_eur
+        formula = (
+            "(quantity x price + fees) / fx" if tx.is_buy else "(quantity x price - fees) / fx"
+        )
         if abs(stored - expected) > max(MONEY_EPS, abs(expected) * 1e-6):
             notes.append(
-                f"stored cost_eur {stored:.2f} disagrees with quantity x price / fx "
+                f"stored cost_eur {stored:.2f} disagrees with {formula} "
                 f"= {expected:.2f} (difference {stored - expected:+.2f})"
             )
     if doc.get("fees") is None and "fees" not in doc:
@@ -655,13 +672,7 @@ def build_cashflows(
     FX rate that applied on its own trade date. Fees are part of the flow because
     they genuinely left the account.
     """
-    flows = [
-        (
-            tx.trade_date,
-            -(tx.gross_eur + tx.fees_eur) if tx.is_buy else (tx.gross_eur - tx.fees_eur),
-        )
-        for tx in txs
-    ]
+    flows = [(tx.trade_date, -tx.net_eur if tx.is_buy else tx.net_eur) for tx in txs]
     flows.append((as_of, float(terminal_value_eur)))
     return sorted(flows)
 

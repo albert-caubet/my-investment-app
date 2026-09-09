@@ -175,7 +175,14 @@ with st.form("trade_form", clear_on_submit=False):
                         "fees": fees,  # always written, so a real 0.0 is not dropped
                         "fx_rate": fx_rate,
                         "fx_source": fx_source,
-                        "cost_eur": (price * quantity + fees) / fx_rate,
+                        # Cash that moved: cost including fees on a buy, proceeds net
+                        # of fees on a sell. Denormalised -- the reader recomputes it
+                        # and the audit checks that the two agree.
+                        "cost_eur": (
+                            (price * quantity + fees) / fx_rate
+                            if action == "Buy"
+                            else (price * quantity - fees) / fx_rate
+                        ),
                         "schema_version": 2,
                         "timestamp": get_timestamp(),
                     }
@@ -193,9 +200,10 @@ with st.form("trade_form", clear_on_submit=False):
                         trade_data["name"] = name.strip()
 
                     record_transaction(trade_data)
+                    moved = "cost" if action == "Buy" else "proceeds"
                     st.success(
                         f"Recorded {action} of {quantity:g} {ticker_clean or isin_clean} "
-                        f"— cost €{trade_data['cost_eur']:,.2f} "
+                        f"— {moved} €{trade_data['cost_eur']:,.2f} "
                         f"(FX {fx_rate:.4f}, {fx_source})"
                     )
 
@@ -241,7 +249,8 @@ else:
                 "fx_rate": tx.fx_rate,
                 # Recomputed rather than read back, so a drifted stored value shows up
                 # in the note column instead of quietly flowing into the cost basis.
-                "cost_eur": tx.gross_eur + tx.fees_eur,
+                # Cost including fees on a buy, proceeds net of fees on a sell.
+                "net_eur": tx.net_eur,
                 "note": "; ".join(notes),
             }
         )
@@ -255,7 +264,7 @@ else:
                 "price_nominal": "{:.2f}",
                 "fees": "{:.2f}",
                 "fx_rate": "{:.4f}",
-                "cost_eur": "€ {:.2f}",
+                "net_eur": "€ {:.2f}",
             },
             na_rep="",
         ),

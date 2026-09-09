@@ -131,3 +131,43 @@ def test_listing_currency_is_read_from_the_document():
 def test_listing_currency_absent_is_none_not_eur():
     tx, _ = transaction_from_doc(doc())
     assert tx.listing_ccy is None
+
+
+def test_net_eur_is_cost_on_a_buy_and_proceeds_on_a_sell(tx):
+    buy = tx(qty=10, price=100.0, fees=9.95)
+    sell = tx(action="Sell", qty=10, price=100.0, fees=9.95)
+    assert buy.net_eur == pytest.approx(1009.95)
+    assert sell.net_eur == pytest.approx(990.05)
+
+
+def test_net_eur_converts_fees_at_the_trade_fx(tx):
+    usd = tx(qty=100, price=11.70, fees=11.70, ccy="USD", fx=1.17)
+    assert usd.net_eur == pytest.approx(1010.0)
+
+
+def test_audit_is_quiet_on_a_fee_bearing_buy():
+    """Regression: the writer stores cost *including* fees, and the audit compared
+    it against gross alone, so every trade with a fee was flagged as drifted."""
+    notes = audit_transaction(doc(quantity=10.0, price_nominal=100.0, fees=9.95, cost_eur=1009.95))
+    assert not any("disagrees" in n for n in notes)
+
+
+def test_audit_is_quiet_on_a_fee_bearing_sell():
+    notes = audit_transaction(
+        doc(action="Sell", quantity=10.0, price_nominal=100.0, fees=9.95, cost_eur=990.05)
+    )
+    assert not any("disagrees" in n for n in notes)
+
+
+def test_audit_flags_a_sell_stored_with_fees_added():
+    """Sells written before this fix carry gross + fees. That is a wrong stored
+    value, and the audit should say so rather than accept either convention."""
+    notes = audit_transaction(
+        doc(action="Sell", quantity=10.0, price_nominal=100.0, fees=9.95, cost_eur=1009.95)
+    )
+    assert any("disagrees" in n and "+19.90" in n for n in notes)
+
+
+def test_audit_still_catches_real_drift_on_a_fee_bearing_buy():
+    notes = audit_transaction(doc(quantity=10.0, price_nominal=100.0, fees=9.95, cost_eur=1000.00))
+    assert any("disagrees" in n for n in notes)
