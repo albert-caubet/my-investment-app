@@ -36,6 +36,24 @@ def record_transaction(data):
     clear_transaction_cache()
 
 
+def update_transaction(doc_id: str, data: dict) -> None:
+    """Replace one transaction document wholesale.
+
+    The caller supplies the complete body, built by the same function the create
+    path uses, so an edited legacy document comes out in the current schema
+    rather than as a patch over old field names.
+    """
+    db = init_db()
+    db.collection("transactions").document(doc_id).set(data)
+    clear_transaction_cache()
+
+
+def delete_transaction(doc_id: str) -> None:
+    db = init_db()
+    db.collection("transactions").document(doc_id).delete()
+    clear_transaction_cache()
+
+
 # 3. Helper function to get all transactions
 @st.cache_data(ttl=60, show_spinner=False)
 def get_all_transactions():

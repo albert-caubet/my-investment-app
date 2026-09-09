@@ -15,6 +15,8 @@ and sells, and see valuation and performance in EUR.
   - Buys and sells across Stocks, ETFs, Funds, Crypto and more.
   - Ticker or ISIN, with ISINs resolved to a Yahoo symbol once at entry.
   - Historical FX captured on the trade date; fees included in the cost basis.
+  - Select a row in the history log to edit or delete it. Saving rebuilds the document
+    in the current schema, so a legacy row is upgraded on its first edit.
 - **Cloud Database**
   - Firebase Firestore, for multi-device sync.
 
@@ -100,6 +102,7 @@ python -m pytest -q
 - `database.py`: Firestore initialisation and helpers.
 - `pages/portfolio.py`: Dashboard — loads, computes, renders.
 - `pages/transactions.py`: Trade entry and history log.
-- `tests/`: pytest suite over `portfolio_math.py`, including a golden fixture.
+- `tests/`: pytest suite over `portfolio_math.py`, including a golden fixture, plus
+  headless smoke tests that run both pages on canned data.
 - `requirements.txt` / `requirements-dev.txt`: Runtime and test dependencies.
 - `firebaseServiceAccountKey.json`: (Not in repo) Your private Firebase credentials.

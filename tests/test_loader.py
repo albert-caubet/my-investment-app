@@ -1,10 +1,15 @@
 """Firestore document loading, including the schema quirks found in the live data."""
 
-from datetime import datetime
+from datetime import date, datetime
 
 import pytest
 
-from portfolio_math import audit_transaction, load_transactions, transaction_from_doc
+from portfolio_math import (
+    audit_transaction,
+    load_transactions,
+    trade_document,
+    transaction_from_doc,
+)
 
 
 def doc(**over):
@@ -171,3 +176,79 @@ def test_audit_flags_a_sell_stored_with_fees_added():
 def test_audit_still_catches_real_drift_on_a_fee_bearing_buy():
     notes = audit_transaction(doc(quantity=10.0, price_nominal=100.0, fees=9.95, cost_eur=1000.00))
     assert any("disagrees" in n for n in notes)
+
+
+# --- writing documents -------------------------------------------------------
+
+
+def _trade(**over):
+    base = dict(
+        trade_date=date(2025, 9, 22),
+        category="Fund",
+        action="Buy",
+        currency="EUR",
+        quantity=10.0,
+        price_nominal=100.0,
+        fees=9.95,
+        fx_rate=1.0,
+        fx_source="base",
+        isin="ES0000000000",
+        name="Test Fund",
+    )
+    base.update(over)
+    return trade_document(**base)
+
+
+def test_trade_document_round_trips_through_the_loader():
+    tx, problems = transaction_from_doc(_trade())
+    assert problems == []
+    assert (tx.trade_date, tx.action, tx.currency) == (date(2025, 9, 22), "Buy", "EUR")
+    assert (tx.quantity, tx.price_nominal, tx.fees, tx.fx_rate) == (10.0, 100.0, 9.95, 1.0)
+    assert (tx.isin, tx.name, tx.category) == ("ES0000000000", "Test Fund", "Fund")
+
+
+def test_trade_document_cost_eur_is_what_the_audit_checks():
+    """Buy stores cost incl. fees, sell stores proceeds net of fees; both audit clean."""
+    buy, sell = _trade(), _trade(action="Sell")
+    assert buy["cost_eur"] == pytest.approx(1009.95)
+    assert sell["cost_eur"] == pytest.approx(990.05)
+    assert not any("disagrees" in n for n in audit_transaction(buy))
+    assert not any("disagrees" in n for n in audit_transaction(sell))
+    assert buy["schema_version"] == 2
+
+
+def test_trade_document_usd_converts_at_the_given_rate():
+    doc = _trade(
+        currency="usd", fx_rate=1.17, fx_source="yahoo", price_nominal=11.70, quantity=100.0, fees=0.0
+    )
+    assert doc["currency"] == "USD"
+    assert doc["cost_eur"] == pytest.approx(1000.0)
+    tx, problems = transaction_from_doc(doc)
+    assert problems == []
+    assert tx.gross_eur == pytest.approx(1000.0)
+
+
+def test_trade_document_omits_empty_optional_fields_and_uppercases_codes():
+    doc = _trade(ticker=" abc ", isin="", name="  ", listing_ccy="usd", resolved_ticker=None)
+    assert doc["ticker"] == "ABC"
+    assert doc["listing_ccy"] == "USD"
+    assert "isin" not in doc and "name" not in doc and "resolved_ticker" not in doc
+    assert doc["fees"] == 9.95  # always present, even when it would be 0.0
+    assert _trade(fees=0.0)["fees"] == 0.0
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        dict(action="Transfer"),
+        dict(quantity=0.0),
+        dict(price_nominal=-1.0),
+        dict(fx_rate=0.0),
+        dict(fx_rate=float("nan")),
+        dict(isin="", ticker=None),
+        dict(currency="EUR", fx_rate=1.17),  # an EUR trade carrying a USD rate is a bug
+    ],
+)
+def test_trade_document_refuses_unusable_input(bad):
+    with pytest.raises(ValueError):
+        _trade(**bad)

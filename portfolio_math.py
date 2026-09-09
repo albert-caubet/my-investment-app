@@ -614,6 +614,80 @@ def audit_transaction(doc: Mapping) -> list[str]:
 
 
 # ---------------------------------------------------------------------------
+# Firestore document writing
+# ---------------------------------------------------------------------------
+
+def trade_document(
+    *,
+    trade_date: date,
+    category: str | None,
+    action: str,
+    currency: str,
+    quantity: float,
+    price_nominal: float,
+    fees: float,
+    fx_rate: float,
+    fx_source: str,
+    ticker: str | None = None,
+    isin: str | None = None,
+    name: str | None = None,
+    listing_ccy: str | None = None,
+    resolved_ticker: str | None = None,
+) -> dict:
+    """The schema-v2 Firestore body for one trade, without the server timestamp.
+
+    The one place the document shape is written. The create and edit forms both
+    call it, so they cannot drift apart, and an edited legacy document comes out
+    in the current schema. ``cost_eur`` is the cash that moved -- cost including
+    fees on a buy, proceeds net of fees on a sell -- which is exactly what
+    :func:`audit_transaction` checks it against. Optional fields are omitted when
+    empty rather than written as empty strings, matching what
+    :func:`transaction_from_doc` expects to read back.
+    """
+    if action not in ("Buy", "Sell"):
+        raise ValueError(f"action must be Buy or Sell, not {action!r}")
+    if not quantity > 0:
+        raise ValueError("quantity must be greater than 0")
+    if not price_nominal > 0:
+        raise ValueError("price must be greater than 0")
+    if not (math.isfinite(fx_rate) and fx_rate > 0):
+        raise ValueError("fx_rate must be a positive number; it is never defaulted")
+    if not ((ticker or "").strip() or (isin or "").strip()):
+        raise ValueError("a ticker or an ISIN is required")
+
+    code = (currency or "").strip().upper()
+    if code == BASE_CCY and fx_rate != 1.0:
+        raise ValueError(f"a {BASE_CCY} trade must carry fx_rate 1.0, not {fx_rate}")
+
+    gross = float(price_nominal) * float(quantity)
+    fees = float(fees or 0.0)
+    doc: dict = {
+        "date": trade_date.strftime("%Y-%m-%d"),
+        "action": action,
+        "currency": code,
+        "quantity": float(quantity),
+        "price_nominal": float(price_nominal),
+        "fees": fees,  # always written, so a real 0.0 is not dropped
+        "fx_rate": float(fx_rate),
+        "fx_source": fx_source,
+        "cost_eur": (gross + fees) / fx_rate if action == "Buy" else (gross - fees) / fx_rate,
+        "schema_version": 2,
+    }
+    for key, value, upper in (
+        ("category", category, False),
+        ("ticker", ticker, True),
+        ("isin", isin, True),
+        ("name", name, False),
+        ("listing_ccy", listing_ccy, True),
+        ("resolved_ticker", resolved_ticker, False),
+    ):
+        cleaned = (value or "").strip()
+        if cleaned:
+            doc[key] = cleaned.upper() if upper else cleaned
+    return doc
+
+
+# ---------------------------------------------------------------------------
 # CAPM
 # ---------------------------------------------------------------------------
 
