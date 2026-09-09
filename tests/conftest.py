@@ -23,6 +23,7 @@ def tx():
         fees=0.0,
         asset="TEST",
         seq=0,
+        listing_ccy=None,
     ):
         return Transaction(
             asset_id=asset,
@@ -35,6 +36,7 @@ def tx():
             fx_rate=fx,
             fees=fees,
             seq=seq,
+            listing_ccy=listing_ccy,
         )
 
     return _make

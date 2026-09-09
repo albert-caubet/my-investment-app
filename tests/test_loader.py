@@ -120,3 +120,14 @@ def test_asset_identity_prefers_isin_matching_existing_grouping():
     tx, _ = transaction_from_doc(doc(isin="ES0001", ticker="ABC"))
     assert tx.asset_id == "ES0001"
     assert tx.ticker == "ABC"  # still carried for display and price resolution
+
+
+def test_listing_currency_is_read_from_the_document():
+    """The writer has stored it since schema v2; the reader must carry it."""
+    tx, _ = transaction_from_doc(doc(listing_ccy="usd"))
+    assert tx.listing_ccy == "USD"
+
+
+def test_listing_currency_absent_is_none_not_eur():
+    tx, _ = transaction_from_doc(doc())
+    assert tx.listing_ccy is None

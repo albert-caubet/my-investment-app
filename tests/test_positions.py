@@ -168,3 +168,13 @@ def test_total_equals_unrealised_plus_realised_invariant(tx):
     # shares were sold and the cash trail legitimately diverges.
     if not any("oversell" in w or "no open position" in w for w in pos.warnings):
         assert total == pytest.approx(cash + pos.quantity * mark, abs=1e-6)
+
+
+def test_position_carries_listing_currency_latest_non_empty_wins(tx):
+    """The stored currency is the valuation fallback, so an empty later doc must
+    not erase it."""
+    pos = build_position([tx(day=1, listing_ccy="USD"), tx(day=2)])
+    assert pos.listing_ccy == "USD"
+    pos = build_position([tx(day=1, listing_ccy="USD"), tx(day=2, listing_ccy="EUR")])
+    assert pos.listing_ccy == "EUR"
+    assert build_position([tx()]).listing_ccy is None

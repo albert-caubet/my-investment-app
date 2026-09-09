@@ -36,6 +36,10 @@ Worth knowing, because these choices decide what the numbers mean:
 - **An FX rate that cannot be established blocks the save.** It is never defaulted to
   1.0 — that would silently understate a USD cost basis by whatever the rate was, and
   freeze the error into the database.
+- **A listing currency that cannot be established blocks valuation.** It is never
+  defaulted to EUR, which would value a USD price one-for-one as euros. The currency
+  detected when the trade was logged is stored with it and used as the fallback when
+  the live lookup fails.
 - **Charts use unadjusted closes**, so the line is on the same scale as the raw trade
   prices plotted on it. The CAPM series uses adjusted prices, which is correct for returns.
 

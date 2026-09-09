@@ -106,3 +106,20 @@ def test_weights_sum_to_100():
     ]
     vals[0].asset_id, vals[1].asset_id = "A", "B"
     assert sum(weights(vals).values()) == pytest.approx(100.0)
+
+
+def test_unknown_listing_currency_is_not_assumed_to_be_eur():
+    """Regression: the dashboard defaulted an unknown listing currency to EUR.
+
+    A failed metadata lookup then valued a USD price one-for-one as euros, ~15%
+    too high. Refuse instead, the same way a missing FX rate is refused.
+    """
+    val = value_position(_pos(), Quote("X", price=11.70, listing_ccy=None), RATES)
+    assert val.market_value_eur is None
+    assert "unknown" in val.error
+    assert val.total_pnl_eur == pytest.approx(0.0)  # realised still flows through
+
+
+def test_empty_string_listing_currency_is_also_unknown():
+    val = value_position(_pos(), Quote("X", price=11.70, listing_ccy=""), RATES)
+    assert val.market_value_eur is None

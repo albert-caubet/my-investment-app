@@ -231,7 +231,12 @@ def to_eur_panel(
         return prices
     out = prices.copy()
     for column in out.columns:
-        ccy = (listing_ccy.get(column) or BASE_CCY).upper()
+        ccy = (listing_ccy.get(column) or "").upper()
+        if not ccy:
+            # Unknown is not EUR: left unconverted, a USD series would be missing
+            # the FX component of its EUR return and the beta would be wrong.
+            out[column] = np.nan
+            continue
         if ccy == BASE_CCY:
             continue
         if fx_panel.empty or ccy not in fx_panel.columns:

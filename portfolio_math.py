@@ -106,6 +106,9 @@ class Transaction:
     #: Yahoo symbol an ISIN resolved to, captured once at entry time so the pricing
     #: path never has to run a live ISIN search.
     resolved_ticker: str | None = None
+    #: Currency the asset was quoted in when the trade was logged. A fallback for
+    #: valuation when the live metadata lookup fails -- never a reason to assume EUR.
+    listing_ccy: str | None = None
 
     @property
     def is_buy(self) -> bool:
@@ -152,6 +155,7 @@ class PositionState:
     ticker: str | None = None
     isin: str | None = None
     resolved_ticker: str | None = None
+    listing_ccy: str | None = None
     warnings: list[str] = field(default_factory=list)
 
     @property
@@ -213,6 +217,7 @@ def _apply(pos: PositionState, tx: Transaction) -> None:
         pos.ticker = tx.ticker or pos.ticker
         pos.isin = tx.isin or pos.isin
         pos.resolved_ticker = tx.resolved_ticker or pos.resolved_ticker
+        pos.listing_ccy = tx.listing_ccy or pos.listing_ccy
 
     if pos.nominal_ccy is None and pos.n_transactions == 1:
         pos.nominal_ccy = tx.currency
@@ -322,6 +327,8 @@ def value_position(
     quoted price is denominated in. The transaction currency says what left your
     bank account and is already baked into ``cost_basis_eur``; the two are
     different things and only coincide by accident.
+
+    An unknown listing currency refuses to value rather than assuming EUR.
     """
     val = Valuation(
         asset_id=pos.asset_id,
@@ -338,6 +345,11 @@ def value_position(
     val.price = quote.price
     val.listing_ccy = quote.listing_ccy
     code = (quote.listing_ccy or "").upper()
+    if not code:
+        # Unknown is not EUR. Valuing a USD price one-for-one as euros is the same
+        # silent error as an FX fallback of 1.0, only in the other direction.
+        val.error = "listing currency unknown"
+        return val
     if code not in SUPPORTED_CCY:
         val.error = f"unsupported listing currency {quote.listing_ccy!r}"
         return val
@@ -507,6 +519,7 @@ def transaction_from_doc(doc: Mapping) -> tuple[Transaction | None, list[str]]:
         ticker=ticker,
         isin=isin,
         resolved_ticker=(doc.get("resolved_ticker") or "").strip() or None,
+        listing_ccy=(doc.get("listing_ccy") or "").strip().upper() or None,
     )
     return tx, problems
 

@@ -49,10 +49,21 @@ symbols = tuple(sorted(set(price_symbol.values())))
 # ==========================================================================================================
 
 listing_info = md.fetch_listing_info(symbols)
-listing_ccy = {sym: (listing_info.get(sym, {}).get("currency") or pm.BASE_CCY) for sym in symbols}
+
+# Live metadata first, the currency detected when the trade was logged as the
+# fallback. Never EUR by default: Yahoo's metadata endpoint fails routinely and the
+# failure is cached for a day, so a default would value a USD price one-for-one as
+# euros -- the same silent error as an FX fallback of 1.0.
+stored_ccy: dict[str, str] = {}
+for aid, pos in positions.items():
+    if pos.listing_ccy:
+        stored_ccy.setdefault(price_symbol[aid], pos.listing_ccy)
+listing_ccy: dict[str, str | None] = {
+    sym: listing_info.get(sym, {}).get("currency") or stored_ccy.get(sym) for sym in symbols
+}
 
 spot = md.fetch_spot_prices(symbols)
-rates = md.fetch_spot_fx(tuple(listing_ccy.values()))
+rates = md.fetch_spot_fx(tuple(c for c in listing_ccy.values() if c))
 
 quotes = {
     aid: pm.Quote(
@@ -84,13 +95,16 @@ try:
     if not hist.empty and md.BENCHMARK_TICKER in hist.columns:
         capm_ccy = dict(listing_ccy)
         capm_ccy[md.BENCHMARK_TICKER] = md.BENCHMARK_CCY
-        fx_hist = md.fetch_fx_history(tuple(capm_ccy.values()), md.CAPM_PERIOD)
+        fx_hist = md.fetch_fx_history(tuple(c for c in capm_ccy.values() if c), md.CAPM_PERIOD)
         eur_panel = md.to_eur_panel(hist, capm_ccy, fx_hist)
         returns = eur_panel.pct_change()
 
         for aid in positions:
             column = price_symbol[aid]
             if column not in returns.columns:
+                continue
+            if not listing_ccy.get(column):
+                capm[aid] = pm.CapmResult(note="listing currency unknown")
                 continue
             pair = (
                 pd.concat([returns[column], returns[md.BENCHMARK_TICKER]], axis=1)
@@ -512,8 +526,9 @@ if open_ids:
         # Your own label first: for funds, Yahoo's "name" is an internal code like
         # 0P0001EI1P.F, which is less useful than what you typed when logging.
         official = pos.name or listing_info.get(symbol, {}).get("name") or aid
-        ccy = val.listing_ccy or pm.BASE_CCY
-        sym = CURRENCY_SYMBOL.get(ccy, "")
+        listing = val.listing_ccy  # None when unknown; no cost line is drawn then
+        ccy = listing or "unknown currency"
+        sym = CURRENCY_SYMBOL.get(listing, "")
 
         with st.expander(f"📈 {pos.name or aid}", expanded=True):
             # Unadjusted, so the series is on the same scale as the raw trade prices
@@ -561,15 +576,19 @@ if open_ids:
                     ),
                 )
 
-            # The cost basis is held in EUR; show it in the chart's currency.
+            # The cost basis is held in EUR; show it in the chart's currency. Skipped
+            # when the listing currency is unknown: a EUR line under a price in some
+            # other currency is a wrong line, not a fallback.
             try:
-                avg_in_chart_ccy = pm.from_base(pos.avg_cost_eur, ccy, rates)
+                avg_in_chart_ccy = (
+                    pm.from_base(pos.avg_cost_eur, listing, rates) if listing else None
+                )
             except pm.MissingRate:
                 avg_in_chart_ccy = None
 
             if avg_in_chart_ccy:
                 label = f"Avg cost: {sym}{avg_in_chart_ccy:,.2f}"
-                if ccy != pm.BASE_CCY:
+                if listing != pm.BASE_CCY:
                     label += f" (€{pos.avg_cost_eur:,.2f} at today's FX)"
                 fig.add_hline(
                     y=avg_in_chart_ccy,
@@ -585,7 +604,7 @@ if open_ids:
                 real_pos = real_positions.get(aid)
                 if real_pos and real_pos.cost_basis_eur > pos.cost_basis_eur:
                     try:
-                        hurdle = pm.from_base(real_pos.avg_cost_eur, ccy, rates)
+                        hurdle = pm.from_base(real_pos.avg_cost_eur, listing, rates)
                     except pm.MissingRate:
                         hurdle = None
                     if hurdle:
