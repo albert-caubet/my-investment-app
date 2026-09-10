@@ -494,34 +494,43 @@ intraday quotes and the HICP dataflow switch.
 
 ### Phase 1: macro dashboard (2 to 4)
 
-- [ ] `macro/indicators.py`: the reading contract; z-score, percentile and change helpers
+- [x] `macro/indicators.py`: the reading contract; z-score, percentile and change helpers
       with hand-computed tests.
-- [ ] Yield curves for the US and euro area; real yields and breakevens; oil.
-- [ ] Inflation block, including real earnings growth from Shiller data via `data/files.py`
-      (downloads with checksum and fetch time).
-- [ ] Labor block, including the Sahm rule and the claims 4-week average.
-- [ ] Consumer and credit blocks; net liquidity; M2; loan officer survey tightening.
-- [ ] `release` source type in the catalog: a headline recorded with its release date. Start
-      capturing ISM Manufacturing (PMI, New Orders, Inventories, Prices Paid) and ISM
-      Services on release day, plus S&P Global, HCOB and LEI headlines. History accrues from
-      the first month; backfill later if a backtest needs it.
-- [ ] Regional Fed surveys (full free history) and their average as the early read on ISM.
-- [ ] Housing block: permits, starts, existing home sales, mortgage rate.
-- [ ] Business investment block: core capital goods orders (deflated), capacity utilisation,
-      temporary help, manufacturing hours, Cass freight, Korea exports.
-- [ ] Composites and nowcasts: excess bond premium CSV, CFNAI, OECD CLI, NY Fed recession
-      probability and r*, GDPNow, NY Fed Staff Nowcast, Cleveland inflation nowcast, Atlanta
-      Fed wage tracker; better cores (median, trimmed-mean, sticky) and inflation
-      expectations in the inflation block.
-- [ ] Euro surveys: Ifo, ZEW, ESI; policy stance (real rate minus r*), dollar and copper/gold.
-- [ ] Valuation block: CAPE, excess CAPE yield, Buffett indicator against trend, profits / GDP.
-- [ ] Market internals from yfinance: 200-day average, Bollinger %B, realised volatility, VIX
-      term structure, RSP/SPY.
-- [ ] `macro/regimes.py` with the v1 rules; one test per rule on synthetic series.
-- [ ] `pages/macro.py`: scorecard, expandable charts with USREC shading, freshness footer;
-      AppTest smoke test.
+- [x] Yield curves for the US and euro area; real yields and breakevens; oil.
+- [x] Inflation block, including real earnings growth from Shiller data via `data/files.py`
+      (downloads with checksum and fetch time). The current Shiller file lives on
+      shillerdata.com; the Yale copy stopped in 2023.
+- [x] Labor block, including the Sahm rule and the claims 4-week average.
+- [x] Consumer and credit blocks; net liquidity; M2; loan officer survey tightening.
+- [x] `release` source type in the catalog: a headline recorded with its release date, entered
+      in `config/releases.toml` or through the form on the Macro page. ISM Manufacturing (PMI,
+      New Orders, Inventories, Prices Paid, Employment), ISM Services, S&P Global, HCOB, Ifo,
+      ZEW, LEI, GDPNow, the NY Fed and Cleveland nowcasts, NAHB, AAII, NAAIM, put/call, ICI
+      flows and margin debt are all defined; history accrues from the first entry.
+- [x] Regional Fed surveys (Empire State and Dallas from FRED, Philadelphia from the Fed's own
+      CSV with FRED as primary; Kansas City and Richmond as releases) and their average, which
+      prints how many surveys it rests on.
+- [x] Housing block: permits, starts, existing home sales, mortgage rate; NAHB as a release.
+- [x] Business investment block: core capital goods orders (CPI-deflated), capacity
+      utilisation, temporary help, manufacturing hours, Cass freight (release), Korea exports.
+- [x] Composites and nowcasts: excess bond premium CSV, CFNAI, OECD CLI (US and G20; the OECD
+      dataflow has no euro-area aggregate), NY Fed recession probability and r*; GDPNow, NY Fed
+      Staff Nowcast, Cleveland inflation nowcast and the Atlanta Fed wage tracker as releases
+      (their spreadsheets moved or are blocked); median, trimmed-mean and sticky cores plus
+      Michigan and Cleveland Fed expectations in the inflation block.
+- [x] Euro surveys: Ifo and ZEW (releases), ESI (Eurostat); policy stance (real rate minus
+      r*), dollar and copper/gold.
+- [x] Valuation block: CAPE, excess CAPE yield, Buffett indicator against trend, profits / GDP.
+- [x] Market internals from yfinance: 200-day average, Bollinger %B, realised volatility, VIX
+      term structure (Yahoo's `^VIX3M` history is sparse and shows as stale), RSP/SPY.
+- [x] `macro/regimes.py` with the v1 rules; one test per rule on synthetic series. Valuation
+      and contrarian sentiment rules are reported but do not count towards the label.
+- [x] `pages/macro.py`: scorecard, expandable charts with USREC shading, freshness footer;
+      AppTest smoke test. Plus a "changed since" panel from stored scorecard snapshots and a
+      form to record releases.
 
 Done when the page renders entirely from DuckDB and every figure shows its date.
+Verified 2026-09-10.
 
 ### Phase 2: positioning and filings (2)
 

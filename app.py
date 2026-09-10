@@ -9,11 +9,17 @@ st.set_page_config(layout="wide", page_icon="💰")
 # Define the pages
 portfolio_page = st.Page("pages/portfolio.py", title="Current Portfolio", icon="💰")
 transactions_page = st.Page("pages/transactions.py", title="Log Transactions", icon="📝")
-# analysis_page = st.Page("pages/analysis.py", title="AI Analysis", icon="📈")
+# Analysis pages read the DuckDB file written by `python -m invest.jobs.refresh`;
+# they never fetch from the network themselves.
+macro_page = st.Page("pages/macro.py", title="Macro", icon="🌍")
 
 # Create Navigation
-# pg = st.navigation([portfolio_page, transactions_page, analysis_page])
-pg = st.navigation([portfolio_page, transactions_page])
+pg = st.navigation(
+    {
+        "Portfolio": [portfolio_page, transactions_page],
+        "Analysis": [macro_page],
+    }
+)
 
 # Run the selected page
 pg.run()

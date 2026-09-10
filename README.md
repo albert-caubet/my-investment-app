@@ -115,6 +115,11 @@ carrying its observation date and source, nothing filled in silently.
   ingests releases and prints a freshness table (last observation, age, limit, status). It
   exits non-zero when a critical series failed or is older than its frequency and lag allow
   and no fallback covers it. A second identical run adds no rows.
+- **Macro page** (`pages/macro.py`): the regime label with the rules behind it, a scorecard
+  by group (value, observation date, z-score, percentile, three-month change, concern),
+  a chart per indicator with NBER recession shading and rule thresholds, a "changed since
+  the previous run" panel, a form to record releases, and a freshness footer. It reads
+  DuckDB only; every figure shows its date.
 - **Secrets**: from the environment or `.streamlit/secrets.toml` (gitignored):
   `FRED_API_KEY` (optional), `SEC_USER_AGENT` (a contact address, required by EDGAR).
 - **Paths**: `INVEST_DATA_DIR` moves the database, downloads and report archive together;
