@@ -88,12 +88,13 @@ FIELDS: dict[str, list[str]] = {
     "eps_diluted": ["EarningsPerShareDiluted", "ifrs-full:DilutedEarningsLossPerShare"],
     "interest_income": ["InterestAndDividendIncomeOperating", "InterestIncomeExpenseNet"],
     "deposits": ["Deposits"],
+    "public_float": ["dei:EntityPublicFloat"],
 }
 
 INSTANT_FIELDS = frozenset({
     "total_assets", "current_assets", "current_liabilities", "total_liabilities", "cash",
     "short_term_investments", "debt_current", "debt_noncurrent", "ppe_net", "goodwill", "intangibles",
-    "equity", "retained_earnings", "shares_outstanding", "deposits",
+    "equity", "retained_earnings", "shares_outstanding", "deposits", "public_float",
 })
 SHARE_FIELDS = frozenset({"shares_outstanding"})
 PER_SHARE_FIELDS = frozenset({"eps_diluted"})
@@ -203,10 +204,26 @@ def annual_series(facts: pd.DataFrame, field_name: str) -> tuple[pd.Series, dict
 
 
 def latest_instant(facts: pd.DataFrame, field_name: str) -> tuple[float | None, date | None, str | None]:
+    """Latest balance-sheet value: ``(value, end date, tag)``.
+
+    Share counts are special. A company with several share classes reports one
+    count per class for the same date in the same filing (companyfacts drops the
+    class dimension), so the distinct values of the most recent filing are
+    summed; and the tag with the most recent date wins over the fallback order,
+    because the cover-page count often stops being reported per company once
+    classes appear (Mastercard and Visa: nothing after 2010).
+    """
     rows = field_rows(facts, field_name)
     rows = rows[rows["start_date"].isna()] if not rows.empty else rows
     if rows.empty:
         return None, None, None
+    if field_name in SHARE_FIELDS:
+        newest = rows.sort_values(["end_date", "priority"], ascending=[False, True]).iloc[0]
+        same_tag = rows[rows["spec"] == newest["spec"]]
+        at_end = same_tag[same_tag["end_date"] == newest["end_date"]]
+        accession = at_end.sort_values("filed_at").iloc[-1]["accession"]
+        classes = at_end[at_end["accession"] == accession]["value"].astype(float).drop_duplicates()
+        return float(classes.sum()), newest["end_date"].date(), newest["spec"]
     best = _best_per_end(rows).sort_values("end_date")
     row = best.iloc[-1]
     return float(row["value"]), row["end_date"].date(), row["spec"]
@@ -288,6 +305,7 @@ class Fundamentals:
     history: dict = field(default_factory=dict)     # field -> {fiscal year: value}
     tags: dict = field(default_factory=dict)
     flow_basis: dict = field(default_factory=dict)  # field -> FlowValue
+    instant_dates: dict = field(default_factory=dict)  # instant field -> date of the latest value
     fiscal_years: list = field(default_factory=list)
     period_end: date | None = None
     fy_end: date | None = None
@@ -326,6 +344,8 @@ def fundamentals_as_of(facts: pd.DataFrame, as_of: date | None = None, *, sic: s
         if name in INSTANT_FIELDS:
             value, end, tag = latest_instant(known, name)
             fund.latest[name] = value
+            if end is not None:
+                fund.instant_dates[name] = end
             chosen = tag or annual_tag
         else:
             flow = ttm(known, name)

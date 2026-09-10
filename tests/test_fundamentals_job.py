@@ -112,6 +112,40 @@ def test_screen_as_of_a_past_date_uses_only_facts_filed_before_it(loaded):
     assert pd.Timestamp(now.loc["MMM", "fy_end"]) > pd.Timestamp(rows.loc["MMM", "fy_end"])
 
 
+def _fact(cik, tag, end, value, filed, *, taxonomy="us-gaap", unit="USD", start=None, fp="FY", form="10-K"):
+    return {"fact_id": f"{cik}|{tag}|{end}|{value}", "cik": cik, "taxonomy": taxonomy, "tag": tag, "unit": unit,
+            "start_date": pd.Timestamp(start).date() if start else None, "end_date": pd.Timestamp(end).date(),
+            "value": float(value), "fy": pd.Timestamp(end).year, "fp": fp, "form": form,
+            "filed_at": pd.Timestamp(filed).date(), "accession": f"acc-{filed}", "frame": None}
+
+
+def test_stale_share_counts_and_class_mismatches_produce_no_market_cap(tmp_path):
+    days = pd.bdate_range("2026-01-01", "2026-09-09")
+    with Store(tmp_path / "g.duckdb") as store:
+        # company 1: the only share count is from 2010 (Mastercard's cover-page case)
+        # company 2: a class-A count against a class-B price, caught by the public float
+        rows = [
+            _fact(1, "Revenues", "2025-12-31", 1e9, "2026-02-01", start="2025-01-01"),
+            _fact(1, "EntityCommonStockSharesOutstanding", "2010-10-27", 1.2e8, "2010-11-02", taxonomy="dei", unit="shares", fp="Q3", form="10-Q"),
+            _fact(2, "Revenues", "2025-12-31", 1e9, "2026-02-01", start="2025-01-01"),
+            _fact(2, "EntityCommonStockSharesOutstanding", "2026-07-20", 941_481, "2026-08-01", taxonomy="dei", unit="shares", fp="Q2", form="10-Q"),
+            _fact(2, "EntityPublicFloat", "2025-06-30", 700e9, "2026-02-01", taxonomy="dei"),
+            _fact(3, "Revenues", "2025-12-31", 1e9, "2026-02-01", start="2025-01-01"),
+            _fact(3, "EntityCommonStockSharesOutstanding", "2026-07-20", 1e9, "2026-08-01", taxonomy="dei", unit="shares", fp="Q2", form="10-Q"),
+            _fact(3, "EntityPublicFloat", "2025-06-30", 400e9, "2026-02-01", taxonomy="dei"),
+        ]
+        store.upsert_facts(pd.DataFrame(rows))
+        for cik, ticker in ((1, "OLD"), (2, "CLASSB"), (3, "FINE")):
+            store.upsert_companies([{"cik": cik, "ticker": ticker, "name": ticker, "sic": "7372"}])
+            store.upsert_prices(ticker, pd.DataFrame({"close": 500.0, "adj_close": 500.0}, index=days), currency="USD")
+        old = job.company_row(store, 1, "OLD", "OLD", "7372", as_of=None)
+        assert old["market_cap"] is None and any("too old" in n for n in old["notes"])
+        classb = job.company_row(store, 2, "CLASSB", "CLASSB", "7372", as_of=None)
+        assert classb["market_cap"] is None and any("public float" in n for n in classb["notes"])
+        fine = job.company_row(store, 3, "FINE", "FINE", "7372", as_of=None)
+        assert fine["market_cap"] == pytest.approx(500e9)
+
+
 def test_snapshot_round_trip_and_screen(loaded):
     store, _ = loaded
     table = job.build_metrics_table(store, UNIVERSE)

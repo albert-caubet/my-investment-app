@@ -88,6 +88,35 @@ def test_instants_take_the_latest_and_shares_prefer_the_cover_page(synthetic):
     assert fund.fy_latest["total_assets"] == 1100.0 and fund.fy_previous["total_assets"] == 1000.0
 
 
+def test_share_classes_reported_in_the_same_filing_are_summed():
+    rows = [
+        # two classes on the cover page of the same 10-Q, and an older single count
+        _row("EntityCommonStockSharesOutstanding", None, "2026-07-20", 1_000, "2026-08-01", fp="Q2", form="10-Q",
+             taxonomy="dei", unit="shares"),
+        _row("EntityCommonStockSharesOutstanding", None, "2026-07-20", 250, "2026-08-01", fp="Q2", form="10-Q",
+             taxonomy="dei", unit="shares"),
+        _row("EntityCommonStockSharesOutstanding", None, "2026-04-20", 1_240, "2026-05-01", fp="Q1", form="10-Q",
+             taxonomy="dei", unit="shares"),
+    ]
+    frame = pd.DataFrame(rows)
+    frame.loc[1, "fact_id"] = "second-class"  # distinct rows, same date and filing
+    value, end, tag = F.latest_instant(F._normalise(frame), "shares_outstanding")
+    assert value == 1_250 and end == date(2026, 7, 20)
+
+
+def test_share_count_prefers_the_most_recent_tag_over_the_fallback_order():
+    """Mastercard: the cover-page count stops in 2010, the balance-sheet count continues."""
+    rows = [
+        _row("EntityCommonStockSharesOutstanding", None, "2010-10-27", 122_530_193, "2010-11-02", fp="Q3", form="10-Q",
+             taxonomy="dei", unit="shares"),
+        _row("CommonStockSharesOutstanding", None, "2026-06-30", 900_000_000, "2026-07-30", fp="Q2", form="10-Q", unit="shares"),
+    ]
+    fund = F.fundamentals_as_of(pd.DataFrame(rows), date(2026, 9, 1))
+    assert fund.latest["shares_outstanding"] == 900_000_000
+    assert fund.instant_dates["shares_outstanding"] == date(2026, 6, 30)
+    assert fund.tags["shares_outstanding"] == "CommonStockSharesOutstanding"
+
+
 def test_apple_resolves_revenue_through_the_fallback_list():
     facts = _facts("aapl")
     fund = F.fundamentals_as_of(facts, date(2026, 9, 10))

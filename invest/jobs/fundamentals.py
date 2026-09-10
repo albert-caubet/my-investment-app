@@ -33,6 +33,10 @@ PRICE_YEARS = 12
 BREADTH_WINDOW = 200
 NEW_HIGH_WINDOW = 252
 MIN_BREADTH_NAMES = 20
+#: A share count older than this, against the price date, does not make a market cap.
+MAX_SHARE_COUNT_AGE_DAYS = 550
+#: Market cap must sit within these multiples of the reported public float, else it is refused.
+FLOAT_RATIO_BOUNDS = (0.25, 4.0)
 
 
 def refresh_universe(
@@ -128,20 +132,34 @@ def company_row(store: Store, cik: int, ticker: str, name: str | None, sic: str 
     fund = fundamentals_as_of(facts, as_of, sic=sic)
     price, price_date = _price_as_of(store.read_prices(ticker), as_of)
     shares = fund.latest.get("shares_outstanding")
+    shares_date = fund.instant_dates.get("shares_outstanding")
     market_cap = None
     notes = list(fund.notes)
     # Yahoo quotes the US listing in dollars; the accounts may be in another currency.
     fx = _fx_to_usd_per(fund.currency or "USD", store, as_of)
     price_in_accounts = price / fx if (price is not None and fx) else None
+    if shares and shares_date and price_date and (price_date - shares_date).days > MAX_SHARE_COUNT_AGE_DAYS:
+        notes.append(f"share count as of {shares_date} is too old for a {price_date} price; no market cap")
+        shares = None
     if price is not None and shares:
         if fx is None:
             notes.append(f"market cap not converted: no {fund.currency} rate stored")
         else:
             market_cap = price_in_accounts * shares  # in the currency of the accounts
+            public_float = fund.latest.get("public_float")
+            if public_float and public_float > 0:
+                ratio = market_cap / public_float
+                if not (FLOAT_RATIO_BOUNDS[0] <= ratio <= FLOAT_RATIO_BOUNDS[1]):
+                    notes.append(
+                        f"market cap {market_cap:,.0f} is {ratio:.2f}x the reported public float {public_float:,.0f} "
+                        f"(as of {fund.instant_dates.get('public_float')}); share count and price likely refer to "
+                        f"different classes; no market cap"
+                    )
+                    market_cap = None
     elif price is None:
         notes.append("no price stored")
-    else:
-        notes.append("no share count")
+    elif not shares:
+        notes.append("no usable share count")
     metric_set = M.compute_all(fund.latest, fund.fy_previous, fund.history, market_cap=market_cap,
                                annual_latest=fund.fy_latest, annual_previous=fund.fy_previous)
     v = metric_set.values
