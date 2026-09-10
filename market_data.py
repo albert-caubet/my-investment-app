@@ -10,9 +10,6 @@ Cached functions take **tuples**, not lists, so the cache key is immutable.
 
 from __future__ import annotations
 
-import csv
-import io
-import urllib.request
 
 import numpy as np
 import pandas as pd
@@ -296,40 +293,32 @@ def fetch_us_10y() -> float | None:
 HICP_AREA = "ES"
 HICP_AREA_LABEL = {"ES": "Spain", "U2": "euro area"}
 
-_ECB_ICP = "https://data-api.ecb.europa.eu/service/data/ICP"
+#: The ECB replaced the ``ICP`` dataflow with ``HICP`` (ECOICOP v2, 2025 = 100) in
+#: February 2026; ``ICP`` stops at 2025-12. Index levels are used only as ratios,
+#: so the change of base year does not affect any figure derived from them.
+_HICP_FLOW = "HICP"
+_HICP_SUFFIX = "4D0"
 
 
 def _fetch_icp(key: str) -> dict[str, float]:
-    """One ICP series as ``{"YYYY-MM": value}``. Empty dict on any failure.
+    """One HICP series as ``{"YYYY-MM": value}``. Empty dict on any failure.
 
-    Note the series does not necessarily reach the present day: at the time of
-    writing it ends in 2025-12, and the data carries a notice about
-    methodological changes from February 2026. Callers must treat the coverage as
-    a fact to be checked, not assumed -- presenting a months-old figure as though
-    it were current is the whole failure mode this is guarding against.
+    Delegates to the analysis package's ECB client (``invest.data.ecb``), which
+    the macro catalog also uses, so there is one ECB parser in the repository.
+
+    Callers must still treat the coverage as a fact to be checked, not assumed:
+    the series ends at the last published month, and presenting a months-old
+    figure as though it were current is the failure mode this guards against.
     """
-    url = f"{_ECB_ICP}/{key}?startPeriod=2000-01&format=csvdata"
-    try:
-        request = urllib.request.Request(url, headers={"User-Agent": "my-investment-app"})
-        with urllib.request.urlopen(request, timeout=20) as response:
-            text = response.read().decode("utf-8", "replace")
-    except Exception:
-        return {}
+    from invest.data.ecb import fetch_series_dict
 
-    series: dict[str, float] = {}
-    for row in csv.DictReader(io.StringIO(text)):
-        period = (row.get("TIME_PERIOD") or "").strip()
-        try:
-            series[period] = float(row.get("OBS_VALUE"))
-        except (TypeError, ValueError):
-            continue
-    return series
+    return fetch_series_dict(f"{_HICP_FLOW}/{key}", start="1996-01")
 
 
 @st.cache_data(ttl=86_400, show_spinner=False)
 def fetch_hicp_index(area: str = HICP_AREA) -> dict[str, float]:
     """Monthly HICP index levels, for restating past amounts in later euros."""
-    return _fetch_icp(f"M.{area}.N.000000.4.INX")
+    return _fetch_icp(f"M.{area}.N.000000.{_HICP_SUFFIX}.INX")
 
 
 @st.cache_data(ttl=86_400, show_spinner=False)
@@ -339,7 +328,7 @@ def fetch_hicp_annual_rate(area: str = HICP_AREA) -> tuple[float, str] | None:
     The month is returned alongside deliberately: this figure is only honest when
     displayed with its date.
     """
-    series = _fetch_icp(f"M.{area}.N.000000.4.ANR")
+    series = _fetch_icp(f"M.{area}.N.000000.{_HICP_SUFFIX}.ANR")
     if not series:
         return None
     month = max(series)
