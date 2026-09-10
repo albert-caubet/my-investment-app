@@ -3,6 +3,10 @@
 Draft v1, 2026-09-10. Companion to the portfolio app in this repo. Meant to be worked
 through phase by phase; tick the boxes as you go and edit freely.
 
+Status 2026-09-10: Phases 0 to 4 built and verified live; Phase 5 built (the four-week
+observation window has not run yet); Phase 6 harness built with first measurements recorded
+in `config/hypotheses.md`; Phase 7 not started. Open items are marked `[ ]` or `[~]` below.
+
 ## 0. What gets built
 
 Three things, in order, each usable on its own:
@@ -308,6 +312,18 @@ against US recession starts. Phase 6 re-measures all of this on our own data.
 | VIX and VIX/VIX3M | coincident | Term-structure inversion marks stress reliably | Hours to weeks of horizon |
 | Breadth (share above 200-day average) | weeks to months | Deteriorating breadth precedes most major tops | Whipsaws in sideways markets |
 | Copper/gold ratio | coincident to 3 months | Tracks growth expectations and the 10-year yield | Supply shocks in either metal break the link |
+
+First measurement on our own data (2026-09-10, `python -m invest.research.hypotheses rules`:
+month-end evaluation with publication lags, 12-month warning window, 7 recession starts since
+1970 where the data reaches back that far): curve un-inversion 8 signals, 5 hits, warned 4 of 4
+since 1983; claims up 20% YoY 8 signals, 6 hits, warned 3 of 7; claims 15% off the low 24
+signals, 8 hits, 16 false alarms, warned 6 of 7; permits down 15% 16 signals, 6 hits, warned 4
+of 7; excess bond premium top decile 12 signals, 6 hits, warned 3 of 6; loan officer tightening
+above 20% 6 signals, 2 hits, warned 2 of 4 since 1990; policy restrictive 11 signals, 3 hits;
+CAPE above the 90th percentile 9 signals, 0 hits (as expected); price below a falling 200-day
+average 20 signals, 4 hits. The coincident rules confirm rather than warn: Sahm 3 of 7 and
+CFNAI 4 of 7 within three months of the start. ISM, LEI and sentiment rules have no history
+yet; the HY spread has three years. Every n is small, and nothing has been retired on it.
 
 The 2022 to 2024 episode is the lesson to keep in view: the yield curve, LEI, ISM
 Manufacturing, the loan officer survey and finally the Sahm rule all signalled, and the
@@ -641,15 +657,20 @@ the first scheduled run is the next Saturday after deployment.
 - [ ] Language-model summaries of letters, filings and news, every number quoted from data.
 - [ ] Anything with a GPU, if it is still fun.
 
-## 11. Decisions to make before Phase 0
+## 11. Decisions made before Phase 0
 
-- **Universe**: US-only screener first, or EU from day one with weaker data?
-- **Target allocation**: which buckets, which weights, how wide the bands?
-- **Delivery**: email, Telegram, or the Streamlit page only?
-- **Hosting**: GitHub Actions first, or straight to a box?
-- **Report language**: English, like the code, or Spanish?
-- **Repository**: keep everything here (recommended, the engine and tests are already in
-  place) or split the analysis package out.
+Taken on 2026-09-10 when the build started; each is a config file away from changing.
+
+- **Universe**: US-only screener first (EDGAR, point-in-time). EU via yfinance not built; the
+  `point_in_time = false` flag on a universe is ready for it.
+- **Target allocation**: four buckets, equity 65 / bonds 20 / cash 10 / crypto 5, bands of
+  5 points absolute or 25% relative, trade to target, minimum trade 250 EUR, no contribution
+  configured. Defaults to edit in `config/targets.toml`, not advice.
+- **Delivery**: the archive and the Streamlit page always; email (SMTP) and Telegram when
+  their secrets are set.
+- **Hosting**: GitHub Actions workflow first (Stage B); Docker Compose files ready for a box.
+- **Report language**: English, like the code.
+- **Repository**: everything here, in the `invest/` package next to the app.
 
 ## 12. Definitions
 

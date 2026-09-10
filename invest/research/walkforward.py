@@ -85,12 +85,17 @@ class HitRate:
     recessions: int
     recessions_warned: int
     warned_rate: float | None
+    recessions_confirmed: int      # the rule fired within the first months of the recession
+    confirmed_rate: float | None
     mean_lead_months: float | None
     first_date: str
     last_date: str
 
     def as_dict(self) -> dict:
         return self.__dict__.copy()
+
+
+CONFIRM_MONTHS = 3
 
 
 def hit_rates(fired: pd.Series, usrec: pd.Series, *, rule: str, lead_months: int = DEFAULT_LEAD_MONTHS) -> HitRate:
@@ -105,10 +110,14 @@ def hit_rates(fired: pd.Series, usrec: pd.Series, *, rule: str, lead_months: int
             hits += 1
             leads.append((following[0].year - signal.year) * 12 + following[0].month - signal.month)
     sample_starts = [r for r in starts if len(evaluated) and evaluated.index[0] <= r <= evaluated.index[-1] + pd.DateOffset(months=lead_months)]
-    warned = 0
+    warned, confirmed = 0, 0
+    firing_months = [stamp for stamp, value in fired.items() if value]
     for start in sample_starts:
         if any(start - pd.DateOffset(months=lead_months) <= s < start for s in signals):
             warned += 1
+        # coincident rules (Sahm, CFNAI) confirm rather than warn: did the rule fire in the first months?
+        if any(start <= m <= start + pd.DateOffset(months=CONFIRM_MONTHS) for m in firing_months):
+            confirmed += 1
     n_signals = len(signals)
     return HitRate(
         rule=rule,
@@ -120,6 +129,8 @@ def hit_rates(fired: pd.Series, usrec: pd.Series, *, rule: str, lead_months: int
         recessions=len(sample_starts),
         recessions_warned=warned,
         warned_rate=(warned / len(sample_starts)) if sample_starts else None,
+        recessions_confirmed=confirmed,
+        confirmed_rate=(confirmed / len(sample_starts)) if sample_starts else None,
         mean_lead_months=(sum(leads) / len(leads)) if leads else None,
         first_date=evaluated.index[0].date().isoformat() if len(evaluated) else "",
         last_date=evaluated.index[-1].date().isoformat() if len(evaluated) else "",

@@ -86,10 +86,12 @@ def test_hit_rates_count_hits_false_alarms_and_warned_recessions():
     fired["2000-10-01":"2001-02-01"] = True   # warns the 2001 recession (6 months ahead)
     fired["2007-06-01":"2007-09-01"] = True   # warns 2008
     fired["2015-01-01":"2015-03-01"] = True   # false alarm
+    fired["2020-04-01":"2020-06-01"] = True   # coincident: confirms 2020 without warning of it
     hr = walkforward.hit_rates(fired, usrec, rule="test", lead_months=12)
     assert hr.n_signals == 3 and hr.hits == 2 and hr.false_alarms == 1
     assert hr.hit_rate == pytest.approx(2 / 3)
     assert hr.recessions == 3 and hr.recessions_warned == 2 and hr.warned_rate == pytest.approx(2 / 3)
+    assert hr.recessions_confirmed == 1 and hr.confirmed_rate == pytest.approx(1 / 3)
     assert hr.mean_lead_months == pytest.approx((6 + 7) / 2)
 
 

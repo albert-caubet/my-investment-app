@@ -175,7 +175,21 @@ carrying its observation date and source, nothing filled in silently.
 - `database.py`: Firestore initialisation and helpers.
 - `pages/portfolio.py`: Dashboard — loads, computes, renders.
 - `pages/transactions.py`: Trade entry and history log.
-- `tests/`: pytest suite over `portfolio_math.py`, including a golden fixture, plus
-  headless smoke tests that run both pages on canned data.
+- `pages/macro.py`, `pages/screener.py`, `pages/report.py`: the analysis pages; they read
+  DuckDB only.
+- `invest/`: the analysis package. `data/` (DuckDB store and every source client), `macro/`
+  (catalog, indicators, derived series, regime rules, scorecard), `positioning/` (COT, 13F,
+  Form 4), `fundamentals/` (facts, metrics, screens, valuation, universe), `portfolio/`
+  (rebalancing, FIFO lots, valuation for the jobs), `report/` (build, render, deliver,
+  hypotheses), `research/` (event studies, walk-forward, hypothesis scripts), `jobs/`
+  (refresh, filings, fundamentals, weekly, backup, vintages, notify).
+- `config/`: `series.toml` (indicator catalog), `releases.toml` (hand-entered headlines),
+  `targets.toml` (allocation and bands), `universe.toml` (screener tickers), `managers.toml`
+  (13F filers), `hypotheses.md` (the register).
+- `scripts/`: scheduler entry points for Task Scheduler, cron and the jobs container.
+- `data/` (gitignored): `market.duckdb`, downloads, the report archive, backups.
+- `tests/`: pytest suite over `portfolio_math.py` and every `invest` module, source parsers
+  on saved responses in `tests/fixtures/`, a golden weekly report, plus headless smoke tests
+  that run every page on canned data.
 - `requirements.txt` / `requirements-dev.txt`: Runtime and test dependencies.
 - `firebaseServiceAccountKey.json`: (Not in repo) Your private Firebase credentials.

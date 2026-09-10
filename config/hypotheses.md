@@ -53,7 +53,7 @@ Format: a level-two heading `## Hn. Title`, then `- **Field:** value` lines.
 - **Indicators:** US_CLAIMS_4WK_YOY, US_CLAIMS_OFF_LOW, US_SAHM, US_UNRATE
 - **Caveat:** About eight recessions since 1970; n is tiny and is printed.
 - **Script:** invest.research.hypotheses:h5_claims_lead
-- **Outcome:** not yet measured
+- **Outcome:** First measurement 2026-09-10 (month-end evaluation 1970 to 2026, publication lags applied, 7 recession starts, 12-month warning window): claims up 20% YoY gave 8 signals, 6 hits, 2 false alarms, warned 3 of 7 recessions about 6 months ahead; claims 15% off their 52-week low gave 24 signals, 8 hits, 16 false alarms, warned 6 of 7 about 5 months ahead and fired in the first three months of all 7; the Sahm rule warned of none (it is coincident by design), confirmed 3 of 7 within three months of the start and produced 2 signals outside recessions (2003 and 2024). Reading: the YoY claims rule is the cleaner warning, the off-the-low rule is a sensitive confirmation, and the Sahm rule confirms with a lag. n is 7.
 
 ## H6. Liquidity drives prices
 - **Status:** open
