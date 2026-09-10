@@ -120,18 +120,28 @@ def fact_id(cik: int, taxonomy: str, tag: str, unit: str, start: date | None, en
     return hashlib.sha1(raw.encode()).hexdigest()
 
 
-def facts_frame(payload: dict, *, taxonomies=("us-gaap", "ifrs-full", "dei")) -> pd.DataFrame:
+def facts_frame(
+    payload: dict,
+    *,
+    taxonomies=("us-gaap", "ifrs-full", "dei"),
+    tags: dict[str, set[str]] | None = None,
+) -> pd.DataFrame:
     """``companyfacts`` JSON into the store's ``facts`` shape, one row per reported value.
 
     Every row keeps ``filed_at`` (the filing date) so a screen can be run as of a
     past date using only what was public then, and ``accession`` so a restated
     value from a later filing is a separate row rather than an overwrite.
+
+    ``tags`` (``{taxonomy: {tag, ...}}``) keeps only the concepts named; a large
+    filer reports several hundred tags and the screener reads a few dozen.
     """
     cik = int(payload["cik"])
     rows = []
     for taxonomy in taxonomies:
-        tags = payload.get("facts", {}).get(taxonomy, {})
-        for tag, body in tags.items():
+        wanted = tags.get(taxonomy) if tags is not None else None
+        for tag, body in payload.get("facts", {}).get(taxonomy, {}).items():
+            if wanted is not None and tag not in wanted:
+                continue
             for unit, values in body.get("units", {}).items():
                 for v in values:
                     end = pd.Timestamp(v["end"]).date()

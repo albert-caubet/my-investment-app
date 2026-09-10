@@ -59,6 +59,14 @@ def test_facts_frame_keeps_filing_dates_and_accessions():
     assert revenue["start_date"].notna().all()
 
 
+def test_facts_frame_can_keep_only_the_tags_asked_for():
+    payload = _json("edgar_companyfacts_aapl.json")
+    everything = edgar.facts_frame(payload)
+    some = edgar.facts_frame(payload, tags={"us-gaap": {"Assets"}, "dei": {"EntityCommonStockSharesOutstanding"}})
+    assert set(some["tag"]) == {"Assets", "EntityCommonStockSharesOutstanding"}
+    assert len(some) < len(everything)
+
+
 def test_facts_frame_reads_ifrs_filers():
     frame = edgar.facts_frame(_json("edgar_companyfacts_sap.json"))
     assert (frame["taxonomy"] == "ifrs-full").any()
