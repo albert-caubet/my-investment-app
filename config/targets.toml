@@ -1,0 +1,51 @@
+# Strategic allocation and rebalancing rules (PLAN.md section 7.1).
+#
+# Buckets are free-form names; the weights must sum to 100. Each holding maps to
+# a bucket by its category (the app's asset classes) unless [map.asset] names the
+# asset explicitly. A bucket that appears in a mapping but not in [targets] has a
+# target of zero and is reported as such.
+#
+# These are defaults to edit, not advice: a long-term EUR investor with a global
+# equity core, a bond sleeve, cash for a year of contributions and a small
+# crypto allocation.
+
+[targets]
+equity = 65
+bonds = 20
+cash = 10
+crypto = 5
+
+[bands]
+# A trade is proposed when the drift exceeds the absolute band (percentage points)
+# or the relative band (percent of the target weight), whichever is hit first.
+absolute = 5
+relative = 25
+# "target" trades back to the target weight; "band_edge" trades only to the edge of the band.
+trade_to = "target"
+min_trade_eur = 250
+
+[contribution]
+# Planned new cash per period, allocated to the most underweight buckets before any
+# sale is proposed. Zero means the report only shows what a contribution would buy.
+amount_eur = 0
+
+[tilts]
+# Tactical tilts from the macro regime. Off until Phase 6 shows a rule has any edge;
+# when on, no bucket moves more than max_points from its strategic weight.
+enabled = false
+max_points = 5
+
+[map.category]
+"Stock" = "equity"
+"ETF" = "equity"
+"Fund" = "equity"
+"Cash/Money Market" = "cash"
+"Fixed Income" = "bonds"
+"Bonds" = "bonds"
+"Crypto" = "crypto"
+"Commodity" = "other"
+"Other" = "other"
+
+[map.asset]
+# asset id (ISIN or ticker, as stored) -> bucket, overriding the category.
+# "IE00B4L5Y983" = "equity"
