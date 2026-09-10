@@ -171,12 +171,15 @@ def freshness_table(store: Store, catalog: Catalog, *, today: date | None = None
         limit = catalog.stale_after(spec)
         snap_row = by_id.get(spec.id, {})
         status = snap_row.get("status")
-        if status in (None, "ok", "stale", "fallback"):
+        # A fetch failure stands until the next refresh; everything else is judged on
+        # what the store holds now, so a series written by another job after the
+        # refresh (breadth) or a release entered since is not reported missing.
+        if status in (None, "ok", "stale", "fallback", "missing", "manual"):
             if last is None:
                 status = "manual" if spec.is_release else "missing"
             elif limit is not None and age is not None and age > limit:
                 status = "stale"
-            elif status is None:
+            elif status in (None, "missing", "manual"):
                 status = "ok"
         rows.append(
             {
