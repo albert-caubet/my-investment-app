@@ -120,8 +120,13 @@ carrying its observation date and source, nothing filled in silently.
   a chart per indicator with NBER recession shading and rule thresholds, a "changed since
   the previous run" panel, a form to record releases, and a freshness footer. It reads
   DuckDB only; every figure shows its date.
+- **Filings**: `python -m invest.jobs.filings` stores the last two 13F quarters for each
+  manager in `config/managers.toml` and prints what changed (new positions, exits, changes
+  above 25%, concentration), always with the filing lag and the long-only caveat stated.
+  `--insiders CIK,CIK` aggregates Form 4 open-market buys and sells per issuer.
 - **Secrets**: from the environment or `.streamlit/secrets.toml` (gitignored):
-  `FRED_API_KEY` (optional), `SEC_USER_AGENT` (a contact address, required by EDGAR).
+  `FRED_API_KEY` (optional), `SEC_USER_AGENT` (an app name plus a contact address, required
+  by EDGAR; the client refuses to run without one).
 - **Paths**: `INVEST_DATA_DIR` moves the database, downloads and report archive together;
   `INVEST_DB` overrides the database file alone.
 

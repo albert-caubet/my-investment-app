@@ -534,13 +534,21 @@ Verified 2026-09-10.
 
 ### Phase 2: positioning and filings (2)
 
-- [ ] COT, AAII, NAAIM, FINRA margin debt and ICI flows as scorecard indicators.
-- [ ] `positioning/filings13f.py`: info-table parser, quarter-over-quarter diff, fixture from
-      a real Berkshire filing; managers in config.
-- [ ] Form 4 aggregate buys and sells per CIK over a window.
-- [ ] Optional: congress disclosures through a third-party dataset, labelled noisy.
+- [x] COT, AAII, NAAIM, FINRA margin debt and ICI flows as scorecard indicators. COT (S&P 500,
+      10-year note, dollar index, gold; large speculators net) is fetched from the CFTC yearly
+      files; AAII, NAAIM, margin debt, put/call and ICI flows are `release` series entered by
+      hand, since their downloads require membership or are blocked.
+- [x] `positioning/filings13f.py`: info-table parser, quarter-over-quarter diff, fixture from
+      a real Berkshire filing (Q1 and Q2 2026); managers in `config/managers.toml`; values in
+      thousands before 2023 converted to dollars; `python -m invest.jobs.filings` stores the
+      last two quarters per manager and prints the summary paragraph.
+- [x] Form 4 aggregate buys and sells per CIK over a window: open-market `P` and `S` only,
+      cluster flag for three or more distinct buyers within ninety days.
+- [ ] Optional: congress disclosures through a third-party dataset, labelled noisy. Not done;
+      last priority by design.
 
 Done when the "what the big holders did" section prints from parsed data for two managers.
+Verified 2026-09-10 on six managers live from EDGAR.
 
 ### Phase 3: fundamentals and screener (3 to 5)
 

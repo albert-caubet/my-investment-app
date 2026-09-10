@@ -1,0 +1,32 @@
+# 13F filers tracked by the positioning module (PLAN.md section 5).
+#
+# `cik` is the SEC Central Index Key of the filer. `name` is what the report
+# prints; the refresh records the name EDGAR returns as well, so a wrong CIK shows
+# up as a mismatch instead of silently tracking the wrong fund.
+#
+# The 13F view is long US positions only, up to 45 days after quarter end, and
+# every report section that uses it says so.
+
+[[manager]]
+cik = 1067983
+name = "Berkshire Hathaway"
+
+[[manager]]
+cik = 1336528
+name = "Pershing Square Capital Management"
+
+[[manager]]
+cik = 1649339
+name = "Scion Asset Management"
+
+[[manager]]
+cik = 1079114
+name = "Greenlight Capital"
+
+[[manager]]
+cik = 1656456
+name = "Appaloosa"
+
+[[manager]]
+cik = 1061768
+name = "Baupost Group"
