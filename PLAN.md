@@ -578,19 +578,24 @@ does; live run 2026-09-10 on the core universe.
 
 ### Phase 4: rebalancing and the report (2 to 3)
 
-- [ ] `config/targets.toml`; `portfolio/rebalance.py`: drift, bands, trade list,
-      contribution allocation; tests including band edge versus target.
-- [ ] `portfolio/lots.py`: FIFO lots from the transactions; taxable gain per proposed sale;
+- [x] `config/targets.toml`; `portfolio/rebalance.py`: drift, bands, trade list,
+      contribution allocation; tests including band edge versus target. Default buckets
+      equity / bonds / cash / crypto (65/20/10/5), mapped from the app's categories with
+      per-asset overrides; edit the file.
+- [x] `portfolio/lots.py`: FIFO lots from the transactions; taxable gain per proposed sale;
       tests showing the same total P&L as the average-cost engine with a different split.
-- [ ] `report/build.py` assembling sections from DuckDB; `report/render.py`; golden test on
-      a fixture run.
-- [ ] `jobs/weekly.py`: refresh, build, render, archive, deliver; the "missing and failed"
-      section.
-- [ ] `pages/report.py` listing archived reports.
-- [ ] Task Scheduler or cron entry for Saturday morning.
+- [x] `report/build.py` assembling sections from DuckDB; `report/render.py`; golden test on
+      a fixture run (`tests/fixtures/report_golden.md`, regenerate with `UPDATE_GOLDEN=1`).
+- [x] `jobs/weekly.py`: refresh, build, render, archive, deliver; the "missing and failed"
+      section. Delivery by SMTP or Telegram when configured, archive always.
+- [x] `pages/report.py` listing archived reports and the run history.
+- [x] Task Scheduler or cron entry for Saturday morning: `scripts/weekly.ps1` and
+      `scripts/weekly.sh` (registration commands in the file headers).
 
 Done when a report runs end to end on the real portfolio with every source live, and a
 second run with one source blocked shows it under "missing" instead of crashing.
+Verified 2026-09-10 on the real Firestore portfolio; `tests/test_weekly.py` blocks the
+scorecard and the transactions and asserts they land under "Missing and failed".
 
 ### Phase 5: automation and hosting (1 to 2, plus operations)
 

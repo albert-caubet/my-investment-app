@@ -133,6 +133,17 @@ carrying its observation date and source, nothing filled in silently.
   manager in `config/managers.toml` and prints what changed (new positions, exits, changes
   above 25%, concentration), always with the filing lag and the long-only caveat stated.
   `--insiders CIK,CIK` aggregates Form 4 open-market buys and sells per issuer.
+- **Weekly report**: `python -m invest.jobs.weekly` values the portfolio (Firestore, or a JSON
+  export named by `INVEST_TRANSACTIONS_JSON`), computes drift against `config/targets.toml`
+  and proposes bucket-level trades (new cash first, fund-to-fund legs flagged as possible
+  traspasos, FIFO taxable gain per sale), then assembles the macro scorecard and regime, what
+  changed since last week, the tracked managers' 13F changes, the top of each screen, the
+  hypotheses due for review from `config/hypotheses.md`, and a "Missing and failed" section
+  naming everything that could not be produced. Rendered to HTML with inline sparklines,
+  archived under `data/reports/`, and sent by SMTP (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`,
+  `SMTP_PASSWORD`, `REPORT_EMAIL_TO`) or Telegram (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`)
+  when configured. `scripts/weekly.ps1` and `scripts/weekly.sh` run the whole chain for Task
+  Scheduler or cron on Saturday mornings. The Report page lists the archive and the runs.
 - **Secrets**: from the environment or `.streamlit/secrets.toml` (gitignored):
   `FRED_API_KEY` (optional), `SEC_USER_AGENT` (an app name plus a contact address, required
   by EDGAR; the client refuses to run without one).

@@ -13,12 +13,13 @@ transactions_page = st.Page("pages/transactions.py", title="Log Transactions", i
 # they never fetch from the network themselves.
 macro_page = st.Page("pages/macro.py", title="Macro", icon="🌍")
 screener_page = st.Page("pages/screener.py", title="Screener", icon="🔎")
+report_page = st.Page("pages/report.py", title="Weekly report", icon="📄")
 
 # Create Navigation
 pg = st.navigation(
     {
         "Portfolio": [portfolio_page, transactions_page],
-        "Analysis": [macro_page, screener_page],
+        "Analysis": [macro_page, screener_page, report_page],
     }
 )
 
