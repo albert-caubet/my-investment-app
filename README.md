@@ -93,6 +93,33 @@ pip install -r requirements-dev.txt
 python -m pytest -q
 ```
 
+## Analysis package (`invest/`)
+
+A second, independent part of the repository: macro indicators, a value screener and a
+weekly rebalancing report, built phase by phase according to `PLAN.md`. It shares the
+principles of the portfolio engine: pure functions tested on fixtures, every number
+carrying its observation date and source, nothing filled in silently.
+
+- **Storage**: one DuckDB file, `data/market.duckdb` (gitignored). Time series are
+  append-only with a fetch time and a vintage date, so revisions stay visible and
+  `read_series(as_of=...)` answers what was known on a given day. Firestore keeps
+  transactions only, exactly as before.
+- **Catalog**: `config/series.toml` lists every series with its source, key, frequency,
+  publication lag, transform, direction of concern and criticality. Sources: FRED (no key
+  needed; `FRED_API_KEY` adds ALFRED vintages), the ECB, Eurostat, the OECD and BIS SDMX
+  APIs, Yahoo Finance, Shiller's data file, the Fed's excess bond premium, the Philadelphia
+  and New York Fed files, CFTC positioning, plus `derived` series computed from stored ones
+  and `release` series entered by hand in `config/releases.toml` (ISM, PMIs, LEI, nowcasts,
+  whose histories are licensed).
+- **Refresh**: `python -m invest.jobs.refresh` fetches the catalog, computes derived series,
+  ingests releases and prints a freshness table (last observation, age, limit, status). It
+  exits non-zero when a critical series failed or is older than its frequency and lag allow
+  and no fallback covers it. A second identical run adds no rows.
+- **Secrets**: from the environment or `.streamlit/secrets.toml` (gitignored):
+  `FRED_API_KEY` (optional), `SEC_USER_AGENT` (a contact address, required by EDGAR).
+- **Paths**: `INVEST_DATA_DIR` moves the database, downloads and report archive together;
+  `INVEST_DB` overrides the database file alone.
+
 ## Project Structure
 
 - `app.py`: Entry point and navigation.

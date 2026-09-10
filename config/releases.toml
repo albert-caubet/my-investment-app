@@ -1,0 +1,30 @@
+# Headline figures recorded by hand on release day (PLAN.md section 3.7).
+#
+# ISM, the S&P Global and HCOB PMIs, the Conference Board LEI, GDPNow and the
+# other nowcasts publish their headline for free but license the history. Their
+# catalog entries have `source = "release"`; the numbers live here, one entry per
+# print, and `python -m invest.jobs.refresh` loads them with the release date as
+# the vintage. History accrues from the first entry; nothing is invented for the
+# months before it.
+#
+# Fields:
+#   series    a catalog id with source = "release" (see config/series.toml)
+#   period    the month (YYYY-MM), quarter (YYYY-Qn) or week (a date) the reading describes
+#   released  the day it was published (a TOML date)
+#   value     the headline number
+#   note      optional: where it came from
+#
+# Example (remove the leading "# " to activate):
+#
+# [[release]]
+# series = "US_ISM_MFG_PMI"
+# period = "2026-08"
+# released = 2026-09-01
+# value = 48.7
+# note = "ISM Report on Business, manufacturing"
+#
+# [[release]]
+# series = "US_ISM_MFG_NEW_ORDERS"
+# period = "2026-08"
+# released = 2026-09-01
+# value = 47.1

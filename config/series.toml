@@ -1,0 +1,2290 @@
+# Indicator catalog for the macro scorecard (PLAN.md sections 3 and 4).
+#
+# One [[series]] per stored series. Fields:
+#   id          unique, stable identifier used as the DuckDB series_id
+#   label       what the scorecard prints
+#   group       rates | policy | surveys | composites | inflation | labor | housing |
+#               investment | consumer | credit | fiscal | valuation | positioning | internals
+#   source      fred | ecb | eurostat | oecd | bis | yahoo | shiller | ebp | philly |
+#               nyfed_recprob | hlw | cot | release | derived
+#   key         the source's own identifier (FRED id, ECB FLOW/KEY, Eurostat query, ticker ...)
+#   frequency   D daily, W weekly, M monthly, Q quarterly, A annual, I irregular
+#   lag_days    typical days between the end of the period and its publication
+#   transform   how the scorecard reads the series: level | yoy | mom | ann3m | diff3m | diff12m | ma4w | ma3m
+#   direction   which way is the concern: high_bad | low_bad | neutral
+#   units       printed after the value
+#   critical    the refresh job exits non-zero when a critical series fails or is stale
+#   show        false for raw inputs that only feed derived series
+#   fallback    id of another series to read when this one is missing or stale
+#   inputs      (derived) catalog ids passed to the formula, in order
+#   formula     (derived) name in invest.macro.derived.FORMULAS
+#
+# Monthly and quarterly observations are dated on the first day of their period,
+# following FRED. Rates are in percent.
+
+[defaults]
+z_window_years = 10
+critical = false
+lag_days = 0
+
+# ---------------------------------------------------------------------------
+# Rates and curve
+# ---------------------------------------------------------------------------
+
+[[series]]
+id = "US_3M"
+label = "US 3-month Treasury yield"
+group = "rates"
+source = "fred"
+key = "DGS3MO"
+frequency = "D"
+lag_days = 1
+units = "%"
+
+[[series]]
+id = "US_2Y"
+label = "US 2-year Treasury yield"
+group = "rates"
+source = "fred"
+key = "DGS2"
+frequency = "D"
+lag_days = 1
+units = "%"
+
+[[series]]
+id = "US_10Y"
+label = "US 10-year Treasury yield"
+group = "rates"
+source = "fred"
+key = "DGS10"
+frequency = "D"
+lag_days = 1
+units = "%"
+critical = true
+
+[[series]]
+id = "US_30Y"
+label = "US 30-year Treasury yield"
+group = "rates"
+source = "fred"
+key = "DGS30"
+frequency = "D"
+lag_days = 1
+units = "%"
+show = false
+
+[[series]]
+id = "US_CURVE_10Y3M"
+label = "US curve: 10-year minus 3-month"
+group = "rates"
+source = "fred"
+key = "T10Y3M"
+frequency = "D"
+lag_days = 1
+direction = "low_bad"
+units = "pp"
+critical = true
+notes = "Inversion (below zero) for three months or more is the classic recession warning; the un-inversion has sat closer to the recession itself."
+
+[[series]]
+id = "US_CURVE_10Y2Y"
+label = "US curve: 10-year minus 2-year"
+group = "rates"
+source = "fred"
+key = "T10Y2Y"
+frequency = "D"
+lag_days = 1
+direction = "low_bad"
+units = "pp"
+
+[[series]]
+id = "US_REAL_10Y"
+label = "US real 10-year yield (TIPS)"
+group = "rates"
+source = "fred"
+key = "DFII10"
+frequency = "D"
+lag_days = 1
+direction = "high_bad"
+units = "%"
+
+[[series]]
+id = "US_REAL_5Y"
+label = "US real 5-year yield (TIPS)"
+group = "rates"
+source = "fred"
+key = "DFII5"
+frequency = "D"
+lag_days = 1
+direction = "high_bad"
+units = "%"
+show = false
+
+[[series]]
+id = "US_BREAKEVEN_10Y"
+label = "US 10-year breakeven inflation"
+group = "inflation"
+source = "fred"
+key = "T10YIE"
+frequency = "D"
+lag_days = 1
+units = "%"
+
+[[series]]
+id = "US_FEDFUNDS_MINUS_2Y"
+label = "Fed funds minus 2-year yield (cuts priced when positive)"
+group = "rates"
+source = "derived"
+formula = "spread"
+inputs = ["US_FEDFUNDS", "US_2Y"]
+frequency = "D"
+units = "pp"
+
+[[series]]
+id = "EA_DFR"
+label = "ECB deposit facility rate"
+group = "rates"
+source = "ecb"
+key = "FM/B.U2.EUR.4F.KR.DFR.LEV"
+frequency = "I"
+units = "%"
+critical = true
+notes = "Dated by change; the level between changes is the last one."
+
+[[series]]
+id = "EA_10Y"
+label = "Euro area AAA 10-year spot yield"
+group = "rates"
+source = "ecb"
+key = "YC/B.U2.EUR.4F.G_N_A.SV_C_YM.SR_10Y"
+frequency = "D"
+lag_days = 1
+units = "%"
+critical = true
+
+[[series]]
+id = "EA_2Y"
+label = "Euro area AAA 2-year spot yield"
+group = "rates"
+source = "ecb"
+key = "YC/B.U2.EUR.4F.G_N_A.SV_C_YM.SR_2Y"
+frequency = "D"
+lag_days = 1
+units = "%"
+show = false
+
+[[series]]
+id = "EA_3M"
+label = "Euro area AAA 3-month spot yield"
+group = "rates"
+source = "ecb"
+key = "YC/B.U2.EUR.4F.G_N_A.SV_C_YM.SR_3M"
+frequency = "D"
+lag_days = 1
+units = "%"
+show = false
+
+[[series]]
+id = "EA_CURVE_10Y2Y"
+label = "Euro area curve: 10-year minus 2-year"
+group = "rates"
+source = "derived"
+formula = "spread"
+inputs = ["EA_10Y", "EA_2Y"]
+frequency = "D"
+direction = "low_bad"
+units = "pp"
+
+[[series]]
+id = "US_NYFED_RECPROB"
+label = "NY Fed recession probability, 12 months ahead (term spread)"
+group = "rates"
+source = "nyfed_recprob"
+key = "rec_prob"
+frequency = "M"
+lag_days = 10
+direction = "high_bad"
+units = "prob"
+notes = "Dated by the month the spread was observed; the probability refers to twelve months later."
+
+[[series]]
+id = "US_RECPROB_SMOOTHED"
+label = "Smoothed US recession probability (Chauvet-Piger)"
+group = "composites"
+source = "fred"
+key = "RECPROUSM156N"
+frequency = "M"
+lag_days = 95
+direction = "high_bad"
+units = "%"
+notes = "Coincident, published with roughly a three-month lag; confirms rather than warns."
+
+# ---------------------------------------------------------------------------
+# Policy stance and currency
+# ---------------------------------------------------------------------------
+
+[[series]]
+id = "US_FEDFUNDS"
+label = "Effective Fed funds rate (monthly)"
+group = "policy"
+source = "fred"
+key = "FEDFUNDS"
+frequency = "M"
+lag_days = 1
+units = "%"
+critical = true
+
+[[series]]
+id = "US_DFF"
+label = "Effective Fed funds rate (daily)"
+group = "policy"
+source = "fred"
+key = "DFF"
+frequency = "D"
+lag_days = 1
+units = "%"
+show = false
+
+[[series]]
+id = "US_RSTAR"
+label = "US neutral real rate r* (Holston-Laubach-Williams)"
+group = "policy"
+source = "hlw"
+key = "rstar_us"
+frequency = "Q"
+lag_days = 75
+units = "%"
+
+[[series]]
+id = "EA_RSTAR"
+label = "Euro area neutral real rate r* (Holston-Laubach-Williams)"
+group = "policy"
+source = "hlw"
+key = "rstar_ea"
+frequency = "Q"
+lag_days = 75
+units = "%"
+
+[[series]]
+id = "US_POLICY_STANCE"
+label = "US policy stance: real Fed funds minus r*"
+group = "policy"
+source = "derived"
+formula = "policy_stance"
+inputs = ["US_FEDFUNDS", "US_CORE_PCE", "US_RSTAR"]
+frequency = "M"
+direction = "high_bad"
+units = "pp"
+critical = true
+notes = "Real Fed funds is the Fisher real rate against core PCE inflation over the past year. Positive means restrictive."
+
+[[series]]
+id = "EA_REAL_POLICY_RATE"
+label = "Euro area real policy rate (deposit rate minus HICP)"
+group = "policy"
+source = "derived"
+formula = "real_rate"
+inputs = ["EA_DFR", "EA_HICP"]
+frequency = "M"
+direction = "high_bad"
+units = "%"
+
+[[series]]
+id = "US_DOLLAR_BROAD"
+label = "Broad trade-weighted dollar, YoY"
+group = "policy"
+source = "fred"
+key = "DTWEXBGS"
+frequency = "D"
+lag_days = 4
+transform = "yoy"
+direction = "high_bad"
+units = "%"
+
+[[series]]
+id = "DXY"
+label = "Dollar index (DXY)"
+group = "policy"
+source = "yahoo"
+key = "DX-Y.NYB"
+frequency = "D"
+lag_days = 1
+
+[[series]]
+id = "COPPER"
+label = "Copper futures (HG=F)"
+group = "policy"
+source = "yahoo"
+key = "HG=F"
+frequency = "D"
+lag_days = 1
+show = false
+
+[[series]]
+id = "GOLD"
+label = "Gold futures (GC=F)"
+group = "policy"
+source = "yahoo"
+key = "GC=F"
+frequency = "D"
+lag_days = 1
+show = false
+
+[[series]]
+id = "EURUSD"
+label = "EUR/USD"
+group = "policy"
+source = "yahoo"
+key = "EURUSD=X"
+frequency = "D"
+lag_days = 1
+units = "USD"
+
+[[series]]
+id = "COPPER_GOLD"
+label = "Copper/gold ratio"
+group = "policy"
+source = "derived"
+formula = "ratio"
+inputs = ["COPPER", "GOLD"]
+frequency = "D"
+direction = "low_bad"
+notes = "Rises with growth expectations and tracks the 10-year yield; supply shocks in either metal break the link."
+
+[[series]]
+id = "GOLD_EUR"
+label = "Gold in EUR per ounce"
+group = "policy"
+source = "derived"
+formula = "ratio"
+inputs = ["GOLD", "EURUSD"]
+frequency = "D"
+units = "EUR"
+
+# ---------------------------------------------------------------------------
+# Business surveys
+# ---------------------------------------------------------------------------
+
+[[series]]
+id = "US_ISM_MFG_PMI"
+label = "ISM Manufacturing PMI"
+group = "surveys"
+source = "release"
+frequency = "M"
+direction = "low_bad"
+notes = "Headline recorded on release day (first business day). History is licensed; it accrues from the first entry."
+
+[[series]]
+id = "US_ISM_MFG_NEW_ORDERS"
+label = "ISM Manufacturing: New Orders"
+group = "surveys"
+source = "release"
+frequency = "M"
+direction = "low_bad"
+
+[[series]]
+id = "US_ISM_MFG_INVENTORIES"
+label = "ISM Manufacturing: Inventories"
+group = "surveys"
+source = "release"
+frequency = "M"
+show = false
+
+[[series]]
+id = "US_ISM_MFG_PRICES"
+label = "ISM Manufacturing: Prices Paid"
+group = "surveys"
+source = "release"
+frequency = "M"
+direction = "high_bad"
+
+[[series]]
+id = "US_ISM_MFG_EMPLOYMENT"
+label = "ISM Manufacturing: Employment"
+group = "surveys"
+source = "release"
+frequency = "M"
+direction = "low_bad"
+
+[[series]]
+id = "US_ISM_NEW_ORDERS_MINUS_INVENTORIES"
+label = "ISM Manufacturing: New Orders minus Inventories"
+group = "surveys"
+source = "derived"
+formula = "spread"
+inputs = ["US_ISM_MFG_NEW_ORDERS", "US_ISM_MFG_INVENTORIES"]
+frequency = "M"
+direction = "low_bad"
+units = "pts"
+
+[[series]]
+id = "US_ISM_SERVICES_PMI"
+label = "ISM Services PMI"
+group = "surveys"
+source = "release"
+frequency = "M"
+direction = "low_bad"
+notes = "Below 50 has coincided with every recession since the series began in 1997."
+
+[[series]]
+id = "US_ISM_SERVICES_ACTIVITY"
+label = "ISM Services: Business Activity"
+group = "surveys"
+source = "release"
+frequency = "M"
+direction = "low_bad"
+
+[[series]]
+id = "US_SPGLOBAL_COMPOSITE_PMI"
+label = "S&P Global US Composite PMI"
+group = "surveys"
+source = "release"
+frequency = "M"
+direction = "low_bad"
+
+[[series]]
+id = "US_EMPIRE_STATE"
+label = "Empire State manufacturing: general business conditions"
+group = "surveys"
+source = "fred"
+key = "GACDISA066MSFRBNY"
+frequency = "M"
+lag_days = 0
+direction = "low_bad"
+units = "index"
+
+[[series]]
+id = "US_PHILLY_FED"
+label = "Philadelphia Fed manufacturing: general activity"
+group = "surveys"
+source = "fred"
+key = "GACDFSA066MSFRBPHI"
+frequency = "M"
+lag_days = 0
+direction = "low_bad"
+units = "index"
+fallback = "US_PHILLY_FED_CSV"
+
+[[series]]
+id = "US_PHILLY_FED_CSV"
+label = "Philadelphia Fed manufacturing: general activity (Philly Fed CSV)"
+group = "surveys"
+source = "philly"
+key = "GAC"
+frequency = "M"
+lag_days = 0
+direction = "low_bad"
+units = "index"
+show = false
+
+[[series]]
+id = "US_PHILLY_NEW_ORDERS"
+label = "Philadelphia Fed manufacturing: new orders"
+group = "surveys"
+source = "philly"
+key = "NOC"
+frequency = "M"
+lag_days = 0
+direction = "low_bad"
+units = "index"
+
+[[series]]
+id = "US_DALLAS_FED"
+label = "Dallas Fed manufacturing: general business activity"
+group = "surveys"
+source = "fred"
+key = "BACTSAMFRBDAL"
+frequency = "M"
+lag_days = 0
+direction = "low_bad"
+units = "index"
+
+[[series]]
+id = "US_KC_FED"
+label = "Kansas City Fed manufacturing composite"
+group = "surveys"
+source = "release"
+frequency = "M"
+direction = "low_bad"
+units = "index"
+
+[[series]]
+id = "US_RICHMOND_FED"
+label = "Richmond Fed manufacturing composite"
+group = "surveys"
+source = "release"
+frequency = "M"
+direction = "low_bad"
+units = "index"
+
+[[series]]
+id = "US_REGIONAL_FED_AVG"
+label = "Regional Fed surveys, average of those available"
+group = "surveys"
+source = "derived"
+formula = "mean_available"
+inputs = ["US_EMPIRE_STATE", "US_PHILLY_FED", "US_DALLAS_FED", "US_KC_FED", "US_RICHMOND_FED"]
+frequency = "M"
+direction = "low_bad"
+units = "index"
+notes = "Out before ISM. The count of surveys behind each month is printed with the reading."
+
+[[series]]
+id = "EA_HCOB_COMPOSITE_PMI"
+label = "HCOB euro area composite PMI"
+group = "surveys"
+source = "release"
+frequency = "M"
+direction = "low_bad"
+
+[[series]]
+id = "EA_HCOB_MFG_PMI"
+label = "HCOB euro area manufacturing PMI"
+group = "surveys"
+source = "release"
+frequency = "M"
+direction = "low_bad"
+
+[[series]]
+id = "DE_HCOB_COMPOSITE_PMI"
+label = "HCOB Germany composite PMI"
+group = "surveys"
+source = "release"
+frequency = "M"
+direction = "low_bad"
+
+[[series]]
+id = "ES_HCOB_COMPOSITE_PMI"
+label = "HCOB Spain composite PMI"
+group = "surveys"
+source = "release"
+frequency = "M"
+direction = "low_bad"
+
+[[series]]
+id = "DE_IFO"
+label = "Ifo business climate (Germany)"
+group = "surveys"
+source = "release"
+frequency = "M"
+direction = "low_bad"
+
+[[series]]
+id = "DE_ZEW"
+label = "ZEW economic expectations (Germany)"
+group = "surveys"
+source = "release"
+frequency = "M"
+direction = "low_bad"
+
+[[series]]
+id = "EA_ESI"
+label = "Euro area Economic Sentiment Indicator"
+group = "surveys"
+source = "eurostat"
+key = "ei_bssi_m_r2?indic=BS-ESI-I&s_adj=SA&geo=EA21"
+frequency = "M"
+lag_days = 0
+direction = "low_bad"
+units = "index"
+fallback = "EA_ESI_EA20"
+
+[[series]]
+id = "EA_ESI_EA20"
+label = "Euro area (EA20) Economic Sentiment Indicator"
+group = "surveys"
+source = "eurostat"
+key = "ei_bssi_m_r2?indic=BS-ESI-I&s_adj=SA&geo=EA20"
+frequency = "M"
+lag_days = 0
+direction = "low_bad"
+units = "index"
+show = false
+
+[[series]]
+id = "GLOBAL_MFG_PMI"
+label = "JPMorgan Global Manufacturing PMI"
+group = "surveys"
+source = "release"
+frequency = "M"
+direction = "low_bad"
+
+[[series]]
+id = "CN_CAIXIN_MFG_PMI"
+label = "Caixin China Manufacturing PMI"
+group = "surveys"
+source = "release"
+frequency = "M"
+direction = "low_bad"
+
+# ---------------------------------------------------------------------------
+# Leading composites and nowcasts
+# ---------------------------------------------------------------------------
+
+[[series]]
+id = "US_LEI_6M_ANN"
+label = "Conference Board LEI, 6-month annualised change"
+group = "composites"
+source = "release"
+frequency = "M"
+direction = "low_bad"
+units = "%"
+notes = "The Conference Board's own signal pairs a reading below -4% with diffusion below 50."
+
+[[series]]
+id = "US_LEI_DIFFUSION"
+label = "Conference Board LEI, 6-month diffusion"
+group = "composites"
+source = "release"
+frequency = "M"
+direction = "low_bad"
+units = "%"
+
+[[series]]
+id = "US_CFNAI"
+label = "Chicago Fed National Activity Index"
+group = "composites"
+source = "fred"
+key = "CFNAI"
+frequency = "M"
+lag_days = 25
+direction = "low_bad"
+units = "sd"
+show = false
+
+[[series]]
+id = "US_CFNAI_MA3"
+label = "Chicago Fed National Activity Index, 3-month average"
+group = "composites"
+source = "fred"
+key = "CFNAIMA3"
+frequency = "M"
+lag_days = 25
+direction = "low_bad"
+units = "sd"
+critical = true
+notes = "Below -0.7 has marked the start of recessions; a confirmation, not a warning."
+
+[[series]]
+id = "OECD_CLI_US"
+label = "OECD composite leading indicator, United States"
+group = "composites"
+source = "oecd"
+key = "OECD.SDD.STES,DSD_STES@DF_CLI,/USA.M.LI...AA...H"
+frequency = "M"
+lag_days = 40
+direction = "low_bad"
+units = "index"
+
+[[series]]
+id = "OECD_CLI_G20"
+label = "OECD composite leading indicator, G20"
+group = "composites"
+source = "oecd"
+key = "OECD.SDD.STES,DSD_STES@DF_CLI,/G20.M.LI...AA...H"
+frequency = "M"
+lag_days = 40
+direction = "low_bad"
+units = "index"
+
+[[series]]
+id = "US_GDPNOW"
+label = "Atlanta Fed GDPNow, current quarter"
+group = "composites"
+source = "release"
+frequency = "M"
+direction = "low_bad"
+units = "% saar"
+
+[[series]]
+id = "US_NYFED_NOWCAST"
+label = "NY Fed Staff Nowcast, current quarter"
+group = "composites"
+source = "release"
+frequency = "M"
+direction = "low_bad"
+units = "% saar"
+
+[[series]]
+id = "US_CLEVELAND_CPI_NOWCAST"
+label = "Cleveland Fed CPI nowcast, YoY"
+group = "inflation"
+source = "release"
+frequency = "M"
+direction = "high_bad"
+units = "%"
+
+[[series]]
+id = "US_EBP"
+label = "Excess bond premium"
+group = "credit"
+source = "ebp"
+key = "ebp"
+frequency = "M"
+lag_days = 15
+direction = "high_bad"
+units = "pp"
+critical = true
+notes = "Corporate spread net of expected defaults: the bond market's risk appetite. Top decile has preceded recessions by 6 to 12 months."
+
+[[series]]
+id = "US_EBP_RECPROB"
+label = "EBP-implied recession probability, 12 months"
+group = "composites"
+source = "ebp"
+key = "est_prob"
+frequency = "M"
+lag_days = 15
+direction = "high_bad"
+units = "prob"
+
+# ---------------------------------------------------------------------------
+# Inflation
+# ---------------------------------------------------------------------------
+
+[[series]]
+id = "US_CPI"
+label = "US CPI, YoY"
+group = "inflation"
+source = "fred"
+key = "CPIAUCSL"
+frequency = "M"
+lag_days = 13
+transform = "yoy"
+direction = "high_bad"
+units = "%"
+critical = true
+
+[[series]]
+id = "US_CPI_3M_ANN"
+label = "US CPI, 3-month annualised"
+group = "inflation"
+source = "derived"
+formula = "ann3m"
+inputs = ["US_CPI"]
+frequency = "M"
+direction = "high_bad"
+units = "%"
+
+[[series]]
+id = "US_CORE_CPI"
+label = "US core CPI, YoY"
+group = "inflation"
+source = "fred"
+key = "CPILFESL"
+frequency = "M"
+lag_days = 13
+transform = "yoy"
+direction = "high_bad"
+units = "%"
+
+[[series]]
+id = "US_CORE_PCE"
+label = "US core PCE prices, YoY"
+group = "inflation"
+source = "fred"
+key = "PCEPILFE"
+frequency = "M"
+lag_days = 30
+transform = "yoy"
+direction = "high_bad"
+units = "%"
+critical = true
+
+[[series]]
+id = "US_MEDIAN_CPI"
+label = "Cleveland Fed median CPI, YoY"
+group = "inflation"
+source = "fred"
+key = "MEDCPIM159SFRBCLE"
+frequency = "M"
+lag_days = 13
+direction = "high_bad"
+units = "%"
+
+[[series]]
+id = "US_TRIMMED_PCE"
+label = "Dallas Fed trimmed-mean PCE, 12-month"
+group = "inflation"
+source = "fred"
+key = "PCETRIM12M159SFRBDAL"
+frequency = "M"
+lag_days = 30
+direction = "high_bad"
+units = "%"
+
+[[series]]
+id = "US_STICKY_CPI"
+label = "Atlanta Fed sticky-price core CPI, YoY"
+group = "inflation"
+source = "fred"
+key = "CORESTICKM159SFRBATL"
+frequency = "M"
+lag_days = 13
+direction = "high_bad"
+units = "%"
+
+[[series]]
+id = "US_MICH_INFLATION_EXP"
+label = "Michigan 1-year inflation expectations"
+group = "inflation"
+source = "fred"
+key = "MICH"
+frequency = "M"
+lag_days = 30
+direction = "high_bad"
+units = "%"
+
+[[series]]
+id = "US_EXPINF_10Y"
+label = "Cleveland Fed 10-year expected inflation"
+group = "inflation"
+source = "fred"
+key = "EXPINF10YR"
+frequency = "M"
+lag_days = 15
+direction = "high_bad"
+units = "%"
+
+[[series]]
+id = "US_WAGE_GROWTH_TRACKER"
+label = "Atlanta Fed wage growth tracker"
+group = "inflation"
+source = "release"
+frequency = "M"
+direction = "high_bad"
+units = "%"
+
+[[series]]
+id = "US_AHE"
+label = "US average hourly earnings, YoY"
+group = "labor"
+source = "fred"
+key = "CES0500000003"
+frequency = "M"
+lag_days = 7
+transform = "yoy"
+units = "%"
+show = false
+
+[[series]]
+id = "US_REAL_WAGES"
+label = "US real wage growth (hourly earnings deflated by CPI), YoY"
+group = "labor"
+source = "derived"
+formula = "deflated_yoy"
+inputs = ["US_AHE", "US_CPI"]
+frequency = "M"
+direction = "low_bad"
+units = "%"
+
+[[series]]
+id = "EA_HICP"
+label = "Euro area HICP, YoY"
+group = "inflation"
+source = "ecb"
+key = "HICP/M.U2.N.000000.4D0.ANR"
+frequency = "M"
+lag_days = 17
+direction = "high_bad"
+units = "%"
+critical = true
+notes = "The HICP dataflow (ECOICOP v2, 2025 = 100) replaced ICP in February 2026; ICP stops at 2025-12."
+
+[[series]]
+id = "EA_HICP_CORE"
+label = "Euro area HICP ex energy and food, YoY"
+group = "inflation"
+source = "ecb"
+key = "HICP/M.U2.N.XEF000.4D0.ANR"
+frequency = "M"
+lag_days = 17
+direction = "high_bad"
+units = "%"
+
+[[series]]
+id = "ES_HICP"
+label = "Spain HICP, YoY"
+group = "inflation"
+source = "ecb"
+key = "HICP/M.ES.N.000000.4D0.ANR"
+frequency = "M"
+lag_days = 17
+direction = "high_bad"
+units = "%"
+
+[[series]]
+id = "OIL_WTI"
+label = "WTI crude, YoY"
+group = "inflation"
+source = "fred"
+key = "DCOILWTICO"
+frequency = "D"
+lag_days = 8
+transform = "yoy"
+direction = "high_bad"
+units = "%"
+
+[[series]]
+id = "OIL_BRENT"
+label = "Brent crude"
+group = "inflation"
+source = "fred"
+key = "DCOILBRENTEU"
+frequency = "D"
+lag_days = 8
+units = "USD/bbl"
+
+[[series]]
+id = "US_GASOLINE"
+label = "US regular gasoline, YoY"
+group = "inflation"
+source = "fred"
+key = "GASREGW"
+frequency = "W"
+lag_days = 1
+transform = "yoy"
+direction = "high_bad"
+units = "%"
+
+# ---------------------------------------------------------------------------
+# Labor
+# ---------------------------------------------------------------------------
+
+[[series]]
+id = "US_CLAIMS"
+label = "Initial jobless claims"
+group = "labor"
+source = "fred"
+key = "ICSA"
+frequency = "W"
+lag_days = 5
+units = "persons"
+show = false
+critical = true
+
+[[series]]
+id = "US_CLAIMS_4WK"
+label = "Initial claims, 4-week average"
+group = "labor"
+source = "derived"
+formula = "ma4w"
+inputs = ["US_CLAIMS"]
+frequency = "W"
+direction = "high_bad"
+units = "persons"
+
+[[series]]
+id = "US_CLAIMS_4WK_YOY"
+label = "Initial claims 4-week average, YoY"
+group = "labor"
+source = "derived"
+formula = "yoy"
+inputs = ["US_CLAIMS_4WK"]
+frequency = "W"
+direction = "high_bad"
+units = "%"
+notes = "Up more than 20% YoY is the rule threshold."
+
+[[series]]
+id = "US_CLAIMS_OFF_LOW"
+label = "Initial claims 4-week average, % above 52-week low"
+group = "labor"
+source = "derived"
+formula = "claims_off_low"
+inputs = ["US_CLAIMS_4WK"]
+frequency = "W"
+direction = "high_bad"
+units = "%"
+notes = "More than 15% above the low has had few false alarms, but it is nearly coincident."
+
+[[series]]
+id = "US_CONTINUING_CLAIMS"
+label = "Continuing claims, YoY"
+group = "labor"
+source = "fred"
+key = "CCSA"
+frequency = "W"
+lag_days = 12
+transform = "yoy"
+direction = "high_bad"
+units = "%"
+
+[[series]]
+id = "US_UNRATE"
+label = "US unemployment rate"
+group = "labor"
+source = "fred"
+key = "UNRATE"
+frequency = "M"
+lag_days = 7
+direction = "high_bad"
+units = "%"
+critical = true
+
+[[series]]
+id = "US_SAHM"
+label = "Sahm rule (real-time)"
+group = "labor"
+source = "fred"
+key = "SAHMREALTIME"
+frequency = "M"
+lag_days = 7
+direction = "high_bad"
+units = "pp"
+critical = true
+notes = "Triggered at 0.5. Mid-2024 fired without a recession; labor supply, not demand, was the cause."
+
+[[series]]
+id = "US_PAYEMS"
+label = "Nonfarm payrolls"
+group = "labor"
+source = "fred"
+key = "PAYEMS"
+frequency = "M"
+lag_days = 7
+units = "thousands"
+show = false
+
+[[series]]
+id = "US_PAYROLLS_3M"
+label = "Payroll gains, 3-month average"
+group = "labor"
+source = "derived"
+formula = "payrolls_3m_change"
+inputs = ["US_PAYEMS"]
+frequency = "M"
+direction = "low_bad"
+units = "thousands"
+
+[[series]]
+id = "US_TEMP_HELP"
+label = "Temporary help employment, YoY"
+group = "labor"
+source = "fred"
+key = "TEMPHELPS"
+frequency = "M"
+lag_days = 7
+transform = "yoy"
+direction = "low_bad"
+units = "%"
+notes = "Leads payrolls at turning points; the structural decline of temp staffing muddies recent readings."
+
+[[series]]
+id = "US_MFG_HOURS"
+label = "Manufacturing weekly hours"
+group = "labor"
+source = "fred"
+key = "AWHMAN"
+frequency = "M"
+lag_days = 7
+direction = "low_bad"
+units = "hours"
+
+[[series]]
+id = "US_JOB_OPENINGS"
+label = "Job openings (JOLTS)"
+group = "labor"
+source = "fred"
+key = "JTSJOL"
+frequency = "M"
+lag_days = 35
+units = "thousands"
+show = false
+
+[[series]]
+id = "US_UNEMPLOYED"
+label = "Unemployed persons"
+group = "labor"
+source = "fred"
+key = "UNEMPLOY"
+frequency = "M"
+lag_days = 7
+units = "thousands"
+show = false
+
+[[series]]
+id = "US_VU_RATIO"
+label = "Openings per unemployed (V/U)"
+group = "labor"
+source = "derived"
+formula = "ratio"
+inputs = ["US_JOB_OPENINGS", "US_UNEMPLOYED"]
+frequency = "M"
+direction = "low_bad"
+
+[[series]]
+id = "US_QUITS_RATE"
+label = "Quits rate (JOLTS)"
+group = "labor"
+source = "fred"
+key = "JTSQUR"
+frequency = "M"
+lag_days = 35
+direction = "low_bad"
+units = "%"
+
+[[series]]
+id = "EA_UNRATE"
+label = "Euro area unemployment rate"
+group = "labor"
+source = "eurostat"
+key = "une_rt_m?geo=EA21&s_adj=SA&age=TOTAL&unit=PC_ACT&sex=T"
+frequency = "M"
+lag_days = 32
+direction = "high_bad"
+units = "%"
+
+[[series]]
+id = "ES_UNRATE"
+label = "Spain unemployment rate"
+group = "labor"
+source = "eurostat"
+key = "une_rt_m?geo=ES&s_adj=SA&age=TOTAL&unit=PC_ACT&sex=T"
+frequency = "M"
+lag_days = 32
+direction = "high_bad"
+units = "%"
+
+# ---------------------------------------------------------------------------
+# Housing
+# ---------------------------------------------------------------------------
+
+[[series]]
+id = "US_PERMITS"
+label = "Building permits, YoY"
+group = "housing"
+source = "fred"
+key = "PERMIT"
+frequency = "M"
+lag_days = 19
+transform = "yoy"
+direction = "low_bad"
+units = "%"
+critical = true
+notes = "Housing has led most post-war cycles; down more than 15% YoY is the rule."
+
+[[series]]
+id = "US_STARTS"
+label = "Housing starts, YoY"
+group = "housing"
+source = "fred"
+key = "HOUST"
+frequency = "M"
+lag_days = 19
+transform = "yoy"
+direction = "low_bad"
+units = "%"
+
+[[series]]
+id = "US_EXISTING_HOME_SALES"
+label = "Existing home sales, YoY"
+group = "housing"
+source = "fred"
+key = "EXHOSLUSM495S"
+frequency = "M"
+lag_days = 25
+transform = "yoy"
+direction = "low_bad"
+units = "%"
+
+[[series]]
+id = "US_MORTGAGE_30Y"
+label = "30-year mortgage rate"
+group = "housing"
+source = "fred"
+key = "MORTGAGE30US"
+frequency = "W"
+lag_days = 1
+direction = "high_bad"
+units = "%"
+
+[[series]]
+id = "US_NAHB"
+label = "NAHB housing market index"
+group = "housing"
+source = "release"
+frequency = "M"
+direction = "low_bad"
+units = "index"
+
+# ---------------------------------------------------------------------------
+# Business investment and trade
+# ---------------------------------------------------------------------------
+
+[[series]]
+id = "US_CORE_CAPEX_ORDERS"
+label = "Core capital goods orders"
+group = "investment"
+source = "fred"
+key = "NEWORDER"
+frequency = "M"
+lag_days = 27
+units = "USD mn"
+show = false
+
+[[series]]
+id = "US_CORE_CAPEX_REAL_YOY"
+label = "Core capital goods orders, CPI-deflated, YoY"
+group = "investment"
+source = "derived"
+formula = "deflated_yoy"
+inputs = ["US_CORE_CAPEX_ORDERS", "US_CPI"]
+frequency = "M"
+direction = "low_bad"
+units = "%"
+
+[[series]]
+id = "US_CAPACITY_UTIL"
+label = "Capacity utilisation"
+group = "investment"
+source = "fred"
+key = "TCU"
+frequency = "M"
+lag_days = 17
+direction = "low_bad"
+units = "%"
+
+[[series]]
+id = "US_INDPRO"
+label = "Industrial production, YoY"
+group = "investment"
+source = "fred"
+key = "INDPRO"
+frequency = "M"
+lag_days = 17
+transform = "yoy"
+direction = "low_bad"
+units = "%"
+
+[[series]]
+id = "US_CASS_SHIPMENTS"
+label = "Cass Freight Index, shipments, YoY"
+group = "investment"
+source = "release"
+frequency = "M"
+direction = "low_bad"
+units = "%"
+
+[[series]]
+id = "KR_EXPORTS"
+label = "South Korea exports, YoY"
+group = "investment"
+source = "fred"
+key = "XTEXVA01KRM667S"
+frequency = "M"
+lag_days = 45
+transform = "yoy"
+direction = "low_bad"
+units = "%"
+notes = "A global trade bellwether; the customs headline comes out on the 1st, this OECD series later."
+
+[[series]]
+id = "EA_INDPRO"
+label = "Euro area industrial production, YoY"
+group = "investment"
+source = "eurostat"
+key = "sts_inpr_m?indic_bt=PRD&nace_r2=B-D&s_adj=SCA&unit=I21&geo=EA21"
+frequency = "M"
+lag_days = 45
+transform = "yoy"
+direction = "low_bad"
+units = "%"
+
+[[series]]
+id = "EA_GDP_YOY"
+label = "Euro area real GDP, YoY"
+group = "investment"
+source = "eurostat"
+key = "namq_10_gdp?geo=EA21&s_adj=SCA&unit=CLV_PCH_SM&na_item=B1GQ"
+frequency = "Q"
+lag_days = 45
+direction = "low_bad"
+units = "%"
+
+[[series]]
+id = "US_GDP_REAL"
+label = "US real GDP"
+group = "investment"
+source = "fred"
+key = "GDPC1"
+frequency = "Q"
+lag_days = 30
+transform = "yoy"
+direction = "low_bad"
+units = "%"
+
+# ---------------------------------------------------------------------------
+# Consumer
+# ---------------------------------------------------------------------------
+
+[[series]]
+id = "US_UMCSENT"
+label = "Michigan consumer sentiment"
+group = "consumer"
+source = "fred"
+key = "UMCSENT"
+frequency = "M"
+lag_days = 30
+direction = "low_bad"
+units = "index"
+notes = "Poor recession predictor on its own; the gap between sentiment and spending is the useful part. FRED carries the Michigan series a month behind the release."
+
+[[series]]
+id = "US_UMCSENT_EXPECTATIONS"
+label = "Michigan consumer expectations"
+group = "consumer"
+source = "release"
+frequency = "M"
+direction = "low_bad"
+units = "index"
+
+[[series]]
+id = "EA_CONSUMER_CONFIDENCE"
+label = "Euro area consumer confidence"
+group = "consumer"
+source = "eurostat"
+key = "ei_bsco_m?indic=BS-CSMCI&s_adj=SA&unit=BAL&geo=EA21"
+frequency = "M"
+lag_days = 0
+direction = "low_bad"
+units = "balance"
+fallback = "EA_CONSUMER_CONFIDENCE_EA20"
+
+[[series]]
+id = "EA_CONSUMER_CONFIDENCE_EA20"
+label = "Euro area (EA20) consumer confidence"
+group = "consumer"
+source = "eurostat"
+key = "ei_bsco_m?indic=BS-CSMCI&s_adj=SA&unit=BAL&geo=EA20"
+frequency = "M"
+lag_days = 0
+direction = "low_bad"
+units = "balance"
+show = false
+
+[[series]]
+id = "EA_RETAIL_VOLUME"
+label = "Euro area retail sales volume, YoY"
+group = "consumer"
+source = "eurostat"
+key = "sts_trtu_m?indic_bt=VOL_SLS&nace_r2=G47&s_adj=SCA&unit=I21&geo=EA21"
+frequency = "M"
+lag_days = 35
+transform = "yoy"
+direction = "low_bad"
+units = "%"
+
+[[series]]
+id = "US_REAL_RETAIL_SALES"
+label = "Real retail sales, YoY"
+group = "consumer"
+source = "fred"
+key = "RRSFS"
+frequency = "M"
+lag_days = 16
+transform = "yoy"
+direction = "low_bad"
+units = "%"
+
+[[series]]
+id = "US_REAL_DPI"
+label = "Real disposable income, YoY"
+group = "consumer"
+source = "fred"
+key = "DSPIC96"
+frequency = "M"
+lag_days = 30
+transform = "yoy"
+direction = "low_bad"
+units = "%"
+
+[[series]]
+id = "US_SAVING_RATE"
+label = "Personal saving rate"
+group = "consumer"
+source = "fred"
+key = "PSAVERT"
+frequency = "M"
+lag_days = 30
+direction = "low_bad"
+units = "%"
+
+[[series]]
+id = "US_REVOLVING_CREDIT"
+label = "Revolving consumer credit, YoY"
+group = "consumer"
+source = "fred"
+key = "REVOLSL"
+frequency = "M"
+lag_days = 38
+transform = "yoy"
+direction = "high_bad"
+units = "%"
+
+[[series]]
+id = "US_CONSUMER_CREDIT"
+label = "Total consumer credit, YoY"
+group = "consumer"
+source = "fred"
+key = "TOTALSL"
+frequency = "M"
+lag_days = 38
+transform = "yoy"
+units = "%"
+show = false
+
+[[series]]
+id = "US_DEBT_SERVICE_RATIO"
+label = "Household debt service ratio"
+group = "consumer"
+source = "fred"
+key = "TDSP"
+frequency = "Q"
+lag_days = 100
+direction = "high_bad"
+units = "%"
+
+[[series]]
+id = "US_CARD_DELINQUENCY"
+label = "Credit card delinquency rate"
+group = "consumer"
+source = "fred"
+key = "DRCCLACBS"
+frequency = "Q"
+lag_days = 55
+direction = "high_bad"
+units = "%"
+
+[[series]]
+id = "US_MORTGAGE_DELINQUENCY"
+label = "Single-family mortgage delinquency rate"
+group = "consumer"
+source = "fred"
+key = "DRSFRMACBS"
+frequency = "Q"
+lag_days = 55
+direction = "high_bad"
+units = "%"
+
+[[series]]
+id = "US_AUTO_DELINQUENCY_90D"
+label = "Auto loans 90+ days delinquent (NY Fed HHDC)"
+group = "consumer"
+source = "release"
+frequency = "Q"
+direction = "high_bad"
+units = "%"
+
+# ---------------------------------------------------------------------------
+# Credit and liquidity
+# ---------------------------------------------------------------------------
+
+[[series]]
+id = "US_HY_OAS"
+label = "US high-yield OAS"
+group = "credit"
+source = "fred"
+key = "BAMLH0A0HYM2"
+frequency = "D"
+lag_days = 1
+direction = "high_bad"
+units = "pp"
+critical = true
+
+[[series]]
+id = "US_HY_OAS_3M_CHG"
+label = "US high-yield OAS, 3-month change"
+group = "credit"
+source = "derived"
+formula = "diff3m"
+inputs = ["US_HY_OAS"]
+frequency = "D"
+direction = "high_bad"
+units = "pp"
+notes = "Up 150bp in three months is the rule threshold."
+
+[[series]]
+id = "US_IG_OAS"
+label = "US investment-grade OAS"
+group = "credit"
+source = "fred"
+key = "BAMLC0A0CM"
+frequency = "D"
+lag_days = 1
+direction = "high_bad"
+units = "pp"
+
+[[series]]
+id = "US_BAA_10Y"
+label = "Baa corporate minus 10-year Treasury"
+group = "credit"
+source = "fred"
+key = "BAA10Y"
+frequency = "D"
+lag_days = 1
+direction = "high_bad"
+units = "pp"
+
+[[series]]
+id = "US_NFCI"
+label = "Chicago Fed financial conditions (NFCI)"
+group = "credit"
+source = "fred"
+key = "NFCI"
+frequency = "W"
+lag_days = 5
+direction = "high_bad"
+units = "sd"
+
+[[series]]
+id = "US_ANFCI"
+label = "Chicago Fed adjusted financial conditions (ANFCI)"
+group = "credit"
+source = "fred"
+key = "ANFCI"
+frequency = "W"
+lag_days = 5
+direction = "high_bad"
+units = "sd"
+show = false
+
+[[series]]
+id = "US_STLFSI"
+label = "St. Louis Fed financial stress index"
+group = "credit"
+source = "fred"
+key = "STLFSI4"
+frequency = "W"
+lag_days = 5
+direction = "high_bad"
+units = "sd"
+
+[[series]]
+id = "US_SLOOS_TIGHTENING"
+label = "Loan officer survey: net share tightening on C&I loans, large and mid firms"
+group = "credit"
+source = "fred"
+key = "DRTSCILM"
+frequency = "Q"
+lag_days = 40
+direction = "high_bad"
+units = "%"
+critical = true
+notes = "Leads credit growth and activity by two to four quarters. Above 20% is the rule."
+
+[[series]]
+id = "US_WALCL"
+label = "Fed balance sheet (total assets)"
+group = "credit"
+source = "fred"
+key = "WALCL"
+frequency = "W"
+lag_days = 1
+units = "USD mn"
+show = false
+
+[[series]]
+id = "US_TGA"
+label = "Treasury General Account"
+group = "credit"
+source = "fred"
+key = "WTREGEN"
+frequency = "W"
+lag_days = 1
+units = "USD mn"
+show = false
+
+[[series]]
+id = "US_RRP"
+label = "Overnight reverse repo"
+group = "credit"
+source = "fred"
+key = "RRPONTSYD"
+frequency = "D"
+lag_days = 1
+units = "USD bn"
+show = false
+
+[[series]]
+id = "US_NET_LIQUIDITY"
+label = "Net liquidity (Fed assets minus TGA minus RRP)"
+group = "credit"
+source = "derived"
+formula = "net_liquidity"
+inputs = ["US_WALCL", "US_TGA", "US_RRP"]
+frequency = "W"
+units = "USD bn"
+
+[[series]]
+id = "US_NET_LIQUIDITY_13W"
+label = "Net liquidity, 13-week change"
+group = "credit"
+source = "derived"
+formula = "change_13w"
+inputs = ["US_NET_LIQUIDITY"]
+frequency = "W"
+direction = "low_bad"
+units = "USD bn"
+
+[[series]]
+id = "US_M2"
+label = "M2 money stock, YoY"
+group = "credit"
+source = "fred"
+key = "M2SL"
+frequency = "M"
+lag_days = 28
+transform = "yoy"
+direction = "low_bad"
+units = "%"
+
+[[series]]
+id = "US_MARGIN_DEBT"
+label = "FINRA margin debt, YoY"
+group = "positioning"
+source = "release"
+frequency = "M"
+direction = "high_bad"
+units = "%"
+
+[[series]]
+id = "EA_BLS_TIGHTENING"
+label = "ECB bank lending survey: net tightening on loans to firms"
+group = "credit"
+source = "ecb"
+key = "BLS/Q.U2.ALL.O.E.Z.B3.ST.S.WFNET"
+frequency = "Q"
+lag_days = 25
+direction = "high_bad"
+units = "net %"
+
+[[series]]
+id = "EA_M3"
+label = "Euro area M3, annual growth"
+group = "credit"
+source = "ecb"
+key = "BSI/M.U2.Y.V.M30.X.I.U2.2300.Z01.A"
+frequency = "M"
+lag_days = 28
+direction = "low_bad"
+units = "%"
+
+[[series]]
+id = "US_CREDIT_GAP"
+label = "US credit-to-GDP gap (BIS)"
+group = "credit"
+source = "bis"
+key = "WS_CREDIT_GAP/Q.US.P.A.C"
+frequency = "Q"
+lag_days = 190
+direction = "high_bad"
+units = "pp"
+
+[[series]]
+id = "EA_CREDIT_GAP"
+label = "Euro area credit-to-GDP gap (BIS)"
+group = "credit"
+source = "bis"
+key = "WS_CREDIT_GAP/Q.XM.P.A.C"
+frequency = "Q"
+lag_days = 190
+direction = "high_bad"
+units = "pp"
+
+[[series]]
+id = "ES_CREDIT_GAP"
+label = "Spain credit-to-GDP gap (BIS)"
+group = "credit"
+source = "bis"
+key = "WS_CREDIT_GAP/Q.ES.P.A.C"
+frequency = "Q"
+lag_days = 190
+direction = "high_bad"
+units = "pp"
+
+# ---------------------------------------------------------------------------
+# Fiscal
+# ---------------------------------------------------------------------------
+
+[[series]]
+id = "US_DEBT_GDP"
+label = "US federal debt / GDP"
+group = "fiscal"
+source = "fred"
+key = "GFDEGDQ188S"
+frequency = "Q"
+lag_days = 90
+direction = "high_bad"
+units = "%"
+
+[[series]]
+id = "US_DEFICIT_GDP"
+label = "US federal surplus or deficit / GDP (fiscal year)"
+group = "fiscal"
+source = "fred"
+key = "FYFSGDA188S"
+frequency = "A"
+lag_days = 120
+direction = "low_bad"
+units = "%"
+
+[[series]]
+id = "US_INTEREST_PAYMENTS"
+label = "Federal interest payments (annual rate)"
+group = "fiscal"
+source = "fred"
+key = "A091RC1Q027SBEA"
+frequency = "Q"
+lag_days = 60
+units = "USD bn"
+show = false
+
+[[series]]
+id = "US_FEDERAL_RECEIPTS"
+label = "Federal current receipts (annual rate)"
+group = "fiscal"
+source = "fred"
+key = "FGRECPT"
+frequency = "Q"
+lag_days = 60
+units = "USD bn"
+show = false
+
+[[series]]
+id = "US_INTEREST_TO_RECEIPTS"
+label = "Federal interest payments / receipts"
+group = "fiscal"
+source = "derived"
+formula = "interest_to_receipts"
+inputs = ["US_INTEREST_PAYMENTS", "US_FEDERAL_RECEIPTS"]
+frequency = "Q"
+direction = "high_bad"
+units = "%"
+
+[[series]]
+id = "EA_DEFICIT_GDP"
+label = "Euro area government balance / GDP"
+group = "fiscal"
+source = "eurostat"
+key = "gov_10dd_edpt1?na_item=B9&sector=S13&unit=PC_GDP&geo=EA21"
+frequency = "A"
+lag_days = 110
+direction = "low_bad"
+units = "%"
+
+[[series]]
+id = "EA_DEBT_GDP"
+label = "Euro area government debt / GDP"
+group = "fiscal"
+source = "eurostat"
+key = "gov_10dd_edpt1?na_item=GD&sector=S13&unit=PC_GDP&geo=EA21"
+frequency = "A"
+lag_days = 110
+direction = "high_bad"
+units = "%"
+
+[[series]]
+id = "ES_DEFICIT_GDP"
+label = "Spain government balance / GDP"
+group = "fiscal"
+source = "eurostat"
+key = "gov_10dd_edpt1?na_item=B9&sector=S13&unit=PC_GDP&geo=ES"
+frequency = "A"
+lag_days = 110
+direction = "low_bad"
+units = "%"
+
+[[series]]
+id = "ES_DEBT_GDP"
+label = "Spain government debt / GDP"
+group = "fiscal"
+source = "eurostat"
+key = "gov_10dd_edpt1?na_item=GD&sector=S13&unit=PC_GDP&geo=ES"
+frequency = "A"
+lag_days = 110
+direction = "high_bad"
+units = "%"
+
+# ---------------------------------------------------------------------------
+# Valuation
+# ---------------------------------------------------------------------------
+
+[[series]]
+id = "SHILLER_PRICE"
+label = "S&P Composite price (Shiller, monthly average)"
+group = "valuation"
+source = "shiller"
+key = "price"
+frequency = "M"
+lag_days = 5
+show = false
+
+[[series]]
+id = "SHILLER_EARNINGS"
+label = "S&P Composite trailing earnings (Shiller)"
+group = "valuation"
+source = "shiller"
+key = "earnings"
+frequency = "M"
+lag_days = 95
+show = false
+notes = "Reported with the lag of the earnings season; the latest months are blank until then."
+
+[[series]]
+id = "SHILLER_CPI"
+label = "CPI (Shiller file)"
+group = "valuation"
+source = "shiller"
+key = "cpi"
+frequency = "M"
+lag_days = 15
+show = false
+
+[[series]]
+id = "SHILLER_GS10"
+label = "10-year yield (Shiller file)"
+group = "valuation"
+source = "shiller"
+key = "gs10"
+frequency = "M"
+lag_days = 5
+show = false
+
+[[series]]
+id = "SP500_CAPE"
+label = "S&P 500 CAPE (Shiller)"
+group = "valuation"
+source = "shiller"
+key = "cape"
+frequency = "M"
+lag_days = 5
+direction = "high_bad"
+critical = true
+notes = "Says expected 10-year real returns are low when high. It has no timing power, and the report says so."
+
+[[series]]
+id = "SP500_EXCESS_CAPE_YIELD"
+label = "Excess CAPE yield (Shiller)"
+group = "valuation"
+source = "shiller"
+key = "excess_cape_yield"
+frequency = "M"
+lag_days = 5
+direction = "low_bad"
+units = "frac"
+notes = "1 / CAPE minus the real 10-year yield: a rough equity risk premium."
+
+[[series]]
+id = "SP500_TRAILING_PE"
+label = "S&P 500 trailing P/E (Shiller)"
+group = "valuation"
+source = "derived"
+formula = "ratio"
+inputs = ["SHILLER_PRICE", "SHILLER_EARNINGS"]
+frequency = "M"
+direction = "high_bad"
+
+[[series]]
+id = "SP500_REAL_EPS_GROWTH"
+label = "S&P 500 real trailing earnings growth, YoY"
+group = "inflation"
+source = "derived"
+formula = "real_earnings_growth"
+inputs = ["SHILLER_EARNINGS", "SHILLER_CPI"]
+frequency = "M"
+direction = "low_bad"
+units = "%"
+notes = "Nominal earnings growth deflated by CPI (Fisher form). The test of 'inflation disguised as growth'."
+
+[[series]]
+id = "SP500_NOMINAL_EPS_GROWTH"
+label = "S&P 500 nominal trailing earnings growth, YoY"
+group = "valuation"
+source = "derived"
+formula = "yoy"
+inputs = ["SHILLER_EARNINGS"]
+frequency = "M"
+direction = "low_bad"
+units = "%"
+
+[[series]]
+id = "US_CORP_EQUITIES"
+label = "Nonfinancial corporate equities, market value (Z.1)"
+group = "valuation"
+source = "fred"
+key = "NCBEILQ027S"
+frequency = "Q"
+lag_days = 75
+units = "USD mn"
+show = false
+
+[[series]]
+id = "US_GDP"
+label = "US nominal GDP"
+group = "valuation"
+source = "fred"
+key = "GDP"
+frequency = "Q"
+lag_days = 30
+units = "USD bn"
+show = false
+
+[[series]]
+id = "US_BUFFETT"
+label = "Buffett indicator: corporate equities / GDP"
+group = "valuation"
+source = "derived"
+formula = "buffett"
+inputs = ["US_CORP_EQUITIES", "US_GDP"]
+frequency = "Q"
+direction = "high_bad"
+units = "x"
+
+[[series]]
+id = "US_BUFFETT_VS_TREND"
+label = "Buffett indicator, % above its log-linear trend"
+group = "valuation"
+source = "derived"
+formula = "trend_deviation"
+inputs = ["US_BUFFETT"]
+frequency = "Q"
+direction = "high_bad"
+units = "%"
+notes = "The ratio drifts upward structurally, so its distance from trend is the honest comparison."
+
+[[series]]
+id = "US_CORP_PROFITS"
+label = "Corporate profits after tax"
+group = "valuation"
+source = "fred"
+key = "CP"
+frequency = "Q"
+lag_days = 60
+units = "USD bn"
+show = false
+
+[[series]]
+id = "US_PROFITS_GDP"
+label = "Corporate profits / GDP"
+group = "valuation"
+source = "derived"
+formula = "ratio_pct"
+inputs = ["US_CORP_PROFITS", "US_GDP"]
+frequency = "Q"
+direction = "high_bad"
+units = "%"
+
+# ---------------------------------------------------------------------------
+# Positioning and sentiment
+# ---------------------------------------------------------------------------
+
+[[series]]
+id = "COT_SP500_NET_SPEC"
+label = "COT: large speculators net S&P 500 futures (contracts)"
+group = "positioning"
+source = "cot"
+key = "S&P 500 Consolidated - CHICAGO MERCANTILE EXCHANGE"
+frequency = "W"
+lag_days = 3
+units = "contracts"
+notes = "Non-commercial long minus short, all contracts. Weekly, Tuesday positions released Friday."
+
+[[series]]
+id = "COT_UST10Y_NET_SPEC"
+label = "COT: large speculators net 10-year Treasury futures"
+group = "positioning"
+source = "cot"
+key = "UST 10Y NOTE - CHICAGO BOARD OF TRADE"
+frequency = "W"
+lag_days = 3
+units = "contracts"
+
+[[series]]
+id = "COT_USD_NET_SPEC"
+label = "COT: large speculators net dollar index futures"
+group = "positioning"
+source = "cot"
+key = "USD INDEX - ICE FUTURES U.S."
+frequency = "W"
+lag_days = 3
+units = "contracts"
+
+[[series]]
+id = "COT_GOLD_NET_SPEC"
+label = "COT: large speculators net gold futures"
+group = "positioning"
+source = "cot"
+key = "GOLD - COMMODITY EXCHANGE INC."
+frequency = "W"
+lag_days = 3
+units = "contracts"
+
+[[series]]
+id = "AAII_BULL_BEAR"
+label = "AAII bull minus bear spread"
+group = "positioning"
+source = "release"
+frequency = "W"
+units = "pp"
+notes = "Contrarian: a z-score below -1.5 has been bullish. Recorded by hand; the historical file requires membership."
+
+[[series]]
+id = "NAAIM_EXPOSURE"
+label = "NAAIM exposure index"
+group = "positioning"
+source = "release"
+frequency = "W"
+units = "%"
+notes = "Above 90 or below 20 are the extremes in the rule."
+
+[[series]]
+id = "US_PUT_CALL"
+label = "CBOE equity put/call ratio"
+group = "positioning"
+source = "release"
+frequency = "W"
+
+[[series]]
+id = "ICI_EQUITY_FLOWS"
+label = "ICI weekly equity fund flows"
+group = "positioning"
+source = "release"
+frequency = "W"
+units = "USD bn"
+
+# ---------------------------------------------------------------------------
+# Market internals
+# ---------------------------------------------------------------------------
+
+[[series]]
+id = "SPX"
+label = "S&P 500"
+group = "internals"
+source = "yahoo"
+key = "^GSPC"
+frequency = "D"
+lag_days = 1
+critical = true
+show = false
+
+[[series]]
+id = "SPX_VS_200D"
+label = "S&P 500, % vs 200-day average"
+group = "internals"
+source = "derived"
+formula = "pct_vs_ma200"
+inputs = ["SPX"]
+frequency = "D"
+direction = "low_bad"
+units = "%"
+
+[[series]]
+id = "SPX_200D_SLOPE"
+label = "S&P 500 200-day average, 20-day slope"
+group = "internals"
+source = "derived"
+formula = "ma200_slope"
+inputs = ["SPX"]
+frequency = "D"
+direction = "low_bad"
+units = "%"
+
+[[series]]
+id = "SPX_PCT_B"
+label = "S&P 500 Bollinger %B (20-day, 2 sigma)"
+group = "internals"
+source = "derived"
+formula = "bollinger_pct_b"
+inputs = ["SPX"]
+frequency = "D"
+
+[[series]]
+id = "SPX_BANDWIDTH"
+label = "S&P 500 Bollinger bandwidth"
+group = "internals"
+source = "derived"
+formula = "bollinger_bandwidth"
+inputs = ["SPX"]
+frequency = "D"
+
+[[series]]
+id = "SPX_REALVOL_20D"
+label = "S&P 500 20-day realised volatility"
+group = "internals"
+source = "derived"
+formula = "realised_vol_20d"
+inputs = ["SPX"]
+frequency = "D"
+direction = "high_bad"
+units = "%"
+
+[[series]]
+id = "SPX_DRAWDOWN"
+label = "S&P 500 drawdown from high"
+group = "internals"
+source = "derived"
+formula = "drawdown"
+inputs = ["SPX"]
+frequency = "D"
+direction = "low_bad"
+units = "%"
+
+[[series]]
+id = "VIX"
+label = "VIX"
+group = "internals"
+source = "fred"
+key = "VIXCLS"
+frequency = "D"
+lag_days = 1
+direction = "high_bad"
+fallback = "VIX_YAHOO"
+
+[[series]]
+id = "VIX_YAHOO"
+label = "VIX (Yahoo)"
+group = "internals"
+source = "yahoo"
+key = "^VIX"
+frequency = "D"
+lag_days = 1
+direction = "high_bad"
+show = false
+
+[[series]]
+id = "VIX3M"
+label = "VIX 3-month"
+group = "internals"
+source = "yahoo"
+key = "^VIX3M"
+frequency = "D"
+lag_days = 1
+show = false
+
+[[series]]
+id = "VIX_TERM"
+label = "VIX / VIX3M (above 1 is an inverted term structure)"
+group = "internals"
+source = "derived"
+formula = "ratio"
+inputs = ["VIX_YAHOO", "VIX3M"]
+frequency = "D"
+direction = "high_bad"
+
+[[series]]
+id = "MOVE"
+label = "MOVE index (Treasury volatility)"
+group = "internals"
+source = "yahoo"
+key = "^MOVE"
+frequency = "D"
+lag_days = 1
+direction = "high_bad"
+
+[[series]]
+id = "RSP"
+label = "Equal-weight S&P 500 ETF (RSP)"
+group = "internals"
+source = "yahoo"
+key = "RSP"
+frequency = "D"
+lag_days = 1
+show = false
+
+[[series]]
+id = "SPY"
+label = "SPDR S&P 500 ETF (SPY)"
+group = "internals"
+source = "yahoo"
+key = "SPY"
+frequency = "D"
+lag_days = 1
+show = false
+
+[[series]]
+id = "BREADTH_RSP_SPY_3M"
+label = "Breadth proxy: equal-weight vs cap-weight S&P 500, 3-month relative return"
+group = "internals"
+source = "derived"
+formula = "relative_strength_3m"
+inputs = ["RSP", "SPY"]
+frequency = "D"
+direction = "low_bad"
+units = "%"
+notes = "Replaced by the share of the universe above its 200-day average once constituent prices are stored."
+
+[[series]]
+id = "STOXX600"
+label = "STOXX Europe 600"
+group = "internals"
+source = "yahoo"
+key = "^STOXX"
+frequency = "D"
+lag_days = 1
+show = false
+
+[[series]]
+id = "STOXX600_VS_200D"
+label = "STOXX 600, % vs 200-day average"
+group = "internals"
+source = "derived"
+formula = "pct_vs_ma200"
+inputs = ["STOXX600"]
+frequency = "D"
+direction = "low_bad"
+units = "%"
+
+[[series]]
+id = "STOXX600_DRAWDOWN"
+label = "STOXX 600 drawdown from high"
+group = "internals"
+source = "derived"
+formula = "drawdown"
+inputs = ["STOXX600"]
+frequency = "D"
+direction = "low_bad"
+units = "%"
+
+[[series]]
+id = "ACWI"
+label = "iShares MSCI ACWI (world proxy)"
+group = "internals"
+source = "yahoo"
+key = "ACWI"
+frequency = "D"
+lag_days = 1
+show = false
+
+[[series]]
+id = "ACWI_VS_200D"
+label = "World (ACWI), % vs 200-day average"
+group = "internals"
+source = "derived"
+formula = "pct_vs_ma200"
+inputs = ["ACWI"]
+frequency = "D"
+direction = "low_bad"
+units = "%"
+
+[[series]]
+id = "NIKKEI"
+label = "Nikkei 225"
+group = "internals"
+source = "yahoo"
+key = "^N225"
+frequency = "D"
+lag_days = 1
+show = false
+
+[[series]]
+id = "US_RECESSION"
+label = "NBER recession indicator (USREC)"
+group = "composites"
+source = "fred"
+key = "USREC"
+frequency = "M"
+lag_days = 31
+units = "0/1"
+show = false
+notes = "For chart shading and event studies. Recession dates are declared months to a year after the fact."

@@ -472,19 +472,25 @@ Rough sizes are weekends of focused work. Each phase ends with a shippable resul
 
 ### Phase 0: foundations (1 to 2)
 
-- [ ] Create `invest/` with `data/cache.py`: DuckDB open, upsert and read with provenance
+- [x] Create `invest/` with `data/cache.py`: DuckDB open, upsert and read with provenance
       columns; tests on a temporary database.
-- [ ] `data/fred.py`: fetch a series by id and store it; fixture test on a saved response;
-      API key from secrets.
-- [ ] `data/ecb.py`: generalise the existing ICP fetcher to any ECB key; move `_fetch_icp`
-      onto it without changing the dashboard.
-- [ ] `config/series.toml` with about 20 starter series and their metadata; a loader that
-      validates it.
-- [ ] `jobs/refresh.py`: fetch the whole catalog, print the freshness table, exit non-zero on
-      any failure.
-- [ ] Decide where report archives live and gitignore `data/`.
+- [x] `data/fred.py`: fetch a series by id and store it; fixture test on a saved response;
+      API key from secrets (optional: the keyless `fredgraph.csv` route is the default, the
+      key adds ALFRED vintages).
+- [x] `data/ecb.py`: generalise the existing ICP fetcher to any ECB key; move `_fetch_icp`
+      onto it without changing the dashboard. The ECB replaced `ICP` with the `HICP` dataflow
+      in February 2026 (`ICP` stops at 2025-12); both the dashboard and the catalog read `HICP`.
+- [x] `config/series.toml` with about 20 starter series and their metadata; a loader that
+      validates it. Shipped with the full Phase 1 catalog (about 180 series) instead, since the
+      loader, the dispatcher and the freshness table are the same work at any size.
+- [x] `jobs/refresh.py`: fetch the whole catalog, print the freshness table, exit non-zero on
+      any failure (a *critical* failure or stale critical series without a fresh fallback).
+- [x] Decide where report archives live (`data/reports/`, gitignored, overridable with
+      `INVEST_DATA_DIR`) and gitignore `data/`.
 
 Done when a second `refresh` run adds no duplicate rows and the freshness table is right.
+Verified 2026-09-10: 135 sources fetched, 0 failed; the second run added rows only for
+intraday quotes and the HICP dataflow switch.
 
 ### Phase 1: macro dashboard (2 to 4)
 
