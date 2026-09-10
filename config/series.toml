@@ -1187,6 +1187,7 @@ lag_days = 25
 transform = "yoy"
 direction = "low_bad"
 units = "%"
+notes = "FRED carries only the last year of the NAR series; the YoY reading needs a second year and appears once the store has accrued it."
 
 [[series]]
 id = "US_MORTGAGE_30Y"
@@ -1491,6 +1492,7 @@ lag_days = 1
 direction = "high_bad"
 units = "pp"
 critical = true
+notes = "FRED publishes only the last three years of the ICE BofA indices without a licence, so the z-score window and percentile are short; US_BAA_10Y (since 1986) is the long-history spread for research."
 
 [[series]]
 id = "US_HY_OAS_3M_CHG"

@@ -83,7 +83,7 @@ Format: a level-two heading `## Hn. Title`, then `- **Field:** value` lines.
 - **Indicators:** SPX_DRAWDOWN
 - **Caveat:** Cheap and decisive either way.
 - **Script:** invest.research.hypotheses:h8_drawdown_gaps
-- **Outcome:** not yet measured
+- **Outcome:** First measurement 2026-09-10 (Shiller real price 1871 to 2026; the stored `research` snapshot carries the code version): 12 real drawdowns deeper than 20%, 11 with a preceding episode; correlation between the years since the previous trough and the depth 0.09, slope 0.002 per year. No support: with n = 11 the sign is noise, and the 1929 and 2000 to 2009 episodes sit at opposite ends of the gap scale.
 
 ## H9. The end of the Ukraine war lifts markets but not defence
 - **Status:** open
@@ -111,4 +111,4 @@ Format: a level-two heading `## Hn. Title`, then `- **Field:** value` lines.
 - **Indicators:** SPX_DRAWDOWN, SPX_VS_200D, SPX_PCT_B
 - **Caveat:** Do this before considering any model.
 - **Script:** invest.research.hypotheses:h11_dip_buying
-- **Outcome:** not yet measured
+- **Outcome:** First measurement 2026-09-10 on the Shiller real price, one unit a month, dividends excluded on both sides, idle cash earning nothing: since 1928 holding turned 1,185 units into 13.6x, buy-after-10% 13.4x, buy-after-20% 13.5x, buy-below-the-10-month-average 13.3x; since 1990 holding 3.8x against 3.3x, 2.9x and 3.7x. Waiting for dips lost to investing at once in both samples, and the gap widens in the sample with fewer crashes. Idle cash at the end (42 units for the 20% rule) is part of the cost. Not yet tested: a cash yield on the idle balance, which would narrow but, at historical bill yields, not close the gap.

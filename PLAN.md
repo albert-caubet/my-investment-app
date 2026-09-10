@@ -599,23 +599,41 @@ scorecard and the transactions and asserts they land under "Missing and failed".
 
 ### Phase 5: automation and hosting (1 to 2, plus operations)
 
-- [ ] GitHub Actions weekly workflow, or Docker Compose on a box: secrets, DuckDB
-      persistence, delivery.
-- [ ] Failure notifications; run history.
-- [ ] Streamlit deployment behind Tailscale or Cloudflare Access with `st.login`;
-      credentials from secrets (`credentials.Certificate` accepts a dict).
-- [ ] Backups of DuckDB and the report archive.
+- [x] GitHub Actions weekly workflow (`.github/workflows/weekly.yml`: Saturday 07:00 UTC,
+      DuckDB cached between runs, report as an artifact and delivered when secrets are set) and
+      Docker Compose on a box (`Dockerfile`, `docker-compose.yml`, `scripts/scheduler.py` for
+      the weekly chain and the nightly backup, `.env.example` for the secrets). A tests
+      workflow runs pytest on every push.
+- [x] Failure notifications (`invest/jobs/notify.py`: a Telegram or email alert whenever the
+      weekly job records a problem) and run history (the `runs` table, shown on the Report
+      page).
+- [x] Streamlit deployment behind Tailscale or Cloudflare Access with `st.login`; credentials
+      from secrets (`database.credential_source` reads `FIREBASE_CREDENTIALS_JSON` or the
+      `[firebase]` secrets section before falling back to the file). The compose file binds
+      the app to localhost only; the tunnel and `st.login` configuration are documented in
+      the README, not automated.
+- [x] Backups of DuckDB and the report archive (`python -m invest.jobs.backup`, nightly in the
+      jobs container, keeps the last 14).
 
-Done when reports arrive for four consecutive weeks without being touched.
+Done when reports arrive for four consecutive weeks without being touched. Not yet observed:
+the first scheduled run is the next Saturday after deployment.
 
 ### Phase 6: research harness (ongoing)
 
-- [ ] `research/` with event-study and walk-forward utilities; publication-lag handling;
-      ALFRED vintages for CPI, unemployment and claims.
-- [ ] `config/hypotheses.md` with one entry per row of section 9, each with a script and a
-      dated outcome.
-- [ ] Hit rates for the Phase 1 regime rules, with n; retire rules that do nothing.
-- [ ] Only then: tactical tilt limits in `targets.toml`, if anything earned them.
+- [x] `research/` with event-study and walk-forward utilities (`events.py`: forward return
+      distributions with bootstrap intervals, overlap removal and an unconditional baseline;
+      `walkforward.py`: rules evaluated at month ends on lag-shifted series, hits, false
+      alarms, recessions warned, expanding-window splits); publication-lag handling; ALFRED
+      vintages for CPI, unemployment, claims and more through `python -m invest.jobs.vintages`
+      (needs a FRED key; stored as first-published prints with their vintage date).
+- [x] `config/hypotheses.md` with one entry per row of section 9, each with a script where one
+      exists (`python -m invest.research.hypotheses H1|H5|H6|H7|H8|H11|rules`) and a dated
+      outcome. Scripts store their result with the code version as a `research` snapshot.
+- [~] Hit rates for the Phase 1 regime rules, with n: `python -m invest.research.hypotheses
+      rules` prints the scoreboard. Retiring rules and weighting them is a reading of that
+      table to be made by hand, after more than one look; nothing has been retired yet.
+- [ ] Only then: tactical tilt limits in `targets.toml`, if anything earned them. Tilts remain
+      off.
 
 ### Phase 7: optional experiments
 

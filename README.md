@@ -144,6 +144,22 @@ carrying its observation date and source, nothing filled in silently.
   `SMTP_PASSWORD`, `REPORT_EMAIL_TO`) or Telegram (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`)
   when configured. `scripts/weekly.ps1` and `scripts/weekly.sh` run the whole chain for Task
   Scheduler or cron on Saturday mornings. The Report page lists the archive and the runs.
+- **Automation and hosting**: `.github/workflows/weekly.yml` runs the whole chain on GitHub
+  Actions every Saturday (the DuckDB file is cached between runs, the report is an artifact
+  and is delivered when the secrets are set); `.github/workflows/tests.yml` runs pytest on
+  every push. `Dockerfile` and `docker-compose.yml` run the app and a jobs container
+  (`scripts/scheduler.py`: weekly chain on Saturday 08:00, `python -m invest.jobs.backup`
+  nightly, keeping the last 14 copies) on one volume, with secrets in a `.env` file (see
+  `.env.example`). The app binds to localhost only: reach it through Tailscale or a Cloudflare
+  Access tunnel, and add `st.login` with an OIDC provider in `.streamlit/secrets.toml` for a
+  second layer. Firebase credentials can come from `FIREBASE_CREDENTIALS_JSON` or a
+  `[firebase]` secrets section instead of a key file. When the weekly job records a problem it
+  sends a one-line alert by Telegram or email.
+- **Research**: `invest/research/` holds the event-study and walk-forward utilities and
+  `python -m invest.research.hypotheses H1|H5|H6|H7|H8|H11|rules`, which measures the
+  hypotheses of `config/hypotheses.md` on the stored data (n and intervals printed, publication
+  lags applied, results stored with the code version). `python -m invest.jobs.vintages` loads
+  ALFRED vintages for the revision-prone series when a FRED key is available.
 - **Secrets**: from the environment or `.streamlit/secrets.toml` (gitignored):
   `FRED_API_KEY` (optional), `SEC_USER_AGENT` (an app name plus a contact address, required
   by EDGAR; the client refuses to run without one).

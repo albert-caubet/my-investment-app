@@ -302,6 +302,41 @@ class Store:
             self.con.unregister("new_rows")
         return int(after - before)
 
+    def insert_vintages(self, series_id: str, frame: pd.DataFrame, *, source: str, fetched_at: datetime | None = None) -> int:
+        """Store historical vintages: every ``(obs_date, value, vintage_date)`` not already present.
+
+        Unlike :meth:`upsert_series`, which compares against the latest known
+        value, this keeps each first-published print with its own vintage date,
+        so a point-in-time read can find the value that was current on a past day.
+        """
+        if frame is None or frame.empty:
+            return 0
+        rows = frame[["obs_date", "value", "vintage_date"]].copy()
+        rows["obs_date"] = pd.to_datetime(rows["obs_date"]).dt.date
+        rows["vintage_date"] = pd.to_datetime(rows["vintage_date"]).dt.date
+        rows["value"] = pd.to_numeric(rows["value"], errors="coerce").astype(float)
+        rows = rows.dropna().drop_duplicates(["obs_date", "vintage_date"], keep="last")
+        fetched_at = fetched_at or utcnow()
+        self.con.register("new_vintages", rows)
+        try:
+            before = self.con.execute("SELECT count(*) FROM series WHERE series_id = ?", [series_id]).fetchone()[0]
+            self.con.execute(
+                """
+                INSERT INTO series (source, series_id, obs_date, value, fetched_at, vintage_date)
+                SELECT ?, ?, n.obs_date, n.value, ?, n.vintage_date
+                FROM new_vintages n
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM series s
+                    WHERE s.series_id = ? AND s.obs_date = n.obs_date AND s.vintage_date = n.vintage_date
+                )
+                """,
+                [source, series_id, fetched_at, series_id],
+            )
+            after = self.con.execute("SELECT count(*) FROM series WHERE series_id = ?", [series_id]).fetchone()[0]
+        finally:
+            self.con.unregister("new_vintages")
+        return int(after - before)
+
     def read_series(self, series_id: str, *, as_of: date | None = None) -> pd.Series:
         """Latest known value per observation date, as a float series on a DatetimeIndex.
 
