@@ -1,0 +1,93 @@
+# Weekly report on GitHub Actions (PLAN.md section 8, Stage B).
+#
+# Runs every Saturday at 07:00 UTC and on demand. The DuckDB file is cached
+# between runs (restored from the newest cache when the week's key is new), so
+# revision history and the scorecard snapshots accrue; if the cache is lost the
+# jobs rebuild everything from the sources. The report is uploaded as an
+# artifact and delivered by email or Telegram when the secrets are set.
+#
+# Repository secrets used (all optional except SEC_USER_AGENT for filings and
+# fundamentals): SEC_USER_AGENT, FRED_API_KEY, FIREBASE_CREDENTIALS_JSON (the
+# service-account JSON, as text), SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD,
+# REPORT_EMAIL_TO, REPORT_EMAIL_FROM, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID.
+
+name: weekly-report
+
+on:
+  schedule:
+    - cron: "0 7 * * 6"
+  workflow_dispatch:
+    inputs:
+      fundamentals:
+        description: "Re-ingest the screener universe (slow)"
+        type: boolean
+        default: true
+
+concurrency:
+  group: weekly-report
+  cancel-in-progress: false
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      PYTHONUTF8: "1"
+      INVEST_DATA_DIR: ${{ github.workspace }}/data
+      SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
+      FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+      FIREBASE_CREDENTIALS_JSON: ${{ secrets.FIREBASE_CREDENTIALS_JSON }}
+      SMTP_HOST: ${{ secrets.SMTP_HOST }}
+      SMTP_PORT: ${{ secrets.SMTP_PORT }}
+      SMTP_USER: ${{ secrets.SMTP_USER }}
+      SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+      REPORT_EMAIL_TO: ${{ secrets.REPORT_EMAIL_TO }}
+      REPORT_EMAIL_FROM: ${{ secrets.REPORT_EMAIL_FROM }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - name: Week number for the cache key
+        id: week
+        run: echo "week=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore the market database
+        uses: actions/cache@v4
+        with:
+          path: data/market.duckdb
+          key: market-duckdb-${{ steps.week.outputs.week }}
+          restore-keys: |
+            market-duckdb-
+
+      - name: Refresh the indicator catalog
+        run: python -m invest.jobs.refresh --quiet
+
+      - name: Refresh 13F holdings
+        if: env.SEC_USER_AGENT != ''
+        run: python -m invest.jobs.filings
+
+      - name: Refresh the screener universe
+        if: env.SEC_USER_AGENT != '' && (github.event_name == 'schedule' || inputs.fundamentals)
+        run: python -m invest.jobs.fundamentals
+
+      - name: Build and deliver the report
+        run: python -m invest.jobs.weekly --skip-refresh --skip-filings
+
+      - name: Upload the report and the log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: weekly-report-${{ steps.week.outputs.week }}
+          path: |
+            data/reports/latest.html
+            data/reports/latest.md
+          if-no-files-found: warn
+          retention-days: 90

@@ -1,0 +1,38 @@
+# Self-hosted deployment (PLAN.md section 8, Stage C): the Streamlit app, a jobs
+# container that runs the weekly chain on Saturday mornings and a nightly backup,
+# DuckDB and the report archive on one volume.
+#
+# Secrets come from a .env file next to this compose file (not committed):
+#   SEC_USER_AGENT, FRED_API_KEY, FIREBASE_CREDENTIALS_JSON, SMTP_*, TELEGRAM_*
+# Expose the app only through Tailscale or Cloudflare Access; nothing here should
+# listen on the open internet. Streamlit's st.login can add a second layer.
+
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8501:8501"
+    env_file: .env
+    volumes:
+      - market-data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8501/_stcore/health', timeout=5)"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+
+  jobs:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # Saturday 08:00 for the weekly chain, 03:00 every day for the backup (container local time).
+      SCHEDULER_WEEKLY: "sat 08:00"
+      SCHEDULER_BACKUP: "daily 03:00"
+    volumes:
+      - market-data:/data
+    command: ["python", "scripts/scheduler.py"]
+
+volumes:
+  market-data:

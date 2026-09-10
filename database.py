@@ -1,3 +1,4 @@
+import json
 import os
 
 import firebase_admin
@@ -10,13 +11,34 @@ CREDENTIALS_PATH = os.environ.get(
     "FIREBASE_CREDENTIALS",
     os.path.join(os.path.dirname(os.path.abspath(__file__)), "firebaseServiceAccountKey.json"),
 )
+#: The service-account JSON as text, for hosts where a file is not wanted
+#: (GitHub Actions secrets, a container .env). Takes precedence over the file.
+CREDENTIALS_JSON_ENV = "FIREBASE_CREDENTIALS_JSON"
+
+
+def credential_source():
+    """A dict from the JSON environment variable or Streamlit secrets, else the file path.
+
+    ``credentials.Certificate`` accepts either. The dict routes keep the key out
+    of the project folder, which is what a hosted deployment needs.
+    """
+    raw = os.environ.get(CREDENTIALS_JSON_ENV)
+    if raw:
+        return json.loads(raw)
+    try:
+        section = st.secrets.get("firebase") if hasattr(st, "secrets") else None
+    except Exception:  # no secrets file at all
+        section = None
+    if section:
+        return dict(section)
+    return CREDENTIALS_PATH
 
 
 # 1. Initialize the App (Singleton Pattern)
 def init_db():
     # Check if the app is already initialized to avoid errors on Streamlit reruns
     if not firebase_admin._apps:
-        cred = credentials.Certificate(CREDENTIALS_PATH)
+        cred = credentials.Certificate(credential_source())
         firebase_admin.initialize_app(cred)
 
     return firestore.client()

@@ -12,3 +12,6 @@ __pycache__/
 # analysis package: local database, downloads and report archive
 /data/
 .streamlit/secrets.toml
+
+# deployment secrets
+.env

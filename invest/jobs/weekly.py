@@ -266,6 +266,11 @@ def run_weekly(
     summary = f"Weekly report {today.isoformat()}: regime {ctx.regime.label if ctx.regime else 'n/a'}; " \
               f"{len(ctx.plan.trades) if ctx.plan else 0} trade(s) proposed; {len(ctx.failures)} problem(s)."
     paths, statuses = deliver_mod.deliver(markdown_text, html_text, now, summary=summary, directory=reports_directory, send=send)
+    if ctx.failures and send:
+        from invest.jobs.notify import notify
+
+        alert = "\n".join(f"{k}: {v}" for k, v in list(ctx.failures.items())[:15])
+        statuses.extend(notify(f"Weekly job {today.isoformat()}: {len(ctx.failures)} problem(s)", alert))
     store.save_snapshot(run_id, "report", {"date": today.isoformat(), "paths": {k: str(v) for k, v in paths.items()},
                                           "failures": ctx.failures, "statuses": statuses, "summary": summary})
     store.finish_run(run_id, ok=1 if not ctx.failures else 0, failed=len(ctx.failures),
