@@ -1,0 +1,48 @@
+# Screener universes (PLAN.md section 6.1).
+#
+# Each [universe.<name>] lists tickers, and optionally a `csv` with a `ticker`
+# column (and any other columns) whose entries are added to the list. Tickers are
+# resolved to SEC CIKs through the company ticker file on each run; unresolved
+# tickers are reported, never dropped silently.
+#
+# The shipped list is a hand-maintained subset of current S&P 500 members, so it
+# carries survivorship bias (companies that left the index are absent). Replace or
+# extend it with a maintained constituents file when one is available:
+#   csv = "config/universe/sp500.csv"
+
+[universe.sp500_core]
+label = "S&P 500 core (large members, hand-maintained)"
+note = "Current members only; about 150 of the largest names across every sector."
+tickers = [
+  # technology
+  "AAPL", "MSFT", "NVDA", "AVGO", "ORCL", "CSCO", "ADBE", "CRM", "AMD", "INTC", "QCOM", "TXN", "IBM",
+  "ACN", "INTU", "AMAT", "MU", "ADI", "LRCX", "KLAC", "NOW", "PANW", "ANET",
+  # communication services
+  "GOOGL", "META", "NFLX", "DIS", "CMCSA", "VZ", "T", "TMUS",
+  # consumer discretionary
+  "AMZN", "TSLA", "HD", "MCD", "NKE", "SBUX", "LOW", "TJX", "BKNG", "CMG", "ORLY", "GM", "F",
+  # consumer staples
+  "WMT", "PG", "KO", "PEP", "COST", "PM", "MO", "MDLZ", "CL", "KMB", "GIS",
+  # health care
+  "LLY", "UNH", "JNJ", "ABBV", "MRK", "PFE", "TMO", "ABT", "DHR", "AMGN", "GILD", "ISRG", "BMY", "CVS",
+  "MDT", "VRTX", "REGN",
+  # financials
+  "BRK-B", "JPM", "V", "MA", "BAC", "WFC", "GS", "MS", "C", "AXP", "BLK", "SCHW", "SPGI", "CB", "PGR",
+  "MMC", "USB", "PNC",
+  # industrials
+  "CAT", "DE", "HON", "UNP", "UPS", "BA", "LMT", "RTX", "GE", "ETN", "ADP", "WM", "ITW", "EMR", "CSX",
+  "NOC", "GD", "FDX", "MMM",
+  # energy
+  "XOM", "CVX", "COP", "EOG", "SLB", "MPC", "PSX", "VLO", "OXY",
+  # materials
+  "LIN", "APD", "SHW", "FCX", "NEM", "ECL", "NUE", "DD",
+  # utilities
+  "NEE", "DUK", "SO", "D", "AEP", "EXC", "SRE",
+  # real estate
+  "PLD", "AMT", "EQIX", "O", "SPG", "PSA",
+]
+
+[universe.watch_examples]
+label = "Examples for tests and demos"
+note = "Three filers with different shapes: an industrial, a bank, an IFRS filer on 20-F."
+tickers = ["MMM", "JPM", "SAP"]
