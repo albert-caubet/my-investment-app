@@ -120,6 +120,15 @@ carrying its observation date and source, nothing filled in silently.
   a chart per indicator with NBER recession shading and rule thresholds, a "changed since
   the previous run" panel, a form to record releases, and a freshness footer. It reads
   DuckDB only; every figure shows its date.
+- **Fundamentals and screener**: `python -m invest.jobs.fundamentals` ingests XBRL company
+  facts, SIC sectors and prices for a universe from `config/universe.toml`, builds one row per
+  company (Greenblatt earnings yield and ROIC, FCF yield, margins and their slope, growth,
+  leverage, Altman Z, accruals, Piotroski F-score, multiples, EPV and a conservative DCF with
+  the margin of safety) and stores it as a snapshot, plus two breadth series for the macro
+  scorecard. `--as-of DATE` builds the table using only facts filed by that date. The
+  Screener page ranks the table (magic formula, quality-value composite, deep value,
+  shareholder yield), shows every input, the fiscal-year history and the intrinsic-value
+  inputs, and keeps a watchlist in DuckDB.
 - **Filings**: `python -m invest.jobs.filings` stores the last two 13F quarters for each
   manager in `config/managers.toml` and prints what changed (new positions, exits, changes
   above 25%, concentration), always with the filing lag and the long-only caveat stated.

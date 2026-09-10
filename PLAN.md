@@ -552,23 +552,29 @@ Verified 2026-09-10 on six managers live from EDGAR.
 
 ### Phase 3: fundamentals and screener (3 to 5)
 
-- [ ] `data/edgar.py`: companyfacts, submissions, frames; rate limiting; User-Agent; fixtures.
-- [ ] `fundamentals/facts.py`: tag mapping with fallbacks and `facts_as_of`; tests on three
-      fixture companies (a bank, an industrial, an IFRS filer).
-- [ ] `fundamentals/metrics.py`: every metric in 6.2, pure, tested against hand-computed
-      numbers.
-- [ ] `fundamentals/screens.py`: magic formula, quality-value composite, deep value;
-      sector-neutral option.
-- [ ] Universe loader from a maintained constituents CSV; note the survivorship bias.
-- [ ] `fundamentals/valuation.py`: EPV and conservative DCF with printed inputs; margin of
-      safety.
-- [ ] `pages/screener.py` with detail view and a DuckDB watchlist; AppTest.
-- [ ] EU coverage through yfinance with the not-point-in-time label.
-- [ ] Breadth from constituent prices: share of the universe above its 200-day average, new
-      highs minus new lows; replaces the RSP/SPY proxy in the macro scorecard.
+- [x] `data/edgar.py`: companyfacts, submissions, frames; rate limiting; User-Agent; fixtures.
+- [x] `fundamentals/facts.py`: tag mapping with fallbacks and `facts_as_of`; tests on three
+      fixture companies (a bank, an industrial, an IFRS filer). Trailing twelve months is
+      computed within one tag as FY + YTD minus the prior YTD, never mixing tags.
+- [x] `fundamentals/metrics.py`: every metric in 6.2, pure, tested against hand-computed
+      numbers. The F-score compares two fiscal years; the other ratios use TTM.
+- [x] `fundamentals/screens.py`: magic formula, quality-value composite, deep value,
+      shareholder yield; sector-neutral option; value-trap filter returns its reasons.
+- [x] Universe loader from a maintained constituents CSV (`config/universe.toml` ships a
+      hand-maintained S&P 500 core list of about 150 names); survivorship bias stated on the
+      page and in the report.
+- [x] `fundamentals/valuation.py`: EPV and conservative DCF with printed inputs; margin of
+      safety against the lower of the two.
+- [x] `pages/screener.py` with detail view and a DuckDB watchlist; AppTest.
+- [ ] EU coverage through yfinance with the not-point-in-time label. Not done: the
+      `point_in_time = false` flag exists on a universe, but no yfinance fundamentals source
+      was built; revisit only if EU screening proves valuable (section 3.6).
+- [x] Breadth from constituent prices: share of the universe above its 200-day average, new
+      highs minus new lows, stored as `computed` series next to the RSP/SPY proxy.
 
 Done when a screen run for a past date uses only facts filed before that date, and a test
-asserts it.
+asserts it. `tests/test_fundamentals_job.py::test_screen_as_of_a_past_date_uses_only_facts_filed_before_it`
+does; live run 2026-09-10 on the core universe.
 
 ### Phase 4: rebalancing and the report (2 to 3)
 

@@ -17,9 +17,11 @@ from invest.paths import CONFIG_DIR
 
 SERIES_PATH = CONFIG_DIR / "series.toml"
 
+#: ``computed`` series are written by another job (breadth from constituent prices
+#: in ``invest.jobs.fundamentals``); the refresh job reports them but does not fetch them.
 SOURCES = frozenset(
     {"fred", "ecb", "eurostat", "oecd", "bis", "yahoo", "shiller", "ebp", "philly",
-     "nyfed_recprob", "hlw", "cot", "release", "derived"}
+     "nyfed_recprob", "hlw", "cot", "release", "derived", "computed"}
 )
 #: ``I`` is irregular (policy-rate changes): never stale by construction.
 FREQUENCIES = frozenset({"D", "W", "M", "Q", "A", "I"})
@@ -80,6 +82,10 @@ class SeriesSpec:
         return self.source == "release"
 
     @property
+    def is_computed(self) -> bool:
+        return self.source == "computed"
+
+    @property
     def stale_after_days(self) -> int | None:
         """Days after the last observation date beyond which the series is stale.
 
@@ -113,8 +119,8 @@ class Catalog:
         return self.by_id[series_id]
 
     def fetched(self) -> list[SeriesSpec]:
-        """Everything that comes from a source, in file order."""
-        return [s for s in self.series if not s.is_derived and not s.is_release]
+        """Everything the refresh job fetches itself, in file order."""
+        return [s for s in self.series if not s.is_derived and not s.is_release and not s.is_computed]
 
     def releases(self) -> list[SeriesSpec]:
         return [s for s in self.series if s.is_release]
@@ -186,7 +192,7 @@ def _entry(raw: dict, defaults: dict, index: int) -> SeriesSpec:
             raise CatalogError(f"{sid}: unknown formula {formula!r}")
         if not inputs:
             raise CatalogError(f"{sid}: derived series needs inputs")
-    elif source != "release" and not key:
+    elif source not in ("release", "computed") and not key:
         raise CatalogError(f"{sid}: source {source!r} needs a key")
     lag = int(raw.get("lag_days", defaults.get("lag_days", 0)))
     if lag < 0:

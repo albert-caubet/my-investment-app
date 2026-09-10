@@ -272,7 +272,7 @@ def refresh(
     # a derived series can look up the status of its inputs.
     ordered = [s for s in catalog if not s.is_derived] + catalog.derived_in_order()
     for spec in ordered:
-        if only and spec.id not in only and not spec.is_derived and not spec.is_release:
+        if only and spec.id not in only and not spec.is_derived and not spec.is_release and not spec.is_computed:
             row = FreshnessRow(spec.id, spec.source, "skipped", None, None, spec.stale_after_days, spec.critical)
         else:
             status, message = fetch_status.get(spec.id, (None, ""))

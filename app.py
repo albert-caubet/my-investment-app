@@ -12,12 +12,13 @@ transactions_page = st.Page("pages/transactions.py", title="Log Transactions", i
 # Analysis pages read the DuckDB file written by `python -m invest.jobs.refresh`;
 # they never fetch from the network themselves.
 macro_page = st.Page("pages/macro.py", title="Macro", icon="🌍")
+screener_page = st.Page("pages/screener.py", title="Screener", icon="🔎")
 
 # Create Navigation
 pg = st.navigation(
     {
         "Portfolio": [portfolio_page, transactions_page],
-        "Analysis": [macro_page],
+        "Analysis": [macro_page, screener_page],
     }
 )
 

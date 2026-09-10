@@ -2215,6 +2215,28 @@ units = "%"
 notes = "Replaced by the share of the universe above its 200-day average once constituent prices are stored."
 
 [[series]]
+id = "BREADTH_ABOVE_200D_PCT"
+label = "Breadth: share of the screener universe above its 200-day average"
+group = "internals"
+source = "computed"
+frequency = "D"
+lag_days = 1
+direction = "low_bad"
+units = "%"
+notes = "Computed by python -m invest.jobs.fundamentals from stored constituent prices. Deteriorating breadth has preceded most major tops; it whipsaws in sideways markets."
+
+[[series]]
+id = "BREADTH_NH_NL_PCT"
+label = "Breadth: new 52-week highs minus new lows, % of the screener universe"
+group = "internals"
+source = "computed"
+frequency = "D"
+lag_days = 1
+direction = "low_bad"
+units = "%"
+notes = "Computed by python -m invest.jobs.fundamentals from stored constituent prices."
+
+[[series]]
 id = "STOXX600"
 label = "STOXX Europe 600"
 group = "internals"
