@@ -288,6 +288,20 @@ def refresh(
     _apply_fallbacks(report.rows, catalog)
 
     store.save_snapshot(run_id, "freshness", [r.as_dict() for r in report.rows])
+    if not skip_derived:
+        # The scorecard as it stood after this run, so the next run (and the
+        # report) can say what changed since.
+        from invest.macro import scorecard
+
+        try:
+            readings = scorecard.build_readings(store, catalog, today=today)
+            reg, results = scorecard.build_regime(store, catalog)
+            store.save_snapshot(run_id, "scorecard", scorecard.build_snapshot(readings, reg, results))
+            if log:
+                log(f"  regime: {reg.label} ({', '.join(reg.firing) or 'no counted rule firing'})")
+        except Exception as exc:  # the data is stored; a scorecard problem must not lose the run
+            if log:
+                log(f"  scorecard snapshot FAILED: {exc}")
     notes = "; ".join(f"{r.id}: {r.status}" for r in report.failures)[:4000]
     store.finish_run(run_id, ok=report.n_ok, failed=report.n_failed, notes=notes)
     return report

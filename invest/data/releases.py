@@ -64,3 +64,30 @@ def load_releases(path: Path = RELEASES_PATH) -> list[Release]:
         return []
     with path.open("rb") as handle:
         return parse_releases(tomllib.load(handle))
+
+
+def release_toml(release: Release) -> str:
+    """One ``[[release]]`` block, as the file expects it."""
+    note = release.note.replace("\\", "\\\\").replace('"', '\\"')
+    lines = [
+        "[[release]]",
+        f'series = "{release.series_id}"',
+        f'period = "{release.period.isoformat()}"',
+        f"released = {release.released.isoformat()}",
+        f"value = {release.value!r}",
+    ]
+    if note:
+        lines.append(f'note = "{note}"')
+    return "\n".join(lines) + "\n"
+
+
+def append_release(release: Release, path: Path = RELEASES_PATH) -> None:
+    """Append one entry to the releases file, creating it if needed.
+
+    The file is re-parsed afterwards so a malformed entry is refused before it
+    can break the next refresh.
+    """
+    existing = path.read_text(encoding="utf-8") if path.exists() else ""
+    text = existing.rstrip("\n") + ("\n\n" if existing.strip() else "") + release_toml(release)
+    parse_releases(tomllib.loads(text))
+    path.write_text(text, encoding="utf-8")
