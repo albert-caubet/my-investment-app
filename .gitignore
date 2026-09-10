@@ -8,3 +8,7 @@ __pycache__/
 
 .idea/workspace.xml
 .idea/misc.xml
+
+# analysis package: local database, downloads and report archive
+/data/
+.streamlit/secrets.toml
