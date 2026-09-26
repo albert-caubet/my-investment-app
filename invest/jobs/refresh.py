@@ -245,7 +245,9 @@ def refresh(
             fetch_status[spec.id] = ("failed", message)
             report.n_failed += 1
             if log:
-                log(f"  {spec.id}: FAILED {message[:200]}")
+                # The cause is at the end, after the URL; a plain [:200] cut it off.
+                shown = message if len(message) <= 200 else f"{message[:70]} … {message[-120:]}"
+                log(f"  {spec.id}: FAILED {shown}")
 
     for symbol, frame in fetcher.yahoo_frames.items():
         store.upsert_prices(symbol, frame, fetched_at=fetched_at)
