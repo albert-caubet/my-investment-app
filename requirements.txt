@@ -7,6 +7,9 @@ firebase-admin==7.4.0
 google-cloud-firestore==2.28.0
 # Required by pandas Styler.background_gradient, which the dashboard table uses.
 matplotlib==3.11.0
+# Verify TLS through the OS trust store. On Windows, Python alone misses roots the OS
+# installs on demand, which made every Eurostat request fail certificate verification.
+truststore==0.10.4
 # Analysis package (invest/): local time-series store, report rendering, spreadsheet sources.
 duckdb==1.5.5
 markdown==3.10.3

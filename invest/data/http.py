@@ -1,7 +1,7 @@
 """Tiny HTTP helper shared by every source module.
 
-``urllib`` only, like ``market_data.py``: one fewer dependency, and every request
-goes through one function that sets a User-Agent, a timeout and a bounded retry.
+``urllib`` only, like ``market_data.py``: every request goes through one function
+that sets a User-Agent, a timeout, a bounded retry and the TLS context below.
 Failures raise :class:`FetchError`; nothing here ever returns a default.
 """
 
@@ -9,12 +9,35 @@ from __future__ import annotations
 
 import gzip
 import json
+import ssl
 import time
 import urllib.error
 import urllib.request
+from functools import lru_cache
+
+import truststore
 
 DEFAULT_USER_AGENT = "my-investment-app/1.0 (personal research tool)"
 DEFAULT_TIMEOUT = 60
+
+
+@lru_cache(maxsize=1)
+def tls_context() -> ssl.SSLContext:
+    """Verify certificates the way the operating system does.
+
+    Windows ships with part of its trusted root list and installs the rest on
+    demand, the first time its own verifier needs one. Python's ``ssl`` only reads
+    the store as it stands, so a source whose root nothing on the machine had
+    needed yet failed from here while working in any browser. Every Eurostat
+    series did, until something installed GlobalSign Root R46.
+
+    truststore verifies through the OS itself (CryptoAPI on Windows,
+    Security.framework on macOS, the system store on Linux), so the on-demand
+    install happens and Python agrees with the browser. Verification is not
+    relaxed in any way: certificates are required and hostnames checked. The
+    answer to a certificate error is never to turn verification off.
+    """
+    return truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
 
 
 class FetchError(RuntimeError):
@@ -35,7 +58,7 @@ def fetch_bytes(
     for attempt in range(retries + 1):
         try:
             request = urllib.request.Request(url, headers=merged)
-            with urllib.request.urlopen(request, timeout=timeout) as response:
+            with urllib.request.urlopen(request, timeout=timeout, context=tls_context()) as response:
                 data = response.read()
                 if response.headers.get("Content-Encoding") == "gzip":
                     data = gzip.decompress(data)

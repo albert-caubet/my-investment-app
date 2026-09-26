@@ -11,13 +11,13 @@ from __future__ import annotations
 import json
 import mimetypes
 import smtplib
-import ssl
 import urllib.request
 import uuid
 from datetime import datetime
 from email.message import EmailMessage
 from pathlib import Path
 
+from invest.data.http import tls_context
 from invest.paths import reports_dir
 from invest.secrets import get_secret
 
@@ -56,10 +56,9 @@ def send_email(subject: str, html_text: str, cfg: dict, *, text_alternative: str
     message["To"] = cfg["to"]
     message.set_content(text_alternative or "The weekly report is attached as HTML.")
     message.add_alternative(html_text, subtype="html")
-    context = ssl.create_default_context()
     with smtplib.SMTP(cfg["host"], cfg["port"], timeout=60) as server:
         server.ehlo()
-        server.starttls(context=context)
+        server.starttls(context=tls_context())  # the OS verifier, as for every source
         if cfg.get("user") and cfg.get("password"):
             server.login(cfg["user"], cfg["password"])
         server.send_message(message)
@@ -89,7 +88,7 @@ def send_telegram(html_path: Path, caption: str, cfg: dict) -> str:
         data=body,
         headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
     )
-    with urllib.request.urlopen(request, timeout=60) as response:
+    with urllib.request.urlopen(request, timeout=60, context=tls_context()) as response:
         payload = json.loads(response.read().decode("utf-8"))
     if not payload.get("ok"):
         raise RuntimeError(f"telegram: {payload}")

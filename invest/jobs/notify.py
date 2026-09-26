@@ -11,13 +11,16 @@ import json
 import urllib.parse
 import urllib.request
 
+from invest.data.http import tls_context
 from invest.report.deliver import email_config, send_email, telegram_config
 
 
 def send_telegram_text(text: str, cfg: dict) -> str:
     data = urllib.parse.urlencode({"chat_id": cfg["chat_id"], "text": text[:4000]}).encode("utf-8")
     request = urllib.request.Request(f"https://api.telegram.org/bot{cfg['token']}/sendMessage", data=data)
-    with urllib.request.urlopen(request, timeout=30) as response:
+    # Same verifier as the data sources: an alert that fails on a certificate is
+    # the one failure nobody would ever hear about.
+    with urllib.request.urlopen(request, timeout=30, context=tls_context()) as response:
         payload = json.loads(response.read().decode("utf-8"))
     if not payload.get("ok"):
         raise RuntimeError(f"telegram: {payload}")
