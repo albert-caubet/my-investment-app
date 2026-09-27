@@ -2,7 +2,9 @@
 
 Reads the latest ``screener`` snapshot written by ``python -m invest.jobs.fundamentals``
 and the facts behind each company. Every row shows its inputs; the footer says
-which universe, as of when, and whether the data is point-in-time.
+which universe, as of when, and whether the data is point-in-time. The build
+button runs that same command in a separate process, so fetching happens only
+when asked for.
 """
 
 from __future__ import annotations
@@ -13,7 +15,10 @@ from datetime import datetime
 import pandas as pd
 import streamlit as st
 
+import job_panel
+from invest import secrets
 from invest.data.cache import Store
+from invest.data.edgar import SEC_USER_AGENT_HELP, user_agent_ok
 from invest.fundamentals import screens
 from invest.fundamentals.facts import fundamentals_as_of
 from invest.fundamentals.universe import SURVIVORSHIP_NOTE
@@ -21,10 +26,38 @@ from invest.paths import db_path
 
 st.title("Value screener")
 
+job_panel.follow_if_running()  # a job holds the database; nothing below may read it
+
 DB = db_path()
-if not DB.exists():
-    st.info("No market database yet. Run `python -m invest.jobs.fundamentals` to ingest a universe first.")
+BUILD_HELP = (
+    "Runs `python -m invest.jobs.fundamentals` in the background: the filings of every company in the "
+    "universe from SEC EDGAR, then their prices. It takes several minutes."
+)
+WHAT_BUILDING_DOES = (
+    "Building it fetches the filings of every company in the universe from SEC EDGAR, then their prices, "
+    "and takes several minutes. Outside the app, `python -m invest.jobs.fundamentals` does the same thing."
+)
+
+
+def _edgar_ready() -> bool:
+    secrets.reload()  # an edit to secrets.toml counts on the next rerun, without a restart
+    return user_agent_ok(secrets.sec_user_agent())
+
+
+def _offer_build(message: str) -> None:
+    """Nothing to show yet: say why, offer the build, and stop the page."""
+    ready = _edgar_ready()
+    st.info(message)
+    if not ready:
+        st.warning(f"The build needs one setting first.\n\n{SEC_USER_AGENT_HELP}\n\nThen reload this page.")
+    job_panel.start_button("fundamentals", "Build the screener table", type="primary", disabled=not ready,
+                           help=BUILD_HELP)
+    job_panel.last_result("fundamentals")
     st.stop()
+
+
+if not DB.exists():
+    _offer_build(f"No market database yet, so no screener table. {WHAT_BUILDING_DOES}")
 
 
 def _version() -> float:
@@ -66,14 +99,21 @@ except Exception as exc:
     st.stop()
 
 if data is None:
-    st.info("No screener table stored yet. Run `python -m invest.jobs.fundamentals` to build one.")
-    st.stop()
+    _offer_build(f"No screener table stored yet. {WHAT_BUILDING_DOES}")
 
 payload = data["payload"]
 table = pd.DataFrame(payload["rows"])
 if table.empty:
-    st.warning("The stored screener table is empty.")
-    st.stop()
+    _offer_build(f"The stored screener table is empty. {WHAT_BUILDING_DOES}")
+
+left, right = st.columns([5, 1], vertical_alignment="center")
+left.caption(f"Table built {pd.Timestamp(data['created_at']):%Y-%m-%d} for {payload.get('universe_label')}; "
+             f"details at the bottom of the page.")
+ready = _edgar_ready()
+with right:
+    job_panel.start_button("fundamentals", "Rebuild now", disabled=not ready,
+                           help=BUILD_HELP if ready else f"Needs one setting first.\n\n{SEC_USER_AGENT_HELP}")
+job_panel.last_result("fundamentals")
 
 # ==========================================================================================
 # Controls

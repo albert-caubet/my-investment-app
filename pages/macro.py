@@ -9,8 +9,6 @@ separate process, so fetching happens only when asked for.
 from __future__ import annotations
 
 import os
-import threading
-import time
 from datetime import date, datetime
 
 import pandas as pd
@@ -18,9 +16,9 @@ import plotly.graph_objects as go
 import streamlit as st
 
 import charts
+import job_panel
 from invest.data.cache import Store, utcnow
 from invest.data.releases import Release, append_release, load_releases
-from invest.jobs import launcher
 from invest.jobs.refresh import ingest_releases
 from invest.macro import scorecard as sc
 from invest.macro.catalog import GROUPS, load_catalog
@@ -32,84 +30,7 @@ st.title("Macro")
 
 DB = db_path()
 
-# ==========================================================================================
-# Refresh from the app
-# ==========================================================================================
-
-
-@st.cache_resource
-def _jobs() -> dict:
-    """Shared by every session on this server, so a second tab sees a run in progress
-    instead of starting another one against a locked database."""
-    return {"lock": threading.Lock(), "current": None, "last": None}
-
-
-def _start_refresh() -> None:
-    jobs = _jobs()
-    with jobs["lock"]:
-        current = jobs["current"]
-        if current is not None and current.running:
-            return  # already going; the rerun reattaches to it
-        jobs["current"] = launcher.start("refresh")
-
-
-def _follow(run: launcher.JobRun) -> None:
-    """Stream a running refresh until it ends, then reload the page on the new data.
-
-    The database is not read meanwhile: the job holds DuckDB's write lock for the
-    whole run. Leaving the page does not stop the job; coming back reattaches.
-    """
-    total = len(load_catalog().fetched())
-    st.info(
-        f"Refreshing the market database, started {run.started:%H:%M:%S}. The page reloads with "
-        f"the new data when it finishes. You can leave and come back; the job keeps running."
-    )
-    bar = st.progress(0.0)
-    box = st.empty()
-    while run.running:
-        done = run.series_done()
-        bar.progress(
-            min(done / total, 1.0) if total else 0.0,
-            text=f"{done} of {total} series fetched, {run.elapsed_seconds():.0f}s",
-        )
-        box.code(run.tail(20) or "starting…", language=None)
-        time.sleep(1.0)
-    jobs = _jobs()
-    with jobs["lock"]:
-        if jobs["current"] is run:
-            jobs["last"], jobs["current"] = run, None
-    st.rerun()
-
-
-def _last_result() -> None:
-    run = _jobs()["last"]
-    if run is None:
-        return
-    when = f"{run.started:%Y-%m-%d %H:%M}"
-    if run.exit_code == 0:
-        label = f"✅ Last refresh from the app, started {when}: finished, every critical series fresh"
-    elif run.crashed:
-        label = f"❌ Last refresh from the app, started {when}: stopped with an error"
-    else:
-        label = f"⚠️ Last refresh from the app, started {when}: finished with critical series failed or stale"
-    with st.expander(label, expanded=run.crashed):
-        if run.crashed:
-            st.write(
-                "If the weekly job or a command-line refresh was running at the same time, the database "
-                "was locked. Wait for it to finish and try again."
-            )
-        elif run.exit_code:
-            st.write("The data that did arrive is stored. The freshness table at the bottom names the rest.")
-        st.code(run.tail(60), language=None)
-        st.caption(f"Full log: {run.log_path}")
-
-
-_current = _jobs()["current"]
-if _current is not None and _current.running:
-    _follow(_current)  # reruns when done; never falls through
-elif _current is not None:  # finished while nobody was watching
-    with _jobs()["lock"]:
-        _jobs()["last"], _jobs()["current"] = _current, None
+job_panel.follow_if_running()  # a job holds the database; nothing below may read it
 
 if not DB.exists():
     st.info(
@@ -118,8 +39,8 @@ if not DB.exists():
         f"series in the catalog and takes several minutes. Outside the app, "
         f"`python -m invest.jobs.refresh` does the same thing, and is what the scheduler runs."
     )
-    st.button("Fetch the data now", type="primary", on_click=_start_refresh)
-    _last_result()
+    job_panel.start_button("refresh", "Fetch the data now", type="primary")
+    job_panel.last_result("refresh")
     st.stop()
 
 
@@ -200,8 +121,9 @@ if data["last_run"]:
     left.caption(f"Data from the refresh started {_local(started):%Y-%m-%d %H:%M}, {_age(started)}.")
 else:
     left.caption("No refresh run recorded in this database.")
-right.button("Refresh now", on_click=_start_refresh, help="Runs `python -m invest.jobs.refresh` in the background.")
-_last_result()
+with right:
+    job_panel.start_button("refresh", "Refresh now", help="Runs `python -m invest.jobs.refresh` in the background.")
+job_panel.last_result("refresh")
 
 # ==========================================================================================
 # Regime

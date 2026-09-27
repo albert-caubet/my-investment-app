@@ -173,3 +173,13 @@ def test_breadth_needs_enough_names(loaded):
     assert series["BREADTH_NH_NL_PCT"].between(-100, 100).all()
     assert job.store_breadth(store, symbols) > 0
     assert not store.read_series("BREADTH_ABOVE_200D_PCT").empty
+
+
+def test_without_the_sec_setting_the_command_explains_and_leaves_the_database_alone(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr("invest.data.edgar.sec_user_agent", lambda: None)
+    db = tmp_path / "untouched.duckdb"
+    assert job.main(["--db", str(db)]) == 2
+    out = capsys.readouterr().out
+    assert "SEC_USER_AGENT" in out and ".streamlit/secrets.toml" in out
+    assert "Traceback" not in out
+    assert not db.exists()

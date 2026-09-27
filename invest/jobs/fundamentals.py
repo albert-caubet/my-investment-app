@@ -22,13 +22,14 @@ import pandas as pd
 
 from invest.data import yahoo
 from invest.data.cache import Store, utcnow
-from invest.data.edgar import EdgarClient, facts_frame
+from invest.data.edgar import SEC_USER_AGENT_HELP, EdgarClient, EdgarConfigError, facts_frame
 from invest.fundamentals import metrics as M
 from invest.fundamentals import screens
 from invest.fundamentals.facts import canonical_tags, fundamentals_as_of
 from invest.fundamentals.universe import Universe, load_universe, resolve_ciks, sector_from_sic
 from invest.fundamentals.valuation import value_summary
 
+DEFAULT_UNIVERSE = "sp500_core"
 PRICE_YEARS = 12
 BREADTH_WINDOW = 200
 NEW_HIGH_WINDOW = 252
@@ -254,7 +255,7 @@ def save_screener_snapshot(store: Store, run_id: str, universe: Universe, table:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Ingest fundamentals for a universe and build the screener table.")
     parser.add_argument("--db", default=None)
-    parser.add_argument("--universe", default="sp500_core")
+    parser.add_argument("--universe", default=DEFAULT_UNIVERSE)
     parser.add_argument("--limit", type=int, default=None, help="only the first N resolved tickers")
     parser.add_argument("--as-of", default=None, help="build the table as of this date (YYYY-MM-DD)")
     parser.add_argument("--skip-prices", action="store_true")
@@ -268,10 +269,16 @@ def main(argv: list[str] | None = None) -> int:
     universe = universes[args.universe]
     as_of = date.fromisoformat(args.as_of) if args.as_of else None
     problems: list[str] = []
+    client = None
+    if not args.skip_fetch:
+        try:
+            client = EdgarClient()  # before the database is touched: no half-started run
+        except EdgarConfigError as exc:
+            print(f"{exc}.\n\n{SEC_USER_AGENT_HELP}")
+            return 2
     with Store(args.db) as store:
         run_id = store.start_run("fundamentals")
-        if not args.skip_fetch:
-            client = EdgarClient()
+        if client is not None:
             problems += refresh_universe(store, client, universe, limit=args.limit, skip_prices=args.skip_prices)
             print(f"  {client.n_requests} EDGAR requests")
         table = build_metrics_table(store, universe, as_of=as_of, log=print)

@@ -31,14 +31,27 @@ ARCHIVE_URL = "https://www.sec.gov/Archives/edgar/data/{cik}/{accession}/{name}"
 MIN_INTERVAL = 0.11  # ten requests per second, with a little room
 
 
+#: How to set it up, for the command line and the Screener page alike.
+SEC_USER_AGENT_HELP = """SEC EDGAR answers only requests that name an app and a contact email. Set it once,
+in .streamlit/secrets.toml at the top of the repository (git ignores that file):
+
+    SEC_USER_AGENT = "my-investment-app your.name@example.com"
+
+or as an environment variable of the same name. Use your own email address."""
+
+
 class EdgarConfigError(RuntimeError):
     """No SEC_USER_AGENT configured. EDGAR requires a contact address."""
+
+
+def user_agent_ok(user_agent: str | None) -> bool:
+    return bool(user_agent) and "@" in user_agent
 
 
 class EdgarClient:
     def __init__(self, user_agent: str | None = None, *, min_interval: float = MIN_INTERVAL):
         self.user_agent = user_agent or sec_user_agent()
-        if not self.user_agent or "@" not in self.user_agent:
+        if not user_agent_ok(self.user_agent):
             raise EdgarConfigError(
                 "SEC_USER_AGENT must be set to an app name and contact address, for example "
                 "'my-investment-app you@example.com'"

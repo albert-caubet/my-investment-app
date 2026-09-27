@@ -27,6 +27,11 @@ def _file_secrets() -> dict:
     return {}
 
 
+def reload() -> None:
+    """Forget the cached file, so an edit to secrets.toml counts without a restart."""
+    _file_secrets.cache_clear()
+
+
 def get_secret(name: str, default: str | None = None) -> str | None:
     """``name`` from the environment, else from secrets.toml (top level or ``[invest]``)."""
     value = os.environ.get(name)

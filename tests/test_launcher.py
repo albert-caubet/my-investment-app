@@ -43,11 +43,25 @@ def test_count_series_lines_matches_what_refresh_prints():
     assert launcher.count_series_lines(text) == 2
 
 
+def test_fundamentals_progress_counts_companies_fetched_or_failed(tmp_path):
+    lines = [
+        "  MMM (66740): 512 facts, SIC 3841",
+        "  NOPE: FAILED HTTP 404",
+        "  prices: 2 of 3 symbols",  # the price step, not a company
+        "  MMM: metrics FAILED division by zero",  # the table step, after fetching
+        "  BREADTH_ABOVE_200D_PCT: 2500 days, 3 new",
+    ]
+    command = [sys.executable, "-c", f"print({chr(10).join(lines)!r})"]
+    run = _wait(launcher.start("fundamentals", command=command, directory=tmp_path))
+    assert run.done() == 2
+
+
 def test_registry_runs_the_same_command_as_the_cli():
     command = launcher.JOBS["refresh"]
     assert command[0] == sys.executable
     assert command[-2:] == ["-m", "invest.jobs.refresh"]
     assert "-u" in command  # unbuffered, or the log arrives in lumps
+    assert launcher.JOBS["fundamentals"][-2:] == ["-m", "invest.jobs.fundamentals"]
 
 
 def test_start_writes_output_to_a_log_file(tmp_path):

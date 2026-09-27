@@ -28,10 +28,17 @@ from invest.paths import REPO_ROOT, data_dir
 #: shows progress as it happens rather than in 8 KB lumps.
 JOBS: dict[str, list[str]] = {
     "refresh": [sys.executable, "-u", "-m", "invest.jobs.refresh"],
+    "fundamentals": [sys.executable, "-u", "-m", "invest.jobs.fundamentals"],
 }
 
-# refresh prints "  SERIES_ID: 312 obs, 12 new" or "  SERIES_ID: FAILED ..." per series.
-_SERIES_LINE = re.compile(r"^  (\S+): (?:\d+ obs|FAILED)")
+#: One line per unit of progress, as each job prints it.
+PROGRESS_LINE = {
+    # "  SERIES_ID: 312 obs, 12 new" or "  SERIES_ID: FAILED ..." per series
+    "refresh": re.compile(r"^  (\S+): (?:\d+ obs|FAILED)"),
+    # "  AAPL (320193): 512 facts, SIC 3571" or "  AAPL: FAILED ..." per company
+    "fundamentals": re.compile(r"^  \S+(?: \(\d+\))?: (?:\d+ facts|FAILED)"),
+}
+_SERIES_LINE = PROGRESS_LINE["refresh"]
 
 
 def logs_dir() -> Path:
@@ -70,6 +77,11 @@ class JobRun:
 
     def series_done(self) -> int:
         return count_series_lines(self.text())
+
+    def done(self) -> int:
+        """Units finished so far (series for a refresh, companies for fundamentals)."""
+        pattern = PROGRESS_LINE.get(self.name)
+        return sum(1 for line in self.text().splitlines() if pattern.match(line)) if pattern else 0
 
     def elapsed_seconds(self, now: datetime | None = None) -> float:
         return ((now or datetime.now()) - self.started).total_seconds()

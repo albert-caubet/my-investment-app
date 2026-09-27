@@ -60,6 +60,7 @@ def test_screener_page_renders_ranked_table_detail_and_watchlist(seeded_db):
     assert "JPM" not in first_table["Ticker"].tolist()
     assert set(first_table["Ticker"]) <= {"MMM", "SAP"}
     assert any("survivorship" in c.value.lower() for c in at.caption)
+    assert "Rebuild now" in [b.label for b in at.button]
 
 
 def test_screener_page_switches_screen(seeded_db):
