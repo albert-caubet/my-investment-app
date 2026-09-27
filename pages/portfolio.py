@@ -12,8 +12,6 @@ from database import get_all_transactions, get_cash_accounts, get_portfolio_desi
 
 CURRENCY_SYMBOL = {"EUR": "€", "USD": "$"}
 
-#: Every chart on this page: 50% taller than the 450px Plotly and Streamlit default.
-CHART_HEIGHT = 675
 
 raw_data = get_all_transactions()
 
@@ -670,7 +668,6 @@ if open_ids:
                         names="category",
                         hole=0.4,
                         color_discrete_sequence=px.colors.qualitative.Prism,
-                        height=CHART_HEIGHT,
                     )
                 ),
                 width="stretch",
@@ -685,7 +682,6 @@ if open_ids:
                         names="name",
                         hole=0.4,
                         color_discrete_sequence=px.colors.qualitative.Pastel,
-                        height=CHART_HEIGHT,
                     )
                 ),
                 width="stretch",
@@ -740,7 +736,6 @@ if open_ids:
                 title=f"{official} ({ccy}, {symbol}) — {selected_label}, unadjusted close",
                 labels={"Close": f"Price ({ccy})", date_col: "Timeline"},
                 template="plotly_white",
-                height=CHART_HEIGHT,
             )
 
             asset_txs = txs_by_asset.get(aid, [])

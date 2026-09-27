@@ -35,10 +35,16 @@ def test_sizes_are_half_again_the_theme_defaults():
 
 
 def test_readable_keeps_what_the_page_set():
-    fig = px.pie(values=[1, 2], names=["a", "b"], height=675)
+    fig = px.pie(values=[1, 2], names=["a", "b"])
     fig.update_layout(legend=dict(orientation="h"))
     charts.readable(fig)
-    assert fig.layout.height == 675 and fig.layout.legend.orientation == "h"
+    assert fig.layout.legend.orientation == "h"
+
+
+def test_charts_are_half_again_as_tall_as_the_page_asks():
+    assert charts.readable(px.pie(values=[1], names=["a"])).layout.height == 675  # 450 default
+    assert charts.readable(go.Figure().update_layout(height=230)).layout.height == 345  # design bars
+    assert charts.readable(go.Figure().update_layout(height=420)).layout.height == 630  # macro chart
 
 
 def _figure_with_everything():

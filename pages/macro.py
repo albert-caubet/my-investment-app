@@ -349,7 +349,7 @@ if options:
         fig.update_layout(
             title=f"{spec.label} — {spec.transform}, {spec.units or 'level'}; shaded: NBER recessions",
             template="plotly_white", hovermode="x unified", showlegend=False,
-            height=630,  # was 420; 50% taller like every chart in the app
+            height=420,  # charts.readable makes it taller
         )
         st.plotly_chart(charts.readable(fig), width="stretch")
     st.write(reading.reading)
