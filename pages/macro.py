@@ -17,6 +17,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+import charts
 from invest.data.cache import Store, utcnow
 from invest.data.releases import Release, append_release, load_releases
 from invest.jobs import launcher
@@ -350,7 +351,7 @@ if options:
             template="plotly_white", hovermode="x unified", showlegend=False,
             height=630,  # was 420; 50% taller like every chart in the app
         )
-        st.plotly_chart(fig, width="stretch")
+        st.plotly_chart(charts.readable(fig), width="stretch")
     st.write(reading.reading)
     if spec.notes:
         st.caption(spec.notes)

@@ -5,6 +5,7 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
+import charts
 import market_data as md
 import portfolio_math as pm
 from database import get_all_transactions, get_cash_accounts, get_portfolio_design
@@ -662,26 +663,30 @@ if open_ids:
         with col_left:
             st.write("**By Category**")
             st.plotly_chart(
-                px.pie(
-                    pie_df.groupby("category", as_index=False)["Market Value (EUR)"].sum(),
-                    values="Market Value (EUR)",
-                    names="category",
-                    hole=0.4,
-                    color_discrete_sequence=px.colors.qualitative.Prism,
-                    height=CHART_HEIGHT,
+                charts.readable(
+                    px.pie(
+                        pie_df.groupby("category", as_index=False)["Market Value (EUR)"].sum(),
+                        values="Market Value (EUR)",
+                        names="category",
+                        hole=0.4,
+                        color_discrete_sequence=px.colors.qualitative.Prism,
+                        height=CHART_HEIGHT,
+                    )
                 ),
                 width="stretch",
             )
         with col_right:
             st.write("**By Asset Name**")
             st.plotly_chart(
-                px.pie(
-                    pie_df.groupby("name", as_index=False)["Market Value (EUR)"].sum(),
-                    values="Market Value (EUR)",
-                    names="name",
-                    hole=0.4,
-                    color_discrete_sequence=px.colors.qualitative.Pastel,
-                    height=CHART_HEIGHT,
+                charts.readable(
+                    px.pie(
+                        pie_df.groupby("name", as_index=False)["Market Value (EUR)"].sum(),
+                        values="Market Value (EUR)",
+                        names="name",
+                        hole=0.4,
+                        color_discrete_sequence=px.colors.qualitative.Pastel,
+                        height=CHART_HEIGHT,
+                    )
                 ),
                 width="stretch",
             )
@@ -807,4 +812,4 @@ if open_ids:
                         )
 
             fig.update_layout(showlegend=True, hovermode="x unified")
-            st.plotly_chart(fig, width="stretch")
+            st.plotly_chart(charts.readable(fig), width="stretch")

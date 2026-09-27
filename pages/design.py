@@ -12,6 +12,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+import charts
 import market_data as md
 import portfolio_math as pm
 from database import get_all_transactions, get_cash_accounts, get_portfolio_design, save_portfolio_design
@@ -182,10 +183,10 @@ def designer() -> None:
         # "normal" so the legend reads left to right like the bars; stacked bars reverse it by default.
         legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0, traceorder="normal"),
         # A band too narrow for its label hides the label; the hover and the table carry the number.
-        uniformtext=dict(minsize=11, mode="hide"),
+        uniformtext=dict(minsize=16, mode="hide"),  # 11 before the fonts grew 50%
         template="plotly_white",
     )
-    st.plotly_chart(fig, width="stretch")
+    st.plotly_chart(charts.readable(fig), width="stretch")
 
     drift = pm.allocation_drift(current, design)
     st.dataframe(
