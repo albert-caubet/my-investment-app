@@ -92,3 +92,47 @@ def get_all_transactions():
 
 def clear_transaction_cache():
     get_all_transactions.clear()
+
+
+# 4. Cash accounts: bank balances entered by hand, one document per account
+CASH_COLLECTION = "cash_accounts"
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def get_cash_accounts():
+    db = init_db()
+    return [doc.to_dict() for doc in db.collection(CASH_COLLECTION).stream()]
+
+
+def save_cash_accounts(accounts: list[dict]) -> None:
+    """Replace every stored account with ``accounts``, in one atomic batch.
+
+    The editor submits the whole list, deletions included, so replacing the
+    collection is the simplest way to make what is stored match what was saved.
+    """
+    db = init_db()
+    collection = db.collection(CASH_COLLECTION)
+    batch = db.batch()
+    for doc in collection.stream():
+        batch.delete(doc.reference)
+    for account in accounts:
+        batch.set(collection.document(), account)
+    batch.commit()
+    get_cash_accounts.clear()
+
+
+# 5. Portfolio design: the target allocation, one document overwritten on each save
+DESIGN_COLLECTION = "portfolio_design"
+DESIGN_DOCUMENT = "current"
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def get_portfolio_design():
+    """``{"targets": {category: percent}, "saved": "YYYY-MM-DD"}``, or None before the first save."""
+    snapshot = init_db().collection(DESIGN_COLLECTION).document(DESIGN_DOCUMENT).get()
+    return snapshot.to_dict() if snapshot.exists else None
+
+
+def save_portfolio_design(design: dict) -> None:
+    init_db().collection(DESIGN_COLLECTION).document(DESIGN_DOCUMENT).set(design)
+    get_portfolio_design.clear()

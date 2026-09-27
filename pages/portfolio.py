@@ -7,7 +7,7 @@ import streamlit as st
 
 import market_data as md
 import portfolio_math as pm
-from database import get_all_transactions
+from database import get_all_transactions, get_cash_accounts, get_portfolio_design
 
 CURRENCY_SYMBOL = {"EUR": "€", "USD": "$"}
 
@@ -46,38 +46,37 @@ symbols = tuple(sorted(set(price_symbol.values())))
 # 2. MARKET DATA
 # ==========================================================================================================
 
-live_ccy = md.fetch_listing_currency(symbols)
-
-# Live metadata first, the currency detected when the trade was logged as the
-# fallback. Never EUR by default: a lookup can still fail, and a default would
-# value a USD price one-for-one as euros -- the same silent error as an FX
-# fallback of 1.0.
-stored_ccy: dict[str, str] = {}
-for aid, pos in positions.items():
-    if pos.listing_ccy:
-        stored_ccy.setdefault(price_symbol[aid], pos.listing_ccy)
-listing_ccy: dict[str, str | None] = {
-    sym: live_ccy.get(sym) or stored_ccy.get(sym) for sym in symbols
-}
-
-spot = md.fetch_spot_prices(symbols)
-rates = md.fetch_spot_fx(tuple(c for c in listing_ccy.values() if c))
-
-quotes = {
-    aid: pm.Quote(
-        asset_id=aid,
-        price=spot.get(price_symbol[aid]),
-        listing_ccy=listing_ccy.get(price_symbol[aid]),
-    )
-    for aid in positions
-}
-
-valuations = {aid: pm.value_position(pos, quotes[aid], rates) for aid, pos in positions.items()}
+valuations, listing_ccy, rates = md.live_valuations(positions)
 open_ids = [aid for aid, pos in positions.items() if pos.is_open]
 closed_ids = [aid for aid, pos in positions.items() if not pos.is_open]
 
 totals = pm.portfolio_totals([valuations[aid] for aid in positions])
-asset_weights = pm.weights([valuations[aid] for aid in open_ids])
+
+# Bank balances entered by hand on the transactions page. Dry Powder is part of the
+# portfolio: in its value, weights, charts and design. Cash in current accounts is the
+# day-to-day reserve and emergency fund, shown on its own and outside all of that.
+# Total Value and every P&L figure stay on the investments alone.
+cash_accounts, cash_problems = pm.clean_cash_accounts(get_cash_accounts())
+dry_powder = [a for a in cash_accounts if a.category != pm.RESERVE_CATEGORY]
+reserve = [a for a in cash_accounts if a.category == pm.RESERVE_CATEGORY]
+dry_total = sum(a.balance_eur for a in dry_powder)
+reserve_total = sum(a.balance_eur for a in reserve)
+portfolio_value = totals.market_value_eur + dry_total
+
+
+def _weight(eur: float | None) -> float | None:
+    """Share of the portfolio (investments plus Dry Powder), so the column sums to 100."""
+    return eur / portfolio_value * 100 if eur is not None and portfolio_value > 0 else None
+
+
+# The allocation against the design saved on the Portfolio design page, by category.
+current_bands = pm.capital_by_band(
+    [(positions[aid].category, valuations[aid].market_value_eur) for aid in open_ids]
+    + [(a.category, a.balance_eur) for a in dry_powder]
+)
+design_doc = get_portfolio_design() or {}
+design, design_problems = pm.clean_design(design_doc.get("targets"))
+drift = pm.allocation_drift(current_bands, design) if design else []
 
 # ==========================================================================================================
 # 3. ALPHA & BETA (CAPM)
@@ -140,6 +139,9 @@ if totals.n_unvalued:
         f"totals: {', '.join(totals.unvalued_ids)}"
     )
 
+for problem in cash_problems:
+    st.warning(f"Cash account skipped: {problem}")
+
 # Money-weighted return over every cash flow ever logged, closed with today's
 # value. Total PnL % is a ratio with no time in it, so it cannot be compared to a
 # benchmark's annual return; this can.
@@ -176,10 +178,36 @@ def _pct_delta(pct: float | None) -> str | None:
 # percentage is against the cost it was actually earned on. Dividing everything by
 # the open cost basis, as before, measured realised gains on capital already
 # withdrawn against capital still at work.
-r1 = st.columns(4)
+r1 = st.columns(6)
 r1[0].metric("Total Cost Basis (EUR)", f"€{totals.cost_basis_eur:,.0f}")
-r1[1].metric("Total Value (EUR)", f"€{totals.market_value_eur:,.0f}")
+r1[1].metric(
+    "Total Value (EUR)",
+    f"€{totals.market_value_eur:,.0f}",
+    help="The investments at market value: the base for every P&L figure. Dry Powder is in Portfolio value.",
+)
+
+dry_saved = max((a.updated for a in dry_powder if a.updated), default=None)
 r1[2].metric(
+    "Portfolio value (EUR)",
+    f"€{portfolio_value:,.0f}",
+    help=(
+        f"Investments €{totals.market_value_eur:,.0f} plus Dry Powder €{dry_total:,.0f} "
+        f"({len(dry_powder)} account(s), entered by hand on the transactions page"
+        + (f", last saved {dry_saved}" if dry_saved else "")
+        + "). The base for the weights, the charts and the portfolio design. "
+        "Your cash reserve is not part of it."
+    ),
+)
+r1[3].metric(
+    "Dry Powder (EUR)",
+    f"€{dry_total:,.0f}",
+    help=(
+        f"Money set aside to invest, across {len(dry_powder)} account(s), entered by hand on the "
+        "transactions page" + (f", last saved {dry_saved}" if dry_saved else "") + ". Part of "
+        "Portfolio value; not in Total Value or any P&L figure."
+    ),
+)
+r1[4].metric(
     "Unrealised PnL (EUR)",
     f"€{totals.unrealised_pnl_eur:,.0f}",
     _pct_delta(totals.unrealised_pnl_pct),
@@ -188,7 +216,7 @@ r1[2].metric(
         "The percentage is on that open cost basis."
     ),
 )
-r1[3].metric(
+r1[5].metric(
     "Realised PnL (EUR)",
     f"€{totals.realised_pnl_eur:,.0f}",
     _pct_delta(totals.realised_pnl_pct),
@@ -198,7 +226,7 @@ r1[3].metric(
     ),
 )
 
-r2 = st.columns(4)
+r2 = st.columns(6)  # six, like the row above, so the two rows line up
 r2[0].metric(
     "Total PnL (EUR)",
     f"€{totals.total_pnl_eur:,.0f}",
@@ -254,6 +282,42 @@ else:
     r2[2].metric(f"Inflation ({hicp_area} HICP)", "–", help="Could not reach the ECB Data Portal.")
     r2[3].metric("Real Return", "–")
 
+if drift:
+    widest = max(drift, key=lambda d: abs(d.off_by_pp))
+    r2[4].metric(
+        "Largest gap vs design",
+        f"{widest.off_by_pp:+.1f} pp",
+        f"{widest.band} {'over' if widest.off_by_pp > 0 else 'under'}" if round(widest.off_by_pp, 1) else None,
+        delta_color="off",
+        help=(
+            "The category furthest from your saved portfolio design, in percentage points of the "
+            "portfolio value. Every category is in Allocation vs. design below."
+        ),
+    )
+else:
+    r2[4].metric(
+        "Largest gap vs design",
+        "–",
+        help="No portfolio design saved yet. Set one on the Portfolio design page, under Analysis.",
+    )
+
+# The cash reserve, on its own line so it is never read as part of the figures above.
+reserve_saved = max((a.updated for a in reserve if a.updated), default=None)
+reserve_metric, reserve_note = st.columns([1, 4], vertical_alignment="center")
+reserve_metric.metric(
+    "Cash reserve (EUR)",
+    f"€{reserve_total:,.0f}",
+    help=(
+        f"Cash in {len(reserve)} current account(s), entered by hand on the transactions page"
+        + (f", last saved {reserve_saved}" if reserve_saved else "")
+        + "."
+    ),
+)
+reserve_note.caption(
+    "Current accounts: your day-to-day cash and emergency fund. Outside the portfolio, so it is "
+    "in no value, weight, chart or design on this page."
+)
+
 # ==========================================================================================================
 # --- 1. ASSET BREAKDOWN ---
 # ==========================================================================================================
@@ -286,7 +350,7 @@ def _row(aid):
         "PnL (EUR)": val.unrealised_pnl_eur,
         "Real PnL (EUR)": real_pnl,
         "Realised (EUR)": pos.realised_pnl_eur,
-        "Weight (%)": asset_weights.get(aid),
+        "Weight (%)": _weight(val.market_value_eur),
         "Beta": cap.beta,
         "R²": cap.r_squared,
         "n": cap.n_obs,
@@ -362,6 +426,10 @@ CAPM_HELP = {
         "by simply riding the benchmark. Only meaningful when R² is high enough for Beta "
         "to mean anything in the first place."
     ),
+    "Weight (%)": (
+        "Share of the portfolio: investments at market value plus Dry Powder. "
+        "Your cash reserve is outside it."
+    ),
     "PnL (%)": "Unrealised gain or loss on what you still hold, against its cost basis.",
     "PnL (EUR)": "Unrealised gain or loss in euros on what you still hold.",
     "Realised (EUR)": "Gain or loss already banked by selling. Zero until you sell.",
@@ -383,7 +451,25 @@ if open_ids:
     ordered = sorted(
         open_ids, key=lambda a: valuations[a].market_value_eur or -1, reverse=True
     )
-    summary = pd.DataFrame([_row(aid) for aid in ordered])
+    # Dry Powder accounts follow the investments; the cash reserve is not part of the
+    # portfolio and is not listed. Only the columns that mean something for a bank
+    # balance are filled; Streamlit draws the empty numeric cells with its own grey
+    # placeholder. The text columns get "" like an investment without a ticker, and
+    # Note is set so an empty value does not count as a note.
+    cash_rows = [
+        {
+            "category": a.category,
+            "name": a.name,
+            "ticker": "",
+            "isin": "",
+            "Ccy": pm.BASE_CCY,
+            "Market Value (EUR)": a.balance_eur,
+            "Weight (%)": _weight(a.balance_eur),
+            "Note": "",
+        }
+        for a in sorted(dry_powder, key=lambda a: a.balance_eur, reverse=True)
+    ]
+    summary = pd.DataFrame([_row(aid) for aid in ordered] + cash_rows)
 
     # The Note column is pure noise when nothing is wrong, which is the normal case.
     if not summary["Note"].astype(bool).any():
@@ -405,6 +491,7 @@ if open_ids:
                 "Weight (%)": "{:.1f} %",
                 "Beta": "{:.2f}",
                 "R²": "{:.2f}",
+                "n": "{:.0f}",  # float once a cash row leaves it empty
                 "Alpha": "{:+.1%}",
             },
             na_rep="–",
@@ -485,6 +572,64 @@ if closed_ids:
     )
 
 # ==========================================================================================================
+# --- ALLOCATION VS. DESIGN ---
+# ==========================================================================================================
+
+st.markdown("---")
+st.subheader("Allocation vs. design")
+for problem in design_problems:
+    st.warning(f"Saved design ignored: {problem}")
+
+if drift:
+    gaps = pd.DataFrame(
+        [
+            {
+                "Category": d.band,
+                "Today (%)": d.current_pct,
+                "Design (%)": d.design_pct,
+                "Off by (pp)": d.off_by_pp,
+                "To reach design (EUR)": d.to_design_eur,
+            }
+            for d in drift
+        ]
+    )
+    st.dataframe(
+        gaps.style.format(
+            {
+                "Today (%)": "{:.1f} %",
+                "Design (%)": "{:.0f} %",
+                "Off by (pp)": "{:+.1f}",
+                "To reach design (EUR)": "€ {:+,.0f}",
+            }
+        )
+        # Shaded by size, not red and green: being over or under a design is neither a
+        # gain nor a loss, just a distance.
+        .apply(lambda s: _warm_scaled_colours(s.abs()), subset=["Off by (pp)"]),
+        column_config={
+            "Off by (pp)": st.column_config.Column(
+                "Off by (pp)",
+                help="Today minus design, in percentage points of the portfolio: positive is over the design.",
+            ),
+            "To reach design (EUR)": st.column_config.Column(
+                "To reach design (EUR)",
+                help=(
+                    "Euros to add (+) or take out (−) of the category to match the design at "
+                    "today's portfolio value. The column adds up to zero."
+                ),
+            ),
+        },
+        hide_index=True,
+    )
+    st.caption(
+        f"Against the design saved {design_doc.get('saved') or 'on an unknown date'}, as a share of "
+        f"the portfolio (€{portfolio_value:,.0f}: investments plus Dry Powder). Your cash reserve "
+        f"is outside it."
+    )
+else:
+    st.info("No portfolio design saved yet.")
+st.page_link("pages/design.py", label="Open Portfolio design", icon="🧭")
+
+# ==========================================================================================================
 # --- 2. ALLOCATION PIE CHARTS ---
 # ==========================================================================================================
 
@@ -501,6 +646,11 @@ if open_ids:
             }
             for aid in open_ids
             if valuations[aid].market_value_eur
+        ]
+        + [
+            {"category": a.category, "name": a.name, "Market Value (EUR)": a.balance_eur}
+            for a in dry_powder  # the cash reserve is not part of the portfolio
+            if a.balance_eur > 0
         ]
     )
 

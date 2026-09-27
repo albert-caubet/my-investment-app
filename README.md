@@ -7,8 +7,13 @@ and sells, and see valuation and performance in EUR.
 
 - **Portfolio Dashboard**
   - Cost basis, market value, and unrealised / realised / total P&L, all in EUR.
-  - Open positions with per-asset weight, plus a separate table of closed positions.
-  - Asset distribution by category and by holding.
+  - Total Value (the investments), Portfolio value (investments plus Dry Powder) and the
+    Dry Powder itself, with the cash reserve on its own line, outside the portfolio.
+  - Open positions and Dry Powder accounts with their weight in the portfolio, plus a
+    separate table of closed positions.
+  - Allocation against the saved portfolio design: the largest gap as a metric, and a
+    table of how far each category is off and the euros that would reach the design.
+  - Portfolio distribution by category and by holding, Dry Powder included.
   - Per-asset price history with buy/sell markers and an average-cost line.
   - Beta, Alpha and R² against the S&P 500, estimated in EUR over two years.
 - **Transaction Logging**
@@ -17,6 +22,16 @@ and sells, and see valuation and performance in EUR.
   - Historical FX captured on the trade date; fees included in the cost basis.
   - Select a row in the history log to edit or delete it. Saving rebuilds the document
     in the current schema, so a legacy row is upgraded on its first edit.
+  - Cash accounts: one row per bank account with its balance in EUR, as *Cash* (current
+    accounts: the day-to-day reserve and emergency fund) or *Dry Powder* (set aside to
+    invest), edited in one table and saved together; an account is deleted with a
+    confirmation, the way a transaction is.
+- **Portfolio design** (Analysis)
+  - A slider per category (Dry Powder, Bonds, Equity funds, Stocks) sets a target share of
+    the portfolio. The sliders always add up to 100%: moving one takes the difference from
+    the unlocked others, in proportion to their size, and a lock keeps a category fixed.
+  - Today's allocation and the design are drawn as two bars, with the euros each category
+    would need to move to get there. Save the design; the dashboard measures against it.
 - **Cloud Database**
   - Firebase Firestore, for multi-device sync.
 
@@ -35,6 +50,15 @@ Worth knowing, because these choices decide what the numbers mean:
   books the difference as realised P&L. A closed position keeps its realised P&L and
   drops out of the open table. FIFO is not implemented.
 - **Fees are capitalised** into the cost basis on a buy, and net off proceeds on a sell.
+- **The portfolio is the investments plus Dry Powder; the cash reserve is outside it.**
+  Bank balances are entered by hand and carry the date they were last saved. Dry Powder
+  counts in Portfolio value, the weights, the charts and the design. Cash in current
+  accounts is the day-to-day reserve and emergency fund: shown on its own, and in none of
+  those. Neither is in Total Value or any P&L figure, which stay on the investments.
+  A holding's design category follows the category it was logged with (Fund and ETF are
+  Equity funds, Bonds and Fixed Income are Bonds, Cash/Money Market is Dry Powder), so a
+  bond fund logged as *Fund* counts as an equity fund until its category is changed.
+  Crypto, commodities and the like are Other, which a design targets at 0%.
 - **Each P&L percentage is on the cost it was earned on.** Unrealised is on the open
   cost basis, realised on the cost of what was sold, and total on the two together,
   which is every euro of cost ever deployed. None of them carries time; the

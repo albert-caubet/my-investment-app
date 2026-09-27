@@ -16,6 +16,7 @@ import pandas as pd
 import streamlit as st
 import yfinance as yf
 
+import portfolio_math as pm
 from portfolio_math import BASE_CCY
 
 # Benchmark and risk-free are separated from the spot-price fetch on purpose: one
@@ -333,3 +334,41 @@ def fetch_hicp_annual_rate(area: str = HICP_AREA) -> tuple[float, str] | None:
         return None
     month = max(series)
     return series[month] / 100.0, month
+
+
+# ---------------------------------------------------------------------------
+# Marking positions to market
+# ---------------------------------------------------------------------------
+
+
+def live_valuations(
+    positions: dict[str, pm.PositionState],
+) -> tuple[dict[str, pm.Valuation], dict[str, str | None], dict[str, float]]:
+    """Value every position at the cached live prices: ``(valuations, listing_ccy, rates)``.
+
+    One function, so the dashboard and the Portfolio design page value the same
+    holdings the same way. ``listing_ccy`` is keyed by price symbol and ``rates``
+    is units per 1 EUR, both reused by the dashboard's charts and CAPM.
+    """
+    symbols = tuple(sorted({pos.price_symbol for pos in positions.values()}))
+    live_ccy = fetch_listing_currency(symbols)
+
+    # Live metadata first, the currency detected when the trade was logged as the
+    # fallback. Never EUR by default: a lookup can still fail, and a default would
+    # value a USD price one-for-one as euros -- the same silent error as an FX
+    # fallback of 1.0.
+    stored_ccy: dict[str, str] = {}
+    for pos in positions.values():
+        if pos.listing_ccy:
+            stored_ccy.setdefault(pos.price_symbol, pos.listing_ccy)
+    listing_ccy = {sym: live_ccy.get(sym) or stored_ccy.get(sym) for sym in symbols}
+
+    spot = fetch_spot_prices(symbols)
+    rates = fetch_spot_fx(tuple(c for c in listing_ccy.values() if c))
+    valuations = {
+        aid: pm.value_position(
+            pos, pm.Quote(aid, spot.get(pos.price_symbol), listing_ccy.get(pos.price_symbol)), rates
+        )
+        for aid, pos in positions.items()
+    }
+    return valuations, listing_ccy, rates

@@ -24,11 +24,21 @@ DAYS = pd.bdate_range("2024-06-03", periods=300)
 NEWEST_ID = "eur_drifted_cost"
 
 
+CASH = [
+    {"name": "Main account", "category": "Cash", "balance_eur": 5000.0, "updated": "2026-09-20"},
+    {"name": "Broker cash", "category": "Dry Powder", "balance_eur": 2500.0, "updated": "2026-09-20"},
+]
+
+
 @pytest.fixture
 def canned(monkeypatch):
     """Canned data sources, plus a recorder for every write the pages attempt."""
-    writes = {"added": [], "updated": [], "deleted": []}
+    writes = {"added": [], "updated": [], "deleted": [], "cash": [], "design": []}
 
+    monkeypatch.setattr(database, "get_cash_accounts", lambda: [dict(a) for a in CASH])
+    monkeypatch.setattr(database, "save_cash_accounts", lambda accounts: writes["cash"].append(accounts))
+    monkeypatch.setattr(database, "get_portfolio_design", lambda: None)  # none saved; tests override
+    monkeypatch.setattr(database, "save_portfolio_design", lambda design: writes["design"].append(design))
     monkeypatch.setattr(database, "get_all_transactions", lambda: [dict(d) for d in FIXTURE])
     monkeypatch.setattr(database, "clear_transaction_cache", lambda: None)
     monkeypatch.setattr(database, "record_transaction", lambda data: writes["added"].append(data))
@@ -94,7 +104,7 @@ def test_portfolio_page_renders_on_canned_data(canned):
         assert expected in labels
     # Nothing was left unvalued: every canned symbol had a price and a currency.
     assert not any("could not be valued" in w.value for w in at.warning)
-    assert canned == {"added": [], "updated": [], "deleted": []}
+    assert canned == {"added": [], "updated": [], "deleted": [], "cash": [], "design": []}
 
 
 def test_portfolio_refuses_to_value_an_unknown_listing_currency(canned, monkeypatch):
@@ -112,7 +122,8 @@ def test_portfolio_refuses_to_value_an_unknown_listing_currency(canned, monkeypa
 def test_transactions_page_renders_the_history(canned):
     at = _transactions_page(_app().run())
     assert not at.exception
-    assert len(at.dataframe) == 1
+    # The history log first, then the cash-accounts editor at the bottom of the page.
+    assert [d.key for d in at.dataframe] == ["tx_log_0", "cash_editor_0"]
     assert len(at.dataframe[0].value) == len(FIXTURE)
 
 
@@ -226,3 +237,213 @@ def test_a_legacy_document_can_be_opened_and_upgraded(canned):
     assert doc_id == "legacy_schema"
     assert doc["price_nominal"] == 50.0 and "price" not in doc
     assert doc["currency"] == "EUR" and doc["schema_version"] == 2
+
+
+# --- cash accounts and portfolio design --------------------------------------
+
+
+def _euros(metric) -> float:
+    return float(metric.value.replace("€", "").replace(",", ""))
+
+
+def _metric(at: AppTest, label: str):
+    return next(m for m in at.metric if m.label == label)
+
+
+def test_dashboard_keeps_the_cash_reserve_outside_the_portfolio(canned):
+    at = _app().run()
+    assert not at.exception
+    total_value = _euros(_metric(at, "Total Value (EUR)"))
+    # Portfolio value is the investments plus Dry Powder (2,500); the 5,000 reserve is not in it.
+    assert _euros(_metric(at, "Portfolio value (EUR)")) == pytest.approx(total_value + 2500, abs=1)
+    assert _euros(_metric(at, "Cash reserve (EUR)")) == 5000
+
+    table = at.dataframe[0].value
+    assert "Broker cash" in set(table["name"])  # Dry Powder is listed with the holdings
+    assert "Main account" not in set(table["name"])  # the reserve is not
+    # Weight is a share of the portfolio, so it sums to 100 without the reserve.
+    assert table["Weight (%)"].sum() == pytest.approx(100.0)
+    investments = table.loc[table["category"] != "Dry Powder", "Market Value (EUR)"].sum()
+    assert total_value == pytest.approx(investments, abs=1)
+
+
+def test_transactions_page_lists_the_cash_accounts(canned):
+    at = _transactions_page(_app().run())
+    assert not at.exception
+    assert "Cash accounts" in [h.value for h in at.subheader]
+    editor = next(d for d in at.dataframe if d.key == "cash_editor_0").value
+    assert list(editor["name"]) == ["Main account", "Broker cash"]
+    assert list(editor["balance_eur"]) == [5000.0, 2500.0]
+    assert any("Cash €5,000.00 · Dry Powder €2,500.00 · last saved 2026-09-20" in c.value for c in at.caption)
+    assert canned["cash"] == []  # nothing saved without pressing Save
+
+
+SAVED_DESIGN = {
+    "targets": {"Dry Powder": 10, "Bonds": 20, "Equity funds": 50, "Stocks": 20},
+    "saved": "2026-09-25",
+}
+BANDS = ("Dry Powder", "Bonds", "Equity funds", "Stocks")
+
+
+def _design_page(dashboard: AppTest | None = None) -> AppTest:
+    return (dashboard or _app().run()).switch_page("pages/design.py").run()
+
+
+def _sliders(at: AppTest) -> dict[str, int]:
+    return {band: at.slider(key=f"design_{band}").value for band in BANDS}
+
+
+def test_design_page_values_the_portfolio_without_the_reserve(canned):
+    dashboard = _app().run()
+    total_value = _euros(_metric(dashboard, "Total Value (EUR)"))  # before switch_page reuses the app
+    at = _design_page(dashboard)
+    assert not at.exception
+
+    investments = _euros(_metric(at, "Investments (EUR)"))
+    # The same valuation code as the dashboard, so the same number.
+    assert investments == pytest.approx(total_value, abs=1)
+    assert _euros(_metric(at, "Dry Powder (EUR)")) == 2500
+    assert _euros(_metric(at, "Portfolio value (EUR)")) == pytest.approx(investments + 2500, abs=1)
+    assert "Cash" not in _sliders(at)  # no slider for the reserve
+    assert at.get("plotly_chart")
+
+
+def test_sliders_start_from_todays_allocation_when_nothing_is_saved(canned):
+    at = _design_page()
+    sliders = _sliders(at)
+    assert sum(sliders.values()) == 100  # rounded so it can be saved as is
+    table = at.dataframe[0].value
+    today = dict(zip(table["Category"], table["Today (%)"]))
+    for band in BANDS:
+        assert sliders[band] == pytest.approx(today[band], abs=1)
+    assert not at.button(key="save_design").disabled
+
+
+def test_sliders_start_from_the_saved_design(canned, monkeypatch):
+    monkeypatch.setattr(database, "get_portfolio_design", lambda: dict(SAVED_DESIGN))
+    at = _design_page()
+    assert _sliders(at) == SAVED_DESIGN["targets"]
+    assert any("This is your saved design (saved 2026-09-25)" in c.value for c in at.caption)
+
+
+def test_moving_a_slider_rebalances_the_others_in_proportion(canned, monkeypatch):
+    monkeypatch.setattr(database, "get_portfolio_design", lambda: dict(SAVED_DESIGN))
+    at = _design_page()
+    at.slider(key="design_Stocks").set_value(40).run()
+    assert not at.exception
+    # 10 : 20 : 50 share the remaining 60 the same way.
+    assert _sliders(at) == {"Dry Powder": 8, "Bonds": 15, "Equity funds": 37, "Stocks": 40}
+    design = at.dataframe[0].value.set_index("Category")["Design (%)"]
+    assert design["Stocks"] == 40 and design.sum() == 100  # the table follows the sliders
+    assert any("not saved yet" in c.value for c in at.caption)
+
+
+def test_a_locked_category_stays_put_and_cannot_be_dragged(canned, monkeypatch):
+    monkeypatch.setattr(database, "get_portfolio_design", lambda: dict(SAVED_DESIGN))
+    at = _design_page()
+    at.checkbox(key="lock_Equity funds").check().run()
+    assert at.slider(key="design_Equity funds").disabled
+
+    at.slider(key="design_Stocks").set_value(40).run()
+    sliders = _sliders(at)
+    assert sliders["Equity funds"] == 50 and sliders["Stocks"] == 40
+    assert sum(sliders.values()) == 100
+
+
+def test_with_one_category_unlocked_nothing_can_move(canned, monkeypatch):
+    monkeypatch.setattr(database, "get_portfolio_design", lambda: dict(SAVED_DESIGN))
+    at = _design_page()
+    for band in ("Dry Powder", "Bonds", "Equity funds"):
+        at.checkbox(key=f"lock_{band}").check()
+    at.run()
+    assert any("Unlock at least two categories" in c.value for c in at.caption)
+    at.slider(key="design_Stocks").set_value(60).run()
+    assert _sliders(at) == SAVED_DESIGN["targets"]  # snapped back: nothing could absorb it
+
+
+def test_saving_the_sliders(canned, monkeypatch):
+    monkeypatch.setattr(database, "get_portfolio_design", lambda: dict(SAVED_DESIGN))
+    at = _design_page()
+    at.slider(key="design_Stocks").set_value(40).run()
+    at.button(key="save_design").click().run()
+    assert not at.exception
+    (saved,) = canned["design"]
+    assert saved["targets"] == {"Dry Powder": 8, "Bonds": 15, "Equity funds": 37, "Stocks": 40}
+    assert saved["saved"]  # dated
+    assert any("Design saved" in s.value for s in at.success)
+
+
+def test_design_page_without_anything_to_show(canned, monkeypatch):
+    monkeypatch.setattr(database, "get_all_transactions", lambda: [])
+    monkeypatch.setattr(database, "get_cash_accounts", lambda: [])
+    at = _design_page()
+    assert not at.exception
+    assert any("Nothing to design yet" in i.value for i in at.info)
+
+
+def test_a_cash_reserve_alone_is_not_a_portfolio(canned, monkeypatch):
+    monkeypatch.setattr(database, "get_all_transactions", lambda: [])
+    monkeypatch.setattr(database, "get_cash_accounts", lambda: [dict(CASH[0])])  # the Cash account only
+    at = _design_page()
+    assert not at.exception
+    assert any("Nothing to design yet" in i.value for i in at.info)
+
+
+def test_dashboard_without_a_design_points_to_the_design_page(canned):
+    at = _app().run()
+    assert not at.exception
+    assert _metric(at, "Largest gap vs design").value == "–"
+    assert "Allocation vs. design" in [h.value for h in at.subheader]
+    assert any("No portfolio design saved yet" in i.value for i in at.info)
+
+
+def test_dashboard_measures_the_allocation_against_the_design(canned, monkeypatch):
+    monkeypatch.setattr(database, "get_portfolio_design", lambda: dict(SAVED_DESIGN))
+    at = _app().run()
+    assert not at.exception
+
+    gaps = next(d for d in at.dataframe if "Off by (pp)" in d.value.columns).value
+    assert list(gaps["Category"])[:4] == list(BANDS)
+    assert "Cash" not in set(gaps["Category"])
+    assert gaps["Design (%)"].tolist()[:4] == [10, 20, 50, 20]
+    # Every category is today minus design, and the moves only shift money around.
+    assert (gaps["Off by (pp)"] == gaps["Today (%)"] - gaps["Design (%)"]).all()
+    assert gaps["To reach design (EUR)"].sum() == pytest.approx(0.0, abs=0.01)
+
+    widest = gaps.loc[gaps["Off by (pp)"].abs().idxmax()]
+    assert _metric(at, "Largest gap vs design").value == f"{widest['Off by (pp)']:+.1f} pp"
+
+
+def test_dry_powder_follows_portfolio_value_in_the_top_metrics(canned):
+    at = _app().run()
+    labels = [m.label for m in at.metric]
+    assert labels[labels.index("Portfolio value (EUR)") + 1] == "Dry Powder (EUR)"
+    assert _euros(_metric(at, "Dry Powder (EUR)")) == 2500
+
+
+def test_deleting_a_cash_account_needs_the_confirmation(canned):
+    at = _transactions_page(_app().run())
+    at.selectbox(key="cash_delete_pick_0").select("Broker cash")
+    at.button(key="cash_delete_0").click().run()
+    assert not at.exception
+    assert any("Tick the confirmation box" in e.value for e in at.error)
+    assert canned["cash"] == []
+
+
+def test_deleting_a_cash_account_keeps_the_others_as_they_were(canned):
+    at = _transactions_page(_app().run())
+    at.selectbox(key="cash_delete_pick_0").select("Broker cash")
+    at.checkbox(key="cash_delete_confirm_0").check()
+    at.button(key="cash_delete_0").click().run()
+    assert not at.exception
+    (saved,) = canned["cash"]
+    # Only the deleted account is gone; the other keeps its balance and its saved date.
+    assert saved == [{"name": "Main account", "category": "Cash", "balance_eur": 5000.0, "updated": "2026-09-20"}]
+    assert any("Deleted the account Broker cash" in s.value for s in at.success)
+
+
+def test_design_table_shows_percentages_before_euros(canned):
+    at = _design_page()
+    assert list(at.dataframe[0].value.columns) == [
+        "Category", "Today (%)", "Design (%)", "Off by (pp)", "Today (EUR)", "Design (EUR)", "To reach design (EUR)",
+    ]

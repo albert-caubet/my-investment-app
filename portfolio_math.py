@@ -916,3 +916,257 @@ def inflation_between(from_month: str, to_month: str, index: Mapping[str, float]
     if not start or not end:
         return None
     return end / start - 1.0
+
+
+# ---------------------------------------------------------------------------
+# Cash accounts and allocation bands
+# ---------------------------------------------------------------------------
+
+#: Account categories. "Cash" is money in current accounts: the day-to-day reserve and
+#: emergency fund, tracked but *outside* the portfolio. "Dry Powder" is money set aside
+#: to invest, and is part of the portfolio.
+CASH_CATEGORIES = ("Cash", "Dry Powder")
+RESERVE_CATEGORY = "Cash"
+
+
+@dataclass(frozen=True)
+class CashAccount:
+    """A bank balance entered by hand, in EUR. ``updated`` is the day it was saved."""
+
+    name: str
+    category: str
+    balance_eur: float
+    updated: str | None = None
+
+
+def _blank(value) -> bool:
+    return value is None or (isinstance(value, float) and math.isnan(value)) or str(value).strip() == ""
+
+
+def clean_cash_accounts(rows: Iterable[Mapping]) -> tuple[list[CashAccount], list[str]]:
+    """Validate account rows, from the editor or from Firestore.
+
+    Wholly empty rows (the editor adds one when you start a new line) are
+    dropped. Anything else that is wrong is an error rather than a guess: a
+    balance with no account name, an unknown category, a missing or negative
+    balance, or two rows for the same account.
+    """
+    accounts: list[CashAccount] = []
+    errors: list[str] = []
+    seen: set[str] = set()
+    for row in rows:
+        name, category, balance = row.get("name"), row.get("category"), row.get("balance_eur")
+        if _blank(name) and _blank(balance):
+            continue
+        if _blank(name):
+            errors.append(f"a balance of {balance} has no account name")
+            continue
+        name = str(name).strip()
+        if category not in CASH_CATEGORIES:
+            errors.append(f"{name}: category must be one of {', '.join(CASH_CATEGORIES)}, not {category!r}")
+            continue
+        amount = _coerce_float(balance)
+        if amount is None or amount < 0:
+            errors.append(f"{name}: balance must be a number of euros, zero or more")
+            continue
+        if name.casefold() in seen:
+            errors.append(f"{name}: listed twice; keep one row per account")
+            continue
+        seen.add(name.casefold())
+        updated = row.get("updated")
+        accounts.append(CashAccount(name, category, amount, None if _blank(updated) else str(updated)))
+    return accounts, errors
+
+
+def account_documents(accounts: Iterable[CashAccount], previous: Iterable[CashAccount], today: str) -> list[dict]:
+    """The documents to save, dated so "last saved" means the balance was last confirmed.
+
+    An account whose category and balance are unchanged keeps the date it had: saving
+    the table after deleting one row, or editing one balance, must not claim every
+    other balance was checked today.
+    """
+    before = {a.name.casefold(): a for a in previous}
+    documents = []
+    for account in accounts:
+        old = before.get(account.name.casefold())
+        unchanged = (
+            old is not None
+            and old.updated
+            and old.category == account.category
+            and old.balance_eur == account.balance_eur
+        )
+        documents.append(
+            {
+                "name": account.name,
+                "category": account.category,
+                "balance_eur": account.balance_eur,
+                "updated": old.updated if unchanged else today,
+            }
+        )
+    return documents
+
+
+#: The categories a portfolio design sets a target for, in drawing order. The cash
+#: reserve is not one of them: it is outside the portfolio.
+DESIGN_BANDS = ("Dry Powder", "Bonds", "Equity funds", "Stocks")
+#: Every band a holding can land in. A category with no band of its own goes to
+#: "Other", so nothing is silently left out of the total; a design targets 0% there.
+ALLOCATION_BANDS = DESIGN_BANDS + ("Other",)
+BAND_BY_CATEGORY = {
+    "Dry Powder": "Dry Powder",
+    # A money-market fund held in the portfolio is money parked there to be invested.
+    "Cash/Money Market": "Dry Powder",
+    "Bonds": "Bonds",
+    "Fixed Income": "Bonds",
+    # By the category a holding was logged with: a bond fund logged as "Fund"
+    # counts here until its category is changed to Bonds.
+    "Fund": "Equity funds",
+    "ETF": "Equity funds",
+    "Stock": "Stocks",
+}
+
+
+def allocation_band(category: str | None) -> str | None:
+    """The band a category counts in, or None for the cash reserve, which is in none."""
+    if category == RESERVE_CATEGORY:
+        return None
+    return BAND_BY_CATEGORY.get(category or "", "Other")
+
+
+def capital_by_band(holdings: Iterable[tuple[str | None, float | None]]) -> dict[str, float]:
+    """The portfolio as ``{band: EUR}`` over ``(category, eur)`` pairs, in drawing order.
+
+    Empty bands are left out. The cash reserve is skipped, so callers can pass every
+    account without filtering. Holdings without a value (a position that could not
+    be priced) contribute nothing; the caller reports them.
+    """
+    totals = {band: 0.0 for band in ALLOCATION_BANDS}
+    for category, eur in holdings:
+        band = allocation_band(category)
+        if eur and band:
+            totals[band] += float(eur)
+    return {band: eur for band, eur in totals.items() if eur > 0}
+
+
+# ---------------------------------------------------------------------------
+# Portfolio design: target allocation and the gap to it
+# ---------------------------------------------------------------------------
+
+
+def round_to_total(shares: Mapping[str, float], total: int) -> dict[str, int]:
+    """Whole numbers in proportion to ``shares`` that add up to exactly ``total``.
+
+    Largest remainder first: plain rounding can land one off, and a design that
+    does not add up to 100 would not save. All zeros when there is nothing to share.
+    """
+    positive = {key: max(float(value), 0.0) for key, value in shares.items()}
+    weight = sum(positive.values())
+    if weight <= 0 or total <= 0:
+        return {key: 0 for key in shares}
+    exact = {key: value / weight * total for key, value in positive.items()}
+    whole = {key: math.floor(value) for key, value in exact.items()}
+    for key in sorted(exact, key=lambda k: exact[k] - whole[k], reverse=True)[: total - sum(whole.values())]:
+        whole[key] += 1
+    return whole
+
+
+def round_to_100(shares: Mapping[str, float]) -> dict[str, int]:
+    """Whole percentages that add up to exactly 100."""
+    return round_to_total(shares, 100)
+
+
+def rebalance(
+    values: Mapping[str, int], changed: str, locked: Iterable[str] = (), total: int = 100
+) -> dict[str, int]:
+    """Slider values after ``changed`` moved, still adding up to ``total``.
+
+    The difference is taken from, or given to, the other *unlocked* categories in
+    proportion to their current values. When they are all at zero there are no
+    proportions to keep, so it is shared equally. The moved value is clamped to what
+    the unlocked others can absorb; with every other category locked, it cannot move
+    at all and goes back to what the locked ones leave.
+    """
+    locked = set(locked) - {changed}
+    free = [key for key in values if key != changed and key not in locked]
+    room = total - sum(values[key] for key in locked)
+    out = dict(values)
+    if not free:
+        out[changed] = room
+        return out
+    out[changed] = min(max(int(values[changed]), 0), room)
+    weights = {key: values[key] for key in free}
+    if sum(weights.values()) <= 0:
+        weights = {key: 1 for key in free}
+    out.update(round_to_total(weights, room - out[changed]))
+    return out
+
+
+def clean_design(targets: Mapping | None) -> tuple[dict[str, float] | None, list[str]]:
+    """A saved design as ``{band: percent}`` for the design categories, or ``None``.
+
+    A missing category counts as 0%. An unknown category, a value outside 0-100
+    or a total other than 100% makes the design unusable: showing gaps against a
+    target that does not add up would be showing gaps against nothing.
+    """
+    if not targets:
+        return None, []
+    problems = [f"unknown category {key!r}" for key in targets if key not in DESIGN_BANDS]
+    design: dict[str, float] = {}
+    for band in DESIGN_BANDS:
+        value = _coerce_float(targets.get(band, 0.0))
+        if value is None or not 0.0 <= value <= 100.0:
+            problems.append(f"{band}: {targets.get(band)!r} is not a percentage between 0 and 100")
+        else:
+            design[band] = value
+    if not problems and abs(sum(design.values()) - 100.0) > 0.01:
+        problems.append(f"adds up to {sum(design.values()):g}%, not 100%")
+    return (None, problems) if problems else (design, [])
+
+
+@dataclass(frozen=True)
+class BandDrift:
+    """How far one category sits from its design, at today's total capital."""
+
+    band: str
+    current_eur: float
+    current_pct: float
+    design_pct: float
+    design_eur: float
+
+    @property
+    def off_by_pp(self) -> float:
+        """Current minus design, in percentage points: positive means over the design."""
+        return self.current_pct - self.design_pct
+
+    @property
+    def to_design_eur(self) -> float:
+        """Euros to add (+) or take out (-) of this category to match the design."""
+        return self.design_eur - self.current_eur
+
+
+def allocation_drift(current: Mapping[str, float], design: Mapping[str, float]) -> list[BandDrift]:
+    """One row per design category, plus Other when anything sits there (its design is 0%).
+
+    ``current`` is ``{band: EUR}`` as from :func:`capital_by_band`. With a design
+    that adds up to 100%, the euro moves add up to zero: rebalancing shifts money
+    between categories without changing the total.
+    """
+    # Only the portfolio's own bands count, so a stray key (the reserve, say) cannot
+    # quietly inflate the base every percentage is taken of.
+    capital = sum(float(current.get(band, 0.0)) for band in ALLOCATION_BANDS)
+    rows = []
+    for band in ALLOCATION_BANDS:
+        eur = float(current.get(band, 0.0))
+        if band not in DESIGN_BANDS and eur <= 0:
+            continue
+        design_pct = float(design.get(band, 0.0))
+        rows.append(
+            BandDrift(
+                band=band,
+                current_eur=eur,
+                current_pct=eur / capital * 100 if capital > 0 else 0.0,
+                design_pct=design_pct,
+                design_eur=capital * design_pct / 100,
+            )
+        )
+    return rows

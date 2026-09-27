@@ -9,8 +9,10 @@ import portfolio_math as pm
 from database import (
     delete_transaction,
     get_all_transactions,
+    get_cash_accounts,
     get_timestamp,
     record_transaction,
+    save_cash_accounts,
     update_transaction,
 )
 
@@ -512,3 +514,102 @@ else:
         original = next((d for d in raw_logs if d.get("_doc_id") == selected_id), None)
         if original is not None:
             _edit_form(original)
+
+
+# ======================================================================================================================
+# --- CASH ACCOUNTS ---
+# ======================================================================================================================
+
+st.markdown("---")
+st.subheader("Cash accounts")
+st.caption(
+    "One row per bank account, balance in EUR. **Cash** is money in current accounts: your "
+    "day-to-day cash and emergency fund, shown on the dashboard as the cash reserve and kept "
+    "outside the portfolio. **Dry Powder** is money set aside to invest: part of the portfolio, "
+    "its weights, charts and design. Add or change rows, then save. To delete an account, either "
+    "tick the box that appears at the left of its row when you point at it, click the bin above "
+    "the table and save, or use Delete an account below."
+)
+
+cash_flash = st.session_state.pop("cash_flash", None)
+if cash_flash:
+    st.success(cash_flash)
+
+stored_accounts, stored_problems = pm.clean_cash_accounts(get_cash_accounts())
+for problem in stored_problems:
+    st.warning(f"Stored account skipped: {problem}")
+
+with st.form("cash_form"):
+    edited = st.data_editor(
+        pd.DataFrame(
+            [{"name": a.name, "category": a.category, "balance_eur": a.balance_eur} for a in stored_accounts],
+            columns=["name", "category", "balance_eur"],
+        ),
+        num_rows="dynamic",
+        hide_index=True,
+        width="stretch",
+        # A fresh key after each save: the editor keeps its edits as changes on top
+        # of the data it was given, and replaying them onto the saved list would
+        # add every new row a second time.
+        key=f"cash_editor_{st.session_state.get('cash_rev', 0)}",
+        column_config={
+            "name": st.column_config.TextColumn("Account", required=True),
+            "category": st.column_config.SelectboxColumn(
+                "Category", options=list(pm.CASH_CATEGORIES), required=True, default="Cash"
+            ),
+            "balance_eur": st.column_config.NumberColumn(
+                "Balance (EUR)", min_value=0.0, format="€ %.2f", required=True
+            ),
+        },
+    )
+    save_cash = st.form_submit_button("Save balances", type="primary", key="save_cash")
+
+if save_cash:
+    accounts, errors = pm.clean_cash_accounts(edited.to_dict("records"))
+    if errors:
+        for error in errors:
+            st.error(f"Not saved: {error}")
+    else:
+        try:
+            # Unchanged accounts keep their dates; only a new or changed balance is dated today.
+            save_cash_accounts(pm.account_documents(accounts, stored_accounts, date.today().isoformat()))
+        except Exception as exc:
+            st.error(f"Error saving balances: {exc}")
+        else:
+            st.session_state["cash_flash"] = (
+                f"Saved {len(accounts)} account(s), €{sum(a.balance_eur for a in accounts):,.2f} in total."
+            )
+            st.session_state["cash_rev"] = st.session_state.get("cash_rev", 0) + 1
+            st.rerun()
+
+if stored_accounts:
+    saved = max((a.updated for a in stored_accounts if a.updated), default=None)
+    st.caption(
+        " · ".join(
+            f"{c} €{sum(a.balance_eur for a in stored_accounts if a.category == c):,.2f}"
+            for c in pm.CASH_CATEGORIES
+        )
+        + (f" · last saved {saved}" if saved else "")
+    )
+
+    # The table can delete rows too, but only through a hidden row checkbox and a bin
+    # icon; this is the obvious way. Like a transaction, it asks for a confirmation.
+    # Keyed by the save counter, so the controls start fresh after every change.
+    rev = st.session_state.get("cash_rev", 0)
+    pick, confirm, delete = st.columns([3, 3, 1], vertical_alignment="bottom")
+    doomed = pick.selectbox("Delete an account", [a.name for a in stored_accounts], key=f"cash_delete_pick_{rev}")
+    sure = confirm.checkbox("Yes, delete it permanently", key=f"cash_delete_confirm_{rev}")
+    if delete.button("Delete", key=f"cash_delete_{rev}", width="stretch"):
+        if not sure:
+            st.error("Tick the confirmation box to delete the account.")
+        else:
+            try:
+                # The others are unchanged, so they keep their dates.
+                remaining = [a for a in stored_accounts if a.name != doomed]
+                save_cash_accounts(pm.account_documents(remaining, stored_accounts, date.today().isoformat()))
+            except Exception as exc:
+                st.error(f"Error deleting the account: {exc}")
+            else:
+                st.session_state["cash_flash"] = f"Deleted the account {doomed}."
+                st.session_state["cash_rev"] = rev + 1
+                st.rerun()
