@@ -176,7 +176,7 @@ def designer() -> None:
         )
     fig.update_layout(
         barmode="stack",
-        height=230,
+        height=345,  # was 230; 50% taller like every chart in the app
         margin=dict(l=10, r=10, t=10, b=10),
         xaxis=dict(range=[0, 100], ticksuffix="%"),
         # "normal" so the legend reads left to right like the bars; stacked bars reverse it by default.
