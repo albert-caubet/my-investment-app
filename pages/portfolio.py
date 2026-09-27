@@ -393,8 +393,8 @@ def _sign_scaled_colours(series: pd.Series) -> list[str]:
     return styles
 
 
-def _warm_scaled_colours(series: pd.Series) -> list[str]:
-    """Warm tan shades scaled independently from the largest value."""
+def _size_scaled_colours(series: pd.Series) -> list[str]:
+    """Blue shades scaled by size against the largest value: "how big", not good or bad."""
     values = pd.to_numeric(series, errors="coerce")
     largest = values[values > 0].max() if (values > 0).any() else 0.0
 
@@ -406,7 +406,7 @@ def _warm_scaled_colours(series: pd.Series) -> list[str]:
         share = value / largest if largest else 1.0
         alpha = 0.18 + 0.62 * share
         text = " color: #ffffff;" if alpha > 0.55 else ""
-        styles.append(f"background-color: rgba(181, 126, 71, {alpha:.3f});{text}")
+        styles.append(f"background-color: rgba(31, 119, 180, {alpha:.3f});{text}")  # blue
     return styles
 
 
@@ -507,7 +507,7 @@ if open_ids:
                 if c in summary
             ],
         ).apply(
-            _warm_scaled_colours,
+            _size_scaled_colours,
             subset=[
                 c for c in ("Market Value (EUR)", "Weight (%)") if c in summary
             ],
@@ -608,7 +608,7 @@ if drift:
         )
         # Shaded by size, not red and green: being over or under a design is neither a
         # gain nor a loss, just a distance.
-        .apply(lambda s: _warm_scaled_colours(s.abs()), subset=["Off by (pp)"]),
+        .apply(lambda s: _size_scaled_colours(s.abs()), subset=["Off by (pp)"]),
         column_config={
             "Off by (pp)": st.column_config.Column(
                 "Off by (pp)",
