@@ -16,12 +16,15 @@ design_page = st.Page("pages/design.py", title="Portfolio design", icon="🧭")
 macro_page = st.Page("pages/macro.py", title="Macro", icon="🌍")
 screener_page = st.Page("pages/screener.py", title="Screener", icon="🔎")
 report_page = st.Page("pages/report.py", title="Weekly report", icon="📄")
+# A sandbox: charts of anything found by search. Unlike the other analysis pages it
+# fetches from Yahoo Finance and FRED itself, as the dashboard does.
+plotter_page = st.Page("pages/plotter.py", title="Custom charts", icon="📈")
 
 # Create Navigation
 pg = st.navigation(
     {
         "Portfolio": [portfolio_page, transactions_page],
-        "Analysis": [design_page, macro_page, screener_page, report_page],
+        "Analysis": [design_page, macro_page, screener_page, plotter_page, report_page],
     }
 )
 

@@ -17,7 +17,7 @@ from invest.data.files import (
     parse_philly_csv,
     parse_shiller_rows,
 )
-from invest.data.fred import parse_api_observations, parse_fredgraph_csv
+from invest.data.fred import parse_api_observations, parse_fredgraph_csv, parse_series_list
 from invest.data.releases import parse_releases
 
 FIX = Path(__file__).parent / "fixtures"
@@ -63,6 +63,27 @@ def test_fred_api_observations_keep_vintage_dates():
     assert len(frame) == 2  # the "." is a not-yet-published value, dropped
     assert frame["vintage_date"].tolist() == [date(2026, 2, 6), date(2026, 3, 6)]
     assert frame["value"].tolist() == [150.0, 143.0]
+
+
+def test_fred_search_rows_keep_what_a_reader_picks_a_series_by():
+    """A search response in the shape FRED documents for ``fred/series/search``."""
+    rows = parse_series_list(json.loads(_read("fred_series_search.json")))
+    assert [r["id"] for r in rows] == ["UNRATE", "ICSA", "UNRATENSA"]  # FRED's order, most relevant first
+    assert rows[0] == {
+        "id": "UNRATE",
+        "title": "Unemployment Rate",
+        "frequency": "Monthly",
+        "units": "%",  # the short form labels a chart without crowding it
+        "seasonal_adjustment": "SA",
+        "observation_start": "1948-01-01",
+        "observation_end": "2026-09-01",
+    }
+    assert rows[1]["frequency"] == "Weekly"  # "Weekly, Ending Saturday" is too long for a label
+
+
+def test_fred_search_rejects_an_error_payload():
+    with pytest.raises(ValueError):
+        parse_series_list({"error_code": 400, "error_message": "Bad Request. The value for variable api_key is not registered."})
 
 
 # --- SDMX (ECB, OECD, BIS) --------------------------------------------------

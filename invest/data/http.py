@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import gzip
 import json
+import re
 import ssl
 import time
 import urllib.error
@@ -40,8 +41,18 @@ def tls_context() -> ssl.SSLContext:
     return truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
 
 
+_API_KEY = re.compile(r"(api_key=)[^&\s]+")
+
+
 class FetchError(RuntimeError):
-    """A request failed after its retries. The message names the URL and cause."""
+    """A request failed after its retries. The message names the URL and cause.
+
+    The value of an ``api_key`` parameter is blanked out of it: FRED takes its key in
+    the URL, and the message is shown on pages and kept in the fetch log.
+    """
+
+    def __init__(self, message: str):
+        super().__init__(_API_KEY.sub(r"\1***", str(message)))
 
 
 def fetch_bytes(

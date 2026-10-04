@@ -47,6 +47,15 @@ def test_context_is_built_once():
     assert http.tls_context() is http.tls_context()
 
 
+def test_a_failed_request_never_prints_an_api_key():
+    """FRED takes its key in the URL, and the URL starts every request error, which pages show."""
+    error = http.FetchError(
+        "https://api.stlouisfed.org/fred/series/search?search_text=cpi&api_key=0123abcd&file_type=json: HTTP Error 400"
+    )
+    assert "0123abcd" not in str(error)
+    assert "search_text=cpi&api_key=***&file_type=json: HTTP Error 400" in str(error)
+
+
 def test_fetch_bytes_passes_the_context(monkeypatch):
     seen = {}
 

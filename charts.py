@@ -10,9 +10,12 @@ figure through :func:`readable` once, last, right before ``st.plotly_chart``, so
 also reaches annotations added along the way.
 
 The time-range presets a price chart offers live here too, with the arithmetic that
-turns a preset into the dates it shows.
+turns a preset into the dates it shows, and the controls of a grid of charts, so the
+pages that show one offer the same choices.
 """
 
+from collections.abc import Mapping
+from dataclasses import dataclass
 from datetime import date
 from typing import Sequence
 
@@ -146,3 +149,83 @@ def clamp_window(window: tuple[date, date], first: date, last: date) -> tuple[da
     """``window`` cut to the history from ``first`` to ``last``; all of it when nothing of the window is left."""
     start, end = max(window[0], first), min(window[1], last)
     return (start, end) if start < end else (first, last)
+
+
+@dataclass(frozen=True)
+class SeriesWindow:
+    """The series a chart draws together, each cut to the dates shown, and why any is left out."""
+
+    series: dict[str, pd.Series]
+    start: date | None  # the first date shown
+    missing: dict[str, str]  # why a series shows nothing
+    common_start: bool = False  # rebased from the first day every series has, later than some begin
+
+
+def window_series(series: Mapping[str, pd.Series], preset: str, *, rebase: bool = False) -> SeriesWindow:
+    """The part of each series a chart shows for a preset range, keyed as given.
+
+    The range counts back from the latest observation of any of them, so a chart of a
+    daily price and a monthly indicator ends on the last price.
+
+    To be rebased, as a % change, the series start on one common day: the first in the
+    range on which every one of them has data. Lines rebased on different days do not
+    compare. A series is left out when it ends before the others start, or when it is
+    zero or below on that day, where a % change does not exist.
+    """
+    present = {key: s.dropna().sort_index() for key, s in series.items()}
+    missing = {key: "no data" for key, s in present.items() if s.empty}
+    present = {key: s for key, s in present.items() if not s.empty}
+    if not present:
+        return SeriesWindow({}, None, missing)
+
+    first = min(s.index[0] for s in present.values()).date()
+    last = max(s.index[-1] for s in present.values()).date()
+    start = pd.Timestamp(range_start(preset, first, last))
+    shown = {}
+    for key, s in present.items():
+        if (cut := s[s.index >= start]).empty:
+            missing[key] = "nothing in the time range"
+        else:
+            shown[key] = cut
+    if not rebase or not shown:
+        return SeriesWindow(shown, start.date() if shown else None, missing)
+
+    while True:  # each pass leaves at least one series out, or ends
+        common = max(s.index[0] for s in shown.values())
+        cut = {key: s[s.index >= common] for key, s in shown.items()}
+        out = {
+            key: "ends before the others start" if c.empty
+            else "zero or below where the others start, so it has no % change"
+            for key, c in cut.items()
+            if c.empty or c.iloc[0] <= 0
+        }
+        if not out:
+            earliest = min(s.index[0] for s in shown.values())
+            return SeriesWindow(cut, common.date(), missing, common_start=common > earliest)
+        missing.update(out)
+        shown = {key: s for key, s in shown.items() if key not in out}
+        if not shown:
+            return SeriesWindow({}, None, missing)
+
+
+def grid_controls(container, *, value: str, change_help: str) -> tuple[int, int, bool]:
+    """Charts per row, chart height and y axis, for a page that lays its charts out in a grid.
+
+    All kept in the URL (?charts_per_row=3&chart_height=Large&y_axis=Change), so a reload
+    or a bookmark keeps the choice. The URL carries an option's label, so the labels stay
+    plain words: "% change" would read %25+change there. ``value`` names the y axis that
+    is not a change: "Price" on the dashboard.
+
+    Returns the charts per row, the height a chart is drawn at, in pixels, and whether
+    the y axis is in % change.
+    """
+    per_row = container.segmented_control(
+        "Charts per row", (1, 2, 3), default=2, required=True, key="charts_per_row", bind="query-params"
+    )
+    height = container.segmented_control(
+        "Chart height", tuple(HEIGHTS), default="Medium", required=True, key="chart_height", bind="query-params"
+    )
+    in_pct = container.segmented_control(
+        "Y axis", (value, "Change"), default=value, required=True, key="y_axis", bind="query-params", help=change_help
+    ) == "Change"
+    return per_row, HEIGHTS[height], in_pct

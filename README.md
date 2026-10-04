@@ -36,6 +36,18 @@ and sells, and see valuation and performance in EUR.
     the unlocked others, in proportion to their size, and a lock keeps a category fixed.
   - Today's allocation and the design are drawn as two bars, with the euros each category
     would need to move to get there. Save the design; the dashboard measures against it.
+- **Custom charts** (Analysis)
+  - A sandbox: add as many charts as you like, each with up to eight series, found with the
+    search box on the chart. It searches Yahoo Finance by name, ticker or ISIN (stocks,
+    ETFs, funds, indices, futures, currencies, crypto), the macro catalog the refresh job
+    stores, read from DuckDB, and, with a `FRED_API_KEY`, every series FRED publishes;
+    without the key, `fred:` and an id (`fred:CPIAUCSL`) charts any FRED series.
+  - The dashboard's time range (1M to Max), charts per row, chart height and y axis.
+    In % change, a chart's series start together on the first day they all have data; in
+    value, series in different units or currencies get a panel each on one time axis,
+    rather than a second scale. A series keeps its colour when another is taken off.
+  - The charts are kept in the page URL (`?chart=AAPL,MSFT&chart=macro:US_CPI`), with the
+    controls, so a reload or a bookmark brings them back.
 - **Cloud Database**
   - Firebase Firestore, for multi-device sync.
 
@@ -205,8 +217,9 @@ carrying its observation date and source, nothing filled in silently.
   lags applied, results stored with the code version). `python -m invest.jobs.vintages` loads
   ALFRED vintages for the revision-prone series when a FRED key is available.
 - **Secrets**: from the environment or `.streamlit/secrets.toml` (gitignored):
-  `FRED_API_KEY` (optional), `SEC_USER_AGENT` (an app name plus a contact address, required
-  by EDGAR; the client refuses to run without one).
+  `FRED_API_KEY` (optional; it adds ALFRED vintages and FRED's search on the Custom charts
+  page, and is blanked out of every request error), `SEC_USER_AGENT` (an app name plus a
+  contact address, required by EDGAR; the client refuses to run without one).
 - **Paths**: `INVEST_DATA_DIR` moves the database, downloads and report archive together;
   `INVEST_DB` overrides the database file alone.
 
@@ -215,12 +228,17 @@ carrying its observation date and source, nothing filled in silently.
 - `app.py`: Entry point and navigation.
 - `portfolio_math.py`: Pure calculation engine — positions, cost basis, valuation, CAPM.
   No I/O, so every figure it produces is unit-testable.
-- `market_data.py`: All network access and caching (prices, FX, metadata, ISIN lookup).
+- `market_data.py`: All network access and caching (prices, FX, metadata, ISIN lookup, and
+  the searches and histories behind Custom charts).
 - `database.py`: Firestore initialisation and helpers.
 - `pages/portfolio.py`: Dashboard — loads, computes, renders.
 - `pages/transactions.py`: Trade entry and history log.
 - `pages/macro.py`, `pages/screener.py`, `pages/report.py`: the analysis pages; they read
   DuckDB only.
+- `pages/plotter.py`: Custom charts. Searches through `invest/data/search.py` (the catalog,
+  Yahoo's and FRED's answers, ranked as one list) and fetches through `market_data.py`.
+- `charts.py`: the look every chart shares, the time-range presets and the grid controls
+  the dashboard and Custom charts both offer.
 - `invest/`: the analysis package. `data/` (DuckDB store and every source client), `macro/`
   (catalog, indicators, derived series, regime rules, scorecard, market charts), `positioning/` (COT, 13F,
   Form 4), `fundamentals/` (facts, metrics, screens, valuation, universe), `portfolio/`

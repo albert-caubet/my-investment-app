@@ -378,3 +378,98 @@ def live_valuations(
         for aid, pos in positions.items()
     }
     return valuations, listing_ccy, rates
+
+
+# ---------------------------------------------------------------------------
+# Any symbol or series, found by search (the custom charts page)
+# ---------------------------------------------------------------------------
+# Each of these raises when it gets nothing, rather than returning something empty:
+# Streamlit does not cache a call that raises, so a failed request is retried on the
+# next run instead of being remembered as "nothing there" for hours.
+
+
+@st.cache_data(ttl=3_600, show_spinner=False)
+def search_yahoo(query: str) -> list[dict]:
+    """Yahoo Finance's own search, by name, ticker or ISIN: its quote rows, best first."""
+    return yf.Search(
+        query, max_results=10, news_count=0, lists_count=0, include_cb=False, recommended=0, raise_errors=True
+    ).quotes
+
+
+@st.cache_data(ttl=43_200, show_spinner=False)
+def fetch_close_history(symbol: str) -> pd.Series:
+    """Every daily close Yahoo has for one symbol, on a plain date index.
+
+    Unadjusted, like the dashboard's charts: the price as it was quoted on the day,
+    dividends paid out not added back.
+    """
+    raw = yf.download(symbol, period="max", progress=False, auto_adjust=False)
+    if raw is None or raw.empty:
+        raise LookupError(f"Yahoo Finance has no prices for {symbol}")
+    close = raw["Close"]
+    if isinstance(close, pd.DataFrame):
+        close = close.iloc[:, 0]
+    close = pd.to_numeric(close, errors="coerce").dropna()
+    if close.empty:
+        raise LookupError(f"Yahoo Finance has no prices for {symbol}")
+    index = pd.DatetimeIndex(close.index)
+    if index.tz is not None:
+        index = index.tz_localize(None)
+    return pd.Series(close.to_numpy(dtype=float), index=index.normalize(), name=symbol)
+
+
+@st.cache_data(ttl=86_400, show_spinner=False)
+def fetch_symbol_meta(symbol: str) -> dict:
+    """Name, currency and kind of one symbol, from the light chart metadata.
+
+    The currency keeps Yahoo's case: London quotes many prices in pence, ``GBp``,
+    which upper-cased would read as pounds.
+    """
+    meta = yf.Ticker(symbol).get_history_metadata() or {}
+    if not meta.get("currency") and not meta.get("instrumentType"):
+        raise LookupError(f"Yahoo Finance does not know {symbol}")
+    return {
+        "name": meta.get("longName") or meta.get("shortName") or symbol,
+        "currency": meta.get("currency") or None,
+        "kind": meta.get("instrumentType"),
+    }
+
+
+@st.cache_data(ttl=3_600, show_spinner=False)
+def search_fred(query: str) -> list[dict]:
+    """FRED's search over every series it publishes. Needs ``FRED_API_KEY``."""
+    from invest import secrets
+    from invest.data import fred
+
+    key = secrets.fred_api_key()
+    if not key:
+        raise LookupError("FRED search needs a FRED_API_KEY")
+    return fred.search_series(query, api_key=key)
+
+
+@st.cache_data(ttl=43_200, show_spinner=False)
+def fetch_fred_series(series_id: str) -> pd.Series:
+    """One FRED series, current vintage. No key needed: without one it comes from the public CSV."""
+    from invest import secrets
+    from invest.data import fred
+
+    frame = fred.fetch_series(series_id, api_key=secrets.fred_api_key())
+    if frame.empty:
+        raise LookupError(f"FRED has no observations for {series_id}")
+    return pd.Series(
+        frame["value"].to_numpy(dtype=float),
+        index=pd.DatetimeIndex(pd.to_datetime(frame["obs_date"])),
+        name=series_id,
+    )
+
+
+@st.cache_data(ttl=86_400, show_spinner=False)
+def fetch_fred_meta(series_id: str) -> dict:
+    """Title and units of one FRED series. Needs ``FRED_API_KEY``."""
+    from invest import secrets
+    from invest.data import fred
+
+    key = secrets.fred_api_key()
+    if not key:
+        raise LookupError("FRED series details need a FRED_API_KEY")
+    return fred.series_info(series_id, api_key=key)

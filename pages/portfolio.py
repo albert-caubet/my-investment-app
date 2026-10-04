@@ -709,17 +709,9 @@ if open_ids:
         "Time range", charts.RANGES, default="3Y", required=True, key="time_range", bind="query-params"
     )
     selected_period = md.RANGE_PERIODS[selected_range]
-    per_row = controls.segmented_control(
-        "Charts per row", (1, 2, 3), default=2, required=True, key="charts_per_row", bind="query-params"
+    per_row, chart_height, in_pct = charts.grid_controls(
+        controls, value="Price", change_help="Change: each chart in % from its first close in the time range."
     )
-    chart_height = controls.segmented_control(
-        "Chart height", tuple(charts.HEIGHTS), default="Medium", required=True, key="chart_height",
-        bind="query-params",
-    )
-    in_pct = controls.segmented_control(
-        "Y axis", ("Price", "Change"), default="Price", required=True, key="y_axis", bind="query-params",
-        help="Change: each chart in % from its first close in the time range.",
-    ) == "Change"
     notes = []
     if ref_month:
         notes.append(
@@ -859,4 +851,4 @@ if open_ids:
                 showlegend=True, hovermode="x unified",
                 legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
             )
-            st.plotly_chart(charts.readable(fig, height=charts.HEIGHTS[chart_height]), width="stretch")
+            st.plotly_chart(charts.readable(fig, height=chart_height), width="stretch")
