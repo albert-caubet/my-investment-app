@@ -13,8 +13,10 @@ import os
 from datetime import datetime
 
 import pandas as pd
+import plotly.graph_objects as go
 import streamlit as st
 
+import charts
 import job_panel
 from invest import secrets
 from invest.data.cache import Store
@@ -90,6 +92,65 @@ def _history(db: str, version: float, cik: int) -> pd.DataFrame:
     with Store(db, read_only=True) as store:
         facts = store.read_facts(cik)
     return fundamentals_as_of(facts).history_frame()
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def _prices(db: str, version: float, symbol: str) -> tuple[pd.Series, str | None]:
+    with Store(db, read_only=True) as store:
+        return store.read_prices(symbol), store.price_currency(symbol)
+
+
+RANGE_KEY, WINDOW_KEY = "price_range", "price_window"
+
+
+def _window_dragged() -> None:
+    """A dragged window is no preset's: no button stays lit for dates it no longer shows."""
+    st.session_state[RANGE_KEY] = None
+
+
+@st.fragment  # a range button or the slider reruns the chart only, not the screen above it
+def _price_chart(symbol: str, name: str) -> None:
+    prices, currency = _prices(str(DB), _version(), symbol)
+    if prices.empty:
+        st.caption(f"No prices stored for {symbol}. Rebuilding the screener table downloads them.")
+        return
+    first, last = prices.index[0].date(), prices.index[-1].date()
+
+    # Both values are set here, before the widgets, and never passed as their defaults:
+    # Streamlit warns when a widget has a default and Session State sets it too.
+    st.session_state.setdefault(RANGE_KEY, charts.DEFAULT_RANGE)
+    preset = st.session_state[RANGE_KEY]
+    if preset:
+        st.session_state[WINDOW_KEY] = (charts.range_start(preset, first, last), last)
+    else:  # dragged, maybe on another company's chart: kept as far as this history allows
+        st.session_state[WINDOW_KEY] = charts.clamp_window(st.session_state.get(WINDOW_KEY, (first, last)), first, last)
+
+    left, right = st.columns(2, vertical_alignment="bottom")
+    left.segmented_control("Range", charts.RANGES, key=RANGE_KEY)
+    start, end = right.slider("Dates shown", min_value=first, max_value=last, key=WINDOW_KEY,
+                              on_change=_window_dragged)
+
+    shown = prices[pd.Timestamp(start):pd.Timestamp(end)]
+    if shown.empty:
+        st.caption("No trading day in the dates shown.")
+        return
+    # Short enough not to be cut on a narrow screen: Plotly does not wrap a title.
+    title = f"{name} ({symbol})"
+    if len(shown) > 1:
+        title += f": {shown.iloc[-1] / shown.iloc[0] - 1:+.1%}"
+    fig = go.Figure(go.Scatter(
+        x=shown.index, y=shown.to_numpy(), name=symbol, mode="lines" if len(shown) > 1 else "markers",
+        line=dict(color="#1f77b4", width=2),
+        hovertemplate=f"%{{y:,.2f}} {currency or ''}<extra></extra>",
+    ))
+    fig.update_layout(
+        title=title, template="plotly_white", hovermode="x unified", showlegend=False,
+        xaxis_hoverformat="%Y-%m-%d", yaxis_title=f"Daily close ({currency or 'currency not recorded'})",
+        height=380,  # charts.readable makes it taller
+    )
+    st.plotly_chart(charts.readable(fig), width="stretch")
+    st.caption(f"The change in the title runs from the first close shown to the last. Closes as stored by the "
+               f"screener build, {first} to {last}, in the listing currency: adjusted for splits, not for dividends.")
 
 
 try:
@@ -216,6 +277,8 @@ d2.metric("Conservative value / share", f"{row.get('value_conservative'):,.2f}" 
           help="The lower of EPV and DCF per share, in the currency of the accounts.")
 d3.metric("Margin of safety", f"{row.get('mos_conservative'):+.0%}" if pd.notna(row.get("mos_conservative")) else "–")
 d4.metric("Data to", str(row.get("period_end") or "–"), help=f"basis: {row.get('basis')}; fiscal year end {row.get('fy_end')}")
+
+_price_chart(pick, row.get("name") if pd.notna(row.get("name")) else pick)
 
 with st.expander("Intrinsic value inputs", expanded=True):
     inputs = row.get("valuation_inputs") or {}

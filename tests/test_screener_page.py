@@ -1,6 +1,7 @@
 """Headless smoke test for the Screener page on a seeded temporary database."""
 
 import json
+from datetime import date
 from pathlib import Path
 
 import numpy as np
@@ -78,3 +79,51 @@ def test_screener_page_without_a_table_explains_what_to_run(tmp_path, monkeypatc
     at = _screener(AppTest.from_file(str(ROOT / "app.py"), default_timeout=120).run())
     assert not at.exception
     assert any("invest.jobs.fundamentals" in i.value for i in at.info)
+
+
+def _chart_layout(at: AppTest) -> dict:
+    charts_shown = at.get("plotly_chart")
+    assert len(charts_shown) == 1
+    return json.loads(charts_shown[0].proto.spec)["layout"]
+
+
+def _company(at: AppTest):
+    return next(s for s in at.selectbox if s.label == "Company")
+
+
+def test_screener_page_charts_the_picked_companys_price_over_the_last_year(seeded_db):
+    at = _screener(AppTest.from_file(str(ROOT / "app.py"), default_timeout=120).run())
+    assert not at.exception
+    pick = _company(at).value
+    name = {"MMM": "3M CO", "SAP": "SAP SE"}[pick]  # as seeded; the bank is not ranked
+    layout = _chart_layout(at)
+    assert layout["title"]["text"].startswith(f"{name} ({pick}): ")
+    assert layout["yaxis"]["title"]["text"] == "Daily close (USD)"
+    assert at.button_group(key="price_range").value == "1Y"
+    assert at.slider(key="price_window").value == (date(2025, 9, 9), date(2026, 9, 9))
+
+
+def test_a_range_button_sets_the_slider_and_dragging_the_slider_clears_the_button(seeded_db):
+    at = _screener(AppTest.from_file(str(ROOT / "app.py"), default_timeout=120).run())
+    at.button_group(key="price_range").set_value("Max").run()
+    assert not at.exception
+    assert at.slider(key="price_window").value == (date(2016, 1, 1), date(2026, 9, 9))
+
+    at.slider(key="price_window").set_value((date(2020, 1, 1), date(2021, 6, 30))).run()
+    assert not at.exception
+    assert at.button_group(key="price_range").value is None
+    assert at.slider(key="price_window").value == (date(2020, 1, 1), date(2021, 6, 30))
+
+
+def test_the_range_carries_over_to_the_next_company(seeded_db):
+    at = _screener(AppTest.from_file(str(ROOT / "app.py"), default_timeout=120).run())
+    at.slider(key="price_window").set_value((date(2020, 1, 1), date(2021, 6, 30))).run()
+    company = _company(at)
+    other = next(t for t in company.options if t != company.value)
+    company.select(other).run()
+    assert not at.exception
+    assert f"({other})" in _chart_layout(at)["title"]["text"]
+    assert at.slider(key="price_window").value == (date(2020, 1, 1), date(2021, 6, 30))
+
+    at.button_group(key="price_range").set_value("YTD").run()
+    assert at.slider(key="price_window").value == (date(2026, 1, 1), date(2026, 9, 9))

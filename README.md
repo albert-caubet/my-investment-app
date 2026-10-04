@@ -152,7 +152,8 @@ carrying its observation date and source, nothing filled in silently.
   scorecard. `--as-of DATE` builds the table using only facts filed by that date. The
   Screener page ranks the table (magic formula, quality-value composite, deep value,
   shareholder yield), shows every input, the fiscal-year history and the intrinsic-value
-  inputs, and keeps a watchlist in DuckDB.
+  inputs, charts the selected company's stored daily close over a range picked with presets
+  (1M to Max) or a date slider, and keeps a watchlist in DuckDB.
 - **Filings**: `python -m invest.jobs.filings` stores the last two 13F quarters for each
   manager in `config/managers.toml` and prints what changed (new positions, exits, changes
   above 25%, concentration), always with the filing lag and the long-only caveat stated.

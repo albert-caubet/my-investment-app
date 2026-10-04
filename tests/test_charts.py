@@ -1,4 +1,6 @@
-"""The shared chart look: every text element 50% larger than Streamlit's theme."""
+"""The shared chart look: every text element 50% larger than Streamlit's theme; time-range presets."""
+
+from datetime import date
 
 import plotly.express as px
 import plotly.graph_objects as go
@@ -81,3 +83,46 @@ def test_slice_and_bar_labels_keep_their_automatic_contrast():
     Plotly still puts white text on a dark slice."""
     fig = charts.readable(px.pie(values=[1, 2], names=["a", "b"]))
     assert fig.data[0].textfont.color is None and fig.data[0].insidetextfont.color is None
+
+
+# ------------------------------------------------------------------------------------------
+# Time-range presets
+# ------------------------------------------------------------------------------------------
+
+FIRST, LAST = date(2014, 10, 3), date(2026, 10, 2)
+
+
+def test_presets_count_back_from_the_last_price():
+    assert charts.range_start("1M", FIRST, LAST) == date(2026, 9, 2)
+    assert charts.range_start("6M", FIRST, LAST) == date(2026, 4, 2)
+    assert charts.range_start("1Y", FIRST, LAST) == date(2025, 10, 2)
+    assert charts.range_start("5Y", FIRST, LAST) == date(2021, 10, 2)
+
+
+def test_a_month_back_from_the_end_of_a_month_lands_on_the_shorter_months_end():
+    assert charts.range_start("1M", FIRST, date(2026, 3, 31)) == date(2026, 2, 28)
+
+
+def test_ytd_starts_on_the_first_of_january_of_the_last_prices_year():
+    assert charts.range_start("YTD", FIRST, LAST) == date(2026, 1, 1)
+
+
+def test_max_and_presets_longer_than_the_history_show_all_of_it():
+    assert charts.range_start("Max", FIRST, LAST) == FIRST
+    assert charts.range_start("5Y", date(2022, 1, 3), LAST) == date(2022, 1, 3)
+    assert charts.range_start("YTD", date(2026, 3, 2), LAST) == date(2026, 3, 2)
+
+
+def test_every_preset_has_a_start():
+    assert charts.DEFAULT_RANGE in charts.RANGES
+    for preset in charts.RANGES:
+        assert FIRST <= charts.range_start(preset, FIRST, LAST) < LAST
+
+
+def test_a_window_is_cut_to_the_history():
+    assert charts.clamp_window((date(2010, 1, 1), date(2030, 1, 1)), FIRST, LAST) == (FIRST, LAST)
+    assert charts.clamp_window((date(2020, 1, 1), date(2021, 1, 1)), FIRST, LAST) == (date(2020, 1, 1), date(2021, 1, 1))
+
+
+def test_a_window_outside_the_history_becomes_all_of_it():
+    assert charts.clamp_window((date(2000, 1, 1), date(2001, 1, 1)), FIRST, LAST) == (FIRST, LAST)

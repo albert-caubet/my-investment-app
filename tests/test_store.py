@@ -103,6 +103,16 @@ def test_prices_replace_on_same_date(store):
     assert store.price_symbols() == ["SPY"]
 
 
+def test_price_currency_is_the_latest_stored_and_none_when_never_stored(store):
+    idx = pd.to_datetime(["2026-01-02", "2026-01-05"])
+    store.upsert_prices("SAP", pd.DataFrame({"close": [100.0]}, index=idx[:1]), currency="EUR")
+    store.upsert_prices("SAP", pd.DataFrame({"close": [101.0]}, index=idx[1:]), currency="USD")
+    store.upsert_prices("^VIX", pd.DataFrame({"close": [15.0]}, index=idx[:1]))
+    assert store.price_currency("SAP") == "USD"
+    assert store.price_currency("^VIX") is None
+    assert store.price_currency("NOPE") is None
+
+
 def test_snapshots_latest_and_offset(store):
     run = store.start_run("test")
     store.save_snapshot(run, "scorecard", {"a": 1})

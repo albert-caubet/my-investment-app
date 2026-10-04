@@ -515,6 +515,14 @@ class Store:
         panel.index = pd.DatetimeIndex(pd.to_datetime(panel.index))
         return panel.astype(float)
 
+    def price_currency(self, symbol: str) -> str | None:
+        """The currency stored with the latest price that has one; None when none does."""
+        row = self.con.execute(
+            "SELECT currency FROM prices WHERE symbol = ? AND currency IS NOT NULL ORDER BY date DESC LIMIT 1",
+            [symbol],
+        ).fetchone()
+        return row[0] if row else None
+
     def price_symbols(self) -> list[str]:
         rows = self.con.execute("SELECT DISTINCT symbol FROM prices ORDER BY symbol").fetchall()
         return [r[0] for r in rows]

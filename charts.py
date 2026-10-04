@@ -7,8 +7,14 @@ all chart text is black. Charts are 50% taller too: a page sets the height a cha
 would naturally have (or none, for Streamlit's 450px default) and :func:`readable`
 scales it. Pass each figure through :func:`readable` once, last, right before
 ``st.plotly_chart``, so it also reaches annotations added along the way.
+
+The time-range presets a price chart offers live here too, with the arithmetic that
+turns a preset into the dates it shows.
 """
 
+from datetime import date
+
+import pandas as pd
 import streamlit as st
 
 #: Every chart is this much taller than the height its page asks for.
@@ -61,3 +67,37 @@ def readable(fig):
         )
     fig.update_annotations(font=dict(size=FONT, color=color))  # e.g. the cost-basis lines' labels
     return fig
+
+
+#: The preset ranges a price chart offers, shortest first. Max is the whole stored history.
+RANGES = ("1M", "6M", "YTD", "1Y", "3Y", "5Y", "Max")
+DEFAULT_RANGE = "1Y"
+_RANGE_OFFSETS = {
+    "1M": pd.DateOffset(months=1),
+    "6M": pd.DateOffset(months=6),
+    "1Y": pd.DateOffset(years=1),
+    "3Y": pd.DateOffset(years=3),
+    "5Y": pd.DateOffset(years=5),
+}
+
+
+def range_start(preset: str, first: date, last: date) -> date:
+    """The first date a preset shows, for a history that runs from ``first`` to ``last``.
+
+    Counted back from the last price rather than from today, so a history a few days
+    old still shows a full month. Never before ``first``: a preset longer than the
+    history shows all of it.
+    """
+    if preset == "Max":
+        start = first
+    elif preset == "YTD":
+        start = date(last.year, 1, 1)
+    else:
+        start = (pd.Timestamp(last) - _RANGE_OFFSETS[preset]).date()
+    return max(start, first)
+
+
+def clamp_window(window: tuple[date, date], first: date, last: date) -> tuple[date, date]:
+    """``window`` cut to the history from ``first`` to ``last``; all of it when nothing of the window is left."""
+    start, end = max(window[0], first), min(window[1], last)
+    return (start, end) if start < end else (first, last)
