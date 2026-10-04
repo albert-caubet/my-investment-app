@@ -691,6 +691,12 @@ if open_ids:
 # --- 3. ASSET PERFORMANCE HISTORIES ---
 # ==========================================================================================================
 
+
+def _on_axis(price, base: float | None):
+    """Where ``price`` sits on the y axis: itself, or its change since ``base`` (0.1 is +10%)."""
+    return price if base is None else price / base - 1
+
+
 if open_ids:
     st.markdown("---")
     st.subheader("Asset Performance & Transaction History")
@@ -708,8 +714,9 @@ if open_ids:
         "Select Time Range", options=list(time_options.keys()), index=2, width=250
     )
     selected_period = time_options[selected_label]
-    # Both kept in the URL (?charts_per_row=3&chart_height=Large), so a reload or a
-    # bookmark keeps the choice.
+    # All kept in the URL (?charts_per_row=3&chart_height=Large&y_axis=Change), so a
+    # reload or a bookmark keeps the choice. The URL carries an option's label, so the
+    # labels stay plain words: "% change" would read %25+change there.
     per_row = controls.segmented_control(
         "Charts per row", (1, 2, 3), default=2, required=True, key="charts_per_row", bind="query-params"
     )
@@ -717,11 +724,23 @@ if open_ids:
         "Chart height", tuple(charts.HEIGHTS), default="Medium", required=True, key="chart_height",
         bind="query-params",
     )
+    in_pct = controls.segmented_control(
+        "Y axis", ("Price", "Change"), default="Price", required=True, key="y_axis", bind="query-params",
+        help="Change: each chart in % from its first close in the time range.",
+    ) == "Change"
+    notes = []
     if ref_month:
-        st.caption(
+        notes.append(
             f"Dashed line: average cost. Dotted line: inflation break-even, the average cost carried "
             f"forward with {hicp_area} HICP to {ref_month}; a price above it has kept its purchasing power."
         )
+    if in_pct:
+        notes.append(
+            "% change is from each chart's first close in the time range. The closes are unadjusted, "
+            "so dividends paid out are not counted in it."
+        )
+    if notes:
+        st.caption(" ".join(notes))
 
     largest_first = sorted(open_ids, key=lambda a: valuations[a].market_value_eur or -1, reverse=True)
     for i, aid in enumerate(largest_first):
@@ -745,20 +764,30 @@ if open_ids:
             # plotted on top of it. An adjusted series would sit below them and drift
             # further apart with every dividend, and jump by the split ratio.
             hist = md.fetch_price_history((symbol,), selected_period, adjusted=False)
-            if hist.empty or symbol not in hist.columns:
+            if hist.empty or symbol not in hist.columns or hist[symbol].dropna().empty:
                 st.error(f"Could not load historical data for {symbol}")
                 continue
 
-            plot_df = hist[[symbol]].rename(columns={symbol: "Close"}).reset_index()
+            plot_df = hist[symbol].dropna().to_frame("Close").reset_index()
             date_col = plot_df.columns[0]
+            # The change is always computed, for the hover; the axis shows it only in % mode.
+            first_close = float(plot_df["Close"].iloc[0])
+            plot_df["Change"] = _on_axis(plot_df["Close"], first_close)
+            axis_base = first_close if in_pct else None
 
             fig = px.line(
                 plot_df,
                 x=date_col,
-                y="Close",
-                labels={"Close": f"Unadjusted close ({ccy})", date_col: "Timeline"},
+                y="Change" if in_pct else "Close",
+                custom_data=["Close", "Change"],
+                labels={
+                    "Close": f"Unadjusted close ({ccy})",
+                    "Change": f"Change since {plot_df[date_col].iloc[0]:%d %b %Y}",
+                    date_col: "Timeline",
+                },
                 template="plotly_white",
             )
+            fig.update_traces(hovertemplate=f"{sym}%{{customdata[0]:,.2f}} · %{{customdata[1]:+.1%}}<extra></extra>")
 
             asset_txs = txs_by_asset.get(aid, [])
             for action, colour, symbol_shape, edge in (
@@ -768,9 +797,11 @@ if open_ids:
                 rows = [t for t in asset_txs if t.action == action]
                 if not rows:
                     continue
+                prices = [t.price_nominal for t in rows]
                 fig.add_scatter(
                     x=[t.trade_date for t in rows],
-                    y=[t.price_nominal for t in rows],
+                    y=[_on_axis(p, axis_base) for p in prices],
+                    customdata=[[p, _on_axis(p, first_close)] for p in prices],
                     mode="markers",
                     name=action,
                     marker=dict(
@@ -781,7 +812,7 @@ if open_ids:
                     ),
                     hovertemplate=(
                         f"<b>{action.upper()}</b><br>Date: %{{x}}<br>"
-                        f"Price: {sym}%{{y:.2f}}<extra></extra>"
+                        f"Price: {sym}%{{customdata[0]:,.2f}} · %{{customdata[1]:+.1%}}<extra></extra>"
                     ),
                 )
 
@@ -814,7 +845,7 @@ if open_ids:
                 if listing != pm.BASE_CCY:
                     label += f" (€{pos.avg_cost_eur:,.2f} at today's FX)"
                 fig.add_hline(
-                    y=avg_in_chart_ccy,
+                    y=_on_axis(avg_in_chart_ccy, axis_base),  # labelled with its price on either axis
                     line_dash="dash",
                     line_color="rgba(46, 204, 113, 0.7)",
                     annotation_text=label,
@@ -822,13 +853,15 @@ if open_ids:
                 )
             if hurdle:
                 fig.add_hline(
-                    y=hurdle,
+                    y=_on_axis(hurdle, axis_base),
                     line_dash="dot",
                     line_color="rgba(230, 126, 34, 0.9)",
                     annotation_text=f"Inflation break-even: {sym}{hurdle:,.2f}",  # HICP month in the caption
                     annotation_position="top left" if hurdle_above else "bottom left",
                 )
 
+            if in_pct:
+                fig.update_yaxes(tickformat="+.1~%")  # +12%, -0.5%: no trailing zeros
             # The legend in a row above the plot, so it takes no width from a chart in a narrow column.
             fig.update_layout(
                 showlegend=True, hovermode="x unified",

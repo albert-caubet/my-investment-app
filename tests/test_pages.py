@@ -5,6 +5,7 @@ the pages call is replaced before the run, so what is exercised is the page code
 itself: loading, replaying, rendering, and the create / edit / delete flows.
 """
 
+import base64
 import json
 from pathlib import Path
 
@@ -13,6 +14,7 @@ import pandas as pd
 import pytest
 from streamlit.testing.v1 import AppTest
 
+import charts
 import database
 import market_data as md
 
@@ -160,18 +162,19 @@ def test_price_charts_are_medium_height_by_default(canned):
     at = _app().run()
     assert not at.exception
     assert at.button_group(key="chart_height").value == "Medium"
-    assert _price_chart_heights(at) == {675}
+    assert _price_chart_heights(at) == {charts.HEIGHTS["Medium"]}
 
 
-@pytest.mark.parametrize("size, pixels", [("Small", 450), ("Large", 900)])
-def test_chart_height_sets_every_price_chart(canned, size, pixels):
+@pytest.mark.parametrize("size", ["Small", "Large"])
+def test_chart_height_sets_every_price_chart(canned, size):
     at = _app().run()
     at.button_group(key="chart_height").set_value(size).run()
     assert not at.exception
-    assert _price_chart_heights(at) == {pixels}
+    assert _price_chart_heights(at) == {charts.HEIGHTS[size]}
     # the pies above are not price charts and keep their height
     pies = [c for c in at.get("plotly_chart") if json.loads(c.proto.spec)["data"][0]["type"] == "pie"]
-    assert {json.loads(c.proto.spec)["layout"]["height"] for c in pies} == {675}
+    scaled_default = round(charts.DEFAULT_HEIGHT * charts.HEIGHT_SCALE)
+    assert {json.loads(c.proto.spec)["layout"]["height"] for c in pies} == {scaled_default}
 
 
 def test_chart_height_is_read_from_the_url(canned):
@@ -180,6 +183,56 @@ def test_chart_height_is_read_from_the_url(canned):
     at.run()
     assert not at.exception
     assert at.button_group(key="chart_height").value == "Large"
+
+
+def _price_figures(at: AppTest) -> list[dict]:
+    return [json.loads(chart.proto.spec) for cell in _price_chart_cells(at) for chart in cell.get("plotly_chart")]
+
+
+def _numbers(values) -> np.ndarray:
+    """A trace's numbers, written by Plotly as a plain list or as a base64 typed array."""
+    if isinstance(values, dict):
+        return np.frombuffer(base64.b64decode(values["bdata"]), dtype=values["dtype"]).astype(float)
+    return np.asarray(values, dtype=float)
+
+
+def test_the_y_axis_shows_prices_by_default(canned):
+    at = _app().run()
+    assert not at.exception
+    assert at.button_group(key="y_axis").value == "Price"
+    for fig in _price_figures(at):
+        assert fig["layout"]["yaxis"]["title"]["text"].startswith("Unadjusted close")
+        assert "tickformat" not in fig["layout"]["yaxis"]
+    assert not any("dividends paid out" in c.value for c in at.caption)
+
+
+def test_percent_change_puts_everything_on_the_first_close_of_the_range(canned):
+    at = _app().run()
+    before = _price_figures(at)
+    assert any(len(fig["data"]) > 1 for fig in before)  # trade markers to convert
+    assert any(fig["layout"].get("shapes") for fig in before)  # cost lines to convert
+    at.button_group(key="y_axis").set_value("Change").run()
+    assert not at.exception
+    after = _price_figures(at)
+    assert len(after) == len(before)
+    for price_fig, pct_fig in zip(before, after):
+        first = _numbers(price_fig["data"][0]["y"])[0]
+        for price_trace, pct_trace in zip(price_fig["data"], pct_fig["data"], strict=True):  # line, markers
+            np.testing.assert_allclose(_numbers(pct_trace["y"]), _numbers(price_trace["y"]) / first - 1)
+        price_lines = [shape["y0"] for shape in price_fig["layout"].get("shapes", [])]
+        pct_lines = [shape["y0"] for shape in pct_fig["layout"].get("shapes", [])]
+        np.testing.assert_allclose(pct_lines, np.asarray(price_lines, dtype=float) / first - 1)
+        assert pct_fig["layout"]["yaxis"]["tickformat"] == "+.1~%"
+        assert pct_fig["layout"]["yaxis"]["title"]["text"].startswith("Change since")
+    assert any("dividends paid out are not counted" in c.value for c in at.caption)
+
+
+def test_y_axis_is_read_from_the_url(canned):
+    at = _app()
+    at.query_params["y_axis"] = "Change"
+    at.run()
+    assert not at.exception
+    assert at.button_group(key="y_axis").value == "Change"
 
 
 # --- transactions: create ----------------------------------------------------
