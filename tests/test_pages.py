@@ -150,6 +150,38 @@ def test_charts_per_row_is_read_from_the_url(canned):
     assert at.button_group(key="charts_per_row").value == 3
 
 
+def _price_chart_heights(at: AppTest) -> set[int]:
+    charts_shown = [chart for cell in _price_chart_cells(at) for chart in cell.get("plotly_chart")]
+    assert charts_shown
+    return {json.loads(chart.proto.spec)["layout"]["height"] for chart in charts_shown}
+
+
+def test_price_charts_are_medium_height_by_default(canned):
+    at = _app().run()
+    assert not at.exception
+    assert at.button_group(key="chart_height").value == "Medium"
+    assert _price_chart_heights(at) == {675}
+
+
+@pytest.mark.parametrize("size, pixels", [("Small", 450), ("Large", 900)])
+def test_chart_height_sets_every_price_chart(canned, size, pixels):
+    at = _app().run()
+    at.button_group(key="chart_height").set_value(size).run()
+    assert not at.exception
+    assert _price_chart_heights(at) == {pixels}
+    # the pies above are not price charts and keep their height
+    pies = [c for c in at.get("plotly_chart") if json.loads(c.proto.spec)["data"][0]["type"] == "pie"]
+    assert {json.loads(c.proto.spec)["layout"]["height"] for c in pies} == {675}
+
+
+def test_chart_height_is_read_from_the_url(canned):
+    at = _app()
+    at.query_params["chart_height"] = "Large"
+    at.run()
+    assert not at.exception
+    assert at.button_group(key="chart_height").value == "Large"
+
+
 # --- transactions: create ----------------------------------------------------
 
 

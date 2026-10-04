@@ -703,12 +703,19 @@ if open_ids:
         "10 Years": "10y",
         "All Time": "max",
     }
-    range_col, layout_col, _ = st.columns([1, 1, 2], vertical_alignment="bottom")
-    selected_label = range_col.selectbox("Select Time Range", options=list(time_options.keys()), index=2)
+    controls = st.container(horizontal=True, vertical_alignment="bottom", gap="medium")
+    selected_label = controls.selectbox(
+        "Select Time Range", options=list(time_options.keys()), index=2, width=250
+    )
     selected_period = time_options[selected_label]
-    # Kept in the URL (?charts_per_row=3), so a reload or a bookmark keeps the choice.
-    per_row = layout_col.segmented_control(
+    # Both kept in the URL (?charts_per_row=3&chart_height=Large), so a reload or a
+    # bookmark keeps the choice.
+    per_row = controls.segmented_control(
         "Charts per row", (1, 2, 3), default=2, required=True, key="charts_per_row", bind="query-params"
+    )
+    chart_height = controls.segmented_control(
+        "Chart height", tuple(charts.HEIGHTS), default="Medium", required=True, key="chart_height",
+        bind="query-params",
     )
     if ref_month:
         st.caption(
@@ -827,4 +834,4 @@ if open_ids:
                 showlegend=True, hovermode="x unified",
                 legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
             )
-            st.plotly_chart(charts.readable(fig), width="stretch")
+            st.plotly_chart(charts.readable(fig, height=charts.HEIGHTS[chart_height]), width="stretch")

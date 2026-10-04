@@ -5,8 +5,9 @@ annotations), 14px (axis titles) and 16px (chart titles), which read small, and 
 axis numbers, axis titles and annotations in grey. Every size here is 50% larger, and
 all chart text is black. Charts are 50% taller too: a page sets the height a chart
 would naturally have (or none, for Streamlit's 450px default) and :func:`readable`
-scales it. Pass each figure through :func:`readable` once, last, right before
-``st.plotly_chart``, so it also reaches annotations added along the way.
+scales it, unless the page lets the viewer pick one of :data:`HEIGHTS`. Pass each
+figure through :func:`readable` once, last, right before ``st.plotly_chart``, so it
+also reaches annotations added along the way.
 
 The time-range presets a price chart offers live here too, with the arithmetic that
 turns a preset into the dates it shows.
@@ -20,6 +21,8 @@ import streamlit as st
 #: Every chart is this much taller than the height its page asks for.
 HEIGHT_SCALE = 1.5
 DEFAULT_HEIGHT = 450  # what Streamlit and Plotly use when a figure sets none
+#: Heights, as drawn, that a page may let the viewer choose. Medium is a default chart's.
+HEIGHTS = {"Small": 450, "Medium": round(DEFAULT_HEIGHT * HEIGHT_SCALE), "Large": 900}
 
 FONT = 18  # 12 * 1.5
 AXIS_TITLE_FONT = 21  # 14 * 1.5
@@ -39,18 +42,19 @@ def text_color() -> str:
     return TEXT_COLOR["dark" if theme == "dark" else "light"]
 
 
-def readable(fig):
+def readable(fig, *, height: int | None = None):
     """Apply the app's height, font sizes and text colour to a figure, in place, and return it.
 
-    Call it once per figure: the height is scaled from what the figure has, so a
-    second call would make it taller again.
+    ``height`` is the height as drawn, in pixels, for a chart whose height the viewer
+    chose. Without it the figure's own height is scaled, so call this once per figure:
+    a second call would make it taller again.
 
     Text inside pie slices and bars keeps Plotly's automatic contrast (white on a dark
     slice, black on a light one): the global colour below does not override it.
     """
     color = text_color()
     fig.update_layout(
-        height=round((fig.layout.height or DEFAULT_HEIGHT) * HEIGHT_SCALE),
+        height=height or round((fig.layout.height or DEFAULT_HEIGHT) * HEIGHT_SCALE),
         font=dict(size=FONT, color=color),
         legend_font=dict(size=FONT, color=color),
         hoverlabel_font=dict(size=HOVER_FONT),

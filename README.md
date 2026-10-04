@@ -15,7 +15,8 @@ and sells, and see valuation and performance in EUR.
     table of how far each category is off and the euros that would reach the design.
   - Portfolio distribution by category and by holding, Dry Powder included.
   - Per-asset price history with buy/sell markers, an average-cost line and the inflation
-    break-even, two charts to a row by default (1 to 3, kept in the page URL).
+    break-even, two charts to a row by default (1 to 3) at a chosen height (small, medium,
+    large); both choices are kept in the page URL.
   - Beta, Alpha and R² against the S&P 500, estimated in EUR over two years.
 - **Transaction Logging**
   - Buys and sells across Stocks, ETFs, Funds, Crypto and more.

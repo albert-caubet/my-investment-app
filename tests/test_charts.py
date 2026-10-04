@@ -49,6 +49,17 @@ def test_charts_are_half_again_as_tall_as_the_page_asks():
     assert charts.readable(go.Figure().update_layout(height=420)).layout.height == 630  # macro chart
 
 
+def test_a_chosen_height_is_drawn_as_it_is():
+    assert charts.readable(go.Figure(), height=900).layout.height == 900
+    assert charts.readable(go.Figure().update_layout(height=420), height=450).layout.height == 450
+
+
+def test_the_medium_height_is_a_default_charts():
+    assert charts.HEIGHTS["Medium"] == charts.readable(go.Figure()).layout.height
+    assert list(charts.HEIGHTS) == ["Small", "Medium", "Large"]
+    assert charts.HEIGHTS["Small"] < charts.HEIGHTS["Medium"] < charts.HEIGHTS["Large"]
+
+
 def _figure_with_everything():
     fig = go.Figure(go.Scatter(x=[1, 2], y=[3, 4]))
     fig.update_layout(title="t", xaxis_title="x", yaxis_title="y")
