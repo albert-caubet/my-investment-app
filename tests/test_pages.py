@@ -116,6 +116,40 @@ def test_portfolio_refuses_to_value_an_unknown_listing_currency(canned, monkeypa
     assert any("could not be valued" in w.value for w in at.warning)
 
 
+def _price_chart_cells(at: AppTest) -> list:
+    """The columns holding an asset's price-history expander, in page order."""
+    return [c for c in at.columns if any(e.label.startswith("📈") for e in c.expander)]
+
+
+def test_price_charts_sit_two_to_a_row_by_default(canned):
+    at = _app().run()
+    assert not at.exception
+    assert at.button_group(key="charts_per_row").value == 2
+    cells = _price_chart_cells(at)
+    assert len(cells) > 2  # enough open positions to fill more than one row
+    assert {c.weight for c in cells} == {1 / 2}
+    assert all(len(c.expander) == 1 for c in cells)  # one chart to a cell
+
+
+@pytest.mark.parametrize("per_row", [1, 3])
+def test_charts_per_row_rearranges_the_price_charts(canned, per_row):
+    at = _app().run()
+    n_charts = len(_price_chart_cells(at))
+    at.button_group(key="charts_per_row").set_value(per_row).run()
+    assert not at.exception
+    cells = _price_chart_cells(at)
+    assert len(cells) == n_charts
+    assert {round(c.weight, 6) for c in cells} == {round(1 / per_row, 6)}
+
+
+def test_charts_per_row_is_read_from_the_url(canned):
+    at = _app()
+    at.query_params["charts_per_row"] = "3"
+    at.run()
+    assert not at.exception
+    assert at.button_group(key="charts_per_row").value == 3
+
+
 # --- transactions: create ----------------------------------------------------
 
 

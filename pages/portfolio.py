@@ -703,10 +703,24 @@ if open_ids:
         "10 Years": "10y",
         "All Time": "max",
     }
-    selected_label = st.selectbox("Select Time Range", options=list(time_options.keys()), index=2)
+    range_col, layout_col, _ = st.columns([1, 1, 2], vertical_alignment="bottom")
+    selected_label = range_col.selectbox("Select Time Range", options=list(time_options.keys()), index=2)
     selected_period = time_options[selected_label]
+    # Kept in the URL (?charts_per_row=3), so a reload or a bookmark keeps the choice.
+    per_row = layout_col.segmented_control(
+        "Charts per row", (1, 2, 3), default=2, required=True, key="charts_per_row", bind="query-params"
+    )
+    if ref_month:
+        st.caption(
+            f"Dashed line: average cost. Dotted line: inflation break-even, the average cost carried "
+            f"forward with {hicp_area} HICP to {ref_month}; a price above it has kept its purchasing power."
+        )
 
-    for aid in sorted(open_ids, key=lambda a: valuations[a].market_value_eur or -1, reverse=True):
+    largest_first = sorted(open_ids, key=lambda a: valuations[a].market_value_eur or -1, reverse=True)
+    for i, aid in enumerate(largest_first):
+        if i % per_row == 0:
+            cells = st.columns(per_row)  # a row per group, so neighbours line up at the top
+
         pos, val = positions[aid], valuations[aid]
         symbol = price_symbol[aid]
         # The name you typed when logging. Yahoo's name is not fetched here: it
@@ -717,7 +731,9 @@ if open_ids:
         ccy = listing or "unknown currency"
         sym = CURRENCY_SYMBOL.get(listing, "")
 
-        with st.expander(f"📈 {pos.name or aid}", expanded=True):
+        # The chart has no title, which half a row could not fit: this label names it.
+        heading = official if official == symbol else f"{official} ({symbol})"
+        with cells[i % per_row].expander(f"📈 {heading}", expanded=True):
             # Unadjusted, so the series is on the same scale as the raw trade prices
             # plotted on top of it. An adjusted series would sit below them and drift
             # further apart with every dividend, and jump by the split ratio.
@@ -733,8 +749,7 @@ if open_ids:
                 plot_df,
                 x=date_col,
                 y="Close",
-                title=f"{official} ({ccy}, {symbol}) — {selected_label}, unadjusted close",
-                labels={"Close": f"Price ({ccy})", date_col: "Timeline"},
+                labels={"Close": f"Unadjusted close ({ccy})", date_col: "Timeline"},
                 template="plotly_white",
             )
 
@@ -773,6 +788,20 @@ if open_ids:
             except pm.MissingRate:
                 avg_in_chart_ccy = None
 
+            # Inflation hurdle: where the price must be to have merely preserved
+            # purchasing power. Between the two lines is nominal profit that
+            # bought nothing extra.
+            hurdle = None
+            real_pos = real_positions.get(aid)
+            if avg_in_chart_ccy and real_pos and real_pos.cost_basis_eur > pos.cost_basis_eur:
+                try:
+                    hurdle = pm.from_base(real_pos.avg_cost_eur, listing, rates)
+                except pm.MissingRate:
+                    pass
+            # Each label on the far side of its line from the other line, so two
+            # lines close together never stack their labels in the gap between them.
+            hurdle_above = bool(hurdle) and hurdle > avg_in_chart_ccy
+
             if avg_in_chart_ccy:
                 label = f"Avg cost: {sym}{avg_in_chart_ccy:,.2f}"
                 if listing != pm.BASE_CCY:
@@ -782,29 +811,20 @@ if open_ids:
                     line_dash="dash",
                     line_color="rgba(46, 204, 113, 0.7)",
                     annotation_text=label,
-                    annotation_position="top left",
+                    annotation_position="bottom left" if hurdle_above else "top left",
+                )
+            if hurdle:
+                fig.add_hline(
+                    y=hurdle,
+                    line_dash="dot",
+                    line_color="rgba(230, 126, 34, 0.9)",
+                    annotation_text=f"Inflation break-even: {sym}{hurdle:,.2f}",  # HICP month in the caption
+                    annotation_position="top left" if hurdle_above else "bottom left",
                 )
 
-                # Inflation hurdle: where the price must be to have merely preserved
-                # purchasing power. Between the two lines is nominal profit that
-                # bought nothing extra.
-                real_pos = real_positions.get(aid)
-                if real_pos and real_pos.cost_basis_eur > pos.cost_basis_eur:
-                    try:
-                        hurdle = pm.from_base(real_pos.avg_cost_eur, listing, rates)
-                    except pm.MissingRate:
-                        hurdle = None
-                    if hurdle:
-                        fig.add_hline(
-                            y=hurdle,
-                            line_dash="dot",
-                            line_color="rgba(230, 126, 34, 0.9)",
-                            annotation_text=(
-                                f"Break-even after inflation: {sym}{hurdle:,.2f} "
-                                f"(to {ref_month})"
-                            ),
-                            annotation_position="bottom left",
-                        )
-
-            fig.update_layout(showlegend=True, hovermode="x unified")
+            # The legend in a row above the plot, so it takes no width from a chart in a narrow column.
+            fig.update_layout(
+                showlegend=True, hovermode="x unified",
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+            )
             st.plotly_chart(charts.readable(fig), width="stretch")
