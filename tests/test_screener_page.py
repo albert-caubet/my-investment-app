@@ -94,8 +94,10 @@ def _company(at: AppTest):
 def test_screener_page_charts_the_picked_companys_price_over_the_last_year(seeded_db):
     at = _screener(AppTest.from_file(str(ROOT / "app.py"), default_timeout=120).run())
     assert not at.exception
-    pick = _company(at).value
+    company = _company(at)
+    pick = company.value
     name = {"MMM": "3M CO", "SAP": "SAP SE"}[pick]  # as seeded; the bank is not ranked
+    assert sorted(company.options) == ["3M CO (MMM)", "SAP SE (SAP)"]
     layout = _chart_layout(at)
     assert layout["title"]["text"].startswith(f"{name} ({pick}): ")
     assert layout["yaxis"]["title"]["text"] == "Daily close (USD)"
@@ -119,7 +121,7 @@ def test_the_range_carries_over_to_the_next_company(seeded_db):
     at = _screener(AppTest.from_file(str(ROOT / "app.py"), default_timeout=120).run())
     at.slider(key="price_window").set_value((date(2020, 1, 1), date(2021, 6, 30))).run()
     company = _company(at)
-    other = next(t for t in company.options if t != company.value)
+    other = next(t for t in ("MMM", "SAP") if t != company.value)  # the options show names; the value is the ticker
     company.select(other).run()
     assert not at.exception
     assert f"({other})" in _chart_layout(at)["title"]["text"]

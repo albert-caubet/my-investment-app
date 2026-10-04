@@ -269,7 +269,15 @@ if ranked.empty:
     st.write("No company passes this screen with these settings.")
     st.stop()
 tickers = ranked["ticker"].tolist()
-pick = st.selectbox("Company", tickers, index=0)
+company_names = dict(zip(ranked["ticker"], ranked["name"]))
+
+
+def _company_label(ticker: str) -> str:
+    name = company_names.get(ticker)
+    return f"{name} ({ticker})" if pd.notna(name) and name else ticker
+
+
+pick = st.selectbox("Company", tickers, index=0, format_func=_company_label)
 row = ranked[ranked["ticker"] == pick].iloc[0]
 d1, d2, d3, d4 = st.columns(4)
 d1.metric("Price", f"{row.get('price'):,.2f}" if pd.notna(row.get("price")) else "–", help=f"as of {row.get('price_date')}")
