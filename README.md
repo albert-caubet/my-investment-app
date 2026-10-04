@@ -167,7 +167,9 @@ carrying its observation date and source, nothing filled in silently.
   archived under `data/reports/`, and sent by SMTP (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`,
   `SMTP_PASSWORD`, `REPORT_EMAIL_TO`) or Telegram (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`)
   when configured. `scripts/weekly.ps1` and `scripts/weekly.sh` run the whole chain for Task
-  Scheduler or cron on Saturday mornings. The Report page lists the archive and the runs.
+  Scheduler or cron on Saturday mornings. The Report page lists the archive and the runs, and
+  its "Build the report now" button runs the same job in the background, fetching fresh data
+  first or, with the box unticked, building from the data already stored.
 - **Automation and hosting**: `.github/workflows/weekly.yml` runs the whole chain on GitHub
   Actions every Saturday (the DuckDB file is cached between runs, the report is an artifact
   and is delivered when the secrets are set); `.github/workflows/tests.yml` runs pytest on

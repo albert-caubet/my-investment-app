@@ -21,6 +21,7 @@ import sys
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
+from typing import Sequence
 
 from invest.paths import REPO_ROOT, data_dir
 
@@ -29,6 +30,7 @@ from invest.paths import REPO_ROOT, data_dir
 JOBS: dict[str, list[str]] = {
     "refresh": [sys.executable, "-u", "-m", "invest.jobs.refresh"],
     "fundamentals": [sys.executable, "-u", "-m", "invest.jobs.fundamentals"],
+    "weekly": [sys.executable, "-u", "-m", "invest.jobs.weekly"],
 }
 
 #: One line per unit of progress, as each job prints it.
@@ -37,6 +39,8 @@ PROGRESS_LINE = {
     "refresh": re.compile(r"^  (\S+): (?:\d+ obs|FAILED)"),
     # "  AAPL (320193): 512 facts, SIC 3571" or "  AAPL: FAILED ..." per company
     "fundamentals": re.compile(r"^  \S+(?: \(\d+\))?: (?:\d+ facts|FAILED)"),
+    # "[portfolio] done, 2s", "[13F holdings] FAILED ..." or "[refresh] skipped" per step
+    "weekly": re.compile(r"^\[[^\]]+\] (?:done|FAILED|skipped)"),
 }
 _SERIES_LINE = PROGRESS_LINE["refresh"]
 
@@ -79,7 +83,7 @@ class JobRun:
         return count_series_lines(self.text())
 
     def done(self) -> int:
-        """Units finished so far (series for a refresh, companies for fundamentals)."""
+        """Units finished so far (series for a refresh, companies for fundamentals, steps for weekly)."""
         pattern = PROGRESS_LINE.get(self.name)
         return sum(1 for line in self.text().splitlines() if pattern.match(line)) if pattern else 0
 
@@ -92,14 +96,17 @@ def count_series_lines(text: str) -> int:
     return sum(1 for line in text.splitlines() if _SERIES_LINE.match(line))
 
 
-def start(name: str, *, command: list[str] | None = None, directory: Path | None = None) -> JobRun:
+def start(
+    name: str, *, args: Sequence[str] = (), command: list[str] | None = None, directory: Path | None = None
+) -> JobRun:
     """Launch ``name`` in the background and return a handle to it.
 
-    ``command`` overrides the registry, which is what the tests use. The child
-    inherits the environment, so ``INVEST_DB`` and ``INVEST_DATA_DIR`` point it at
+    ``args`` are command-line options appended to the job's command, as you would type
+    them after it. ``command`` overrides the registry, which is what the tests use. The
+    child inherits the environment, so ``INVEST_DB`` and ``INVEST_DATA_DIR`` point it at
     the same database the page reads.
     """
-    command = list(command or JOBS[name])
+    command = list(command or JOBS[name]) + list(args)
     directory = directory or logs_dir()
     directory.mkdir(parents=True, exist_ok=True)
     started = datetime.now()

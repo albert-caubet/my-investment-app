@@ -128,6 +128,20 @@ def test_report_golden_sections_are_stable(seeded, tmp_path):
     assert "\n".join(lines) + "\n" == golden.read_text(encoding="utf-8")
 
 
+def test_every_step_prints_one_progress_line(seeded, tmp_path):
+    """The Report page's progress bar counts these lines against len(STEPS)."""
+    from invest.jobs import launcher
+
+    lines = []
+    with Store(seeded) as store:
+        weekly.run_weekly(store, today=TODAY, skip_refresh=True, skip_filings=True, send=False,
+                          transaction_docs=DOCS, portfolio_kwargs=PORTFOLIO_KWARGS,
+                          reports_directory=tmp_path / "r", log=lines.append)
+    steps = [line for line in lines if launcher.PROGRESS_LINE["weekly"].match(line)]
+    assert [s[1:s.index("]")] for s in steps] == list(weekly.STEPS)
+    assert steps[0] == "[refresh] skipped"
+
+
 def test_report_page_lists_archives(seeded, tmp_path, monkeypatch):
     reports = tmp_path / "reports"
     with Store(seeded) as store:

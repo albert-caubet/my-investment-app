@@ -1,4 +1,4 @@
-"""Jobs started from pages: one at a time, and the Screener page's build button."""
+"""Jobs started from pages: one at a time, the Screener page's build button and the Report page's."""
 
 import sys
 import time
@@ -15,6 +15,8 @@ ROOT = Path(__file__).resolve().parents[1]
 
 # One company line in the shape the fundamentals job prints, then a clean exit.
 FAKE_FUNDAMENTALS = [sys.executable, "-c", "print('  MMM (66740): 512 facts, SIC 3841')"]
+# One step line in the shape the weekly job prints, then the options it was given.
+FAKE_WEEKLY = [sys.executable, "-c", "import sys; print('[portfolio] done, 0s'); print(sys.argv[1:])"]
 SLEEPER = [sys.executable, "-c", "import time; time.sleep(1.5)"]
 
 
@@ -23,6 +25,8 @@ def clean(tmp_path, monkeypatch):
     monkeypatch.setenv("INVEST_DATA_DIR", str(tmp_path))
     monkeypatch.setenv("INVEST_DB", str(tmp_path / "absent.duckdb"))
     monkeypatch.setitem(launcher.JOBS, "fundamentals", FAKE_FUNDAMENTALS)
+    monkeypatch.setitem(launcher.JOBS, "weekly", FAKE_WEEKLY)
+    monkeypatch.setenv("INVEST_REPORTS_DIR", str(tmp_path / "reports"))
     st.cache_resource.clear()  # the job registry is shared server-wide; start clean
     yield tmp_path
     run = job_panel._registry()["current"]
@@ -66,3 +70,37 @@ def test_the_build_button_runs_the_job_and_reports_the_outcome(clean, monkeypatc
     labels = [e.label for e in at.expander]
     assert any(label.startswith("✅ Last screener build from the app") for label in labels), labels
     assert len(list((clean / "logs").glob("fundamentals_*.log"))) == 1
+
+
+def _report():
+    at = AppTest.from_file(str(ROOT / "app.py"), default_timeout=120).run()
+    return at.switch_page("pages/report.py").run()
+
+
+def _report_button(at):
+    return next(b for b in at.button if b.label == "Build the report now")
+
+
+def _weekly_log(directory):
+    logs = list((directory / "logs").glob("weekly_*.log"))
+    assert len(logs) == 1  # one click, one job
+    return logs[0].read_text(encoding="utf-8")
+
+
+def test_the_report_button_runs_the_weekly_job_and_reports_the_outcome(clean):
+    at = _report()
+    assert not at.exception
+    assert any("button below" in i.value for i in at.info)
+    _report_button(at).click().run()
+    assert not at.exception
+    labels = [e.label for e in at.expander]
+    assert any(label.startswith("✅ Last weekly report from the app") for label in labels), labels
+    assert "[]" in _weekly_log(clean)  # fetches first, as the command line does by default
+
+
+def test_unticking_the_box_builds_from_the_stored_data(clean):
+    at = _report()
+    at.checkbox[0].uncheck().run()
+    _report_button(at).click().run()
+    assert not at.exception
+    assert "['--skip-refresh', '--skip-filings']" in _weekly_log(clean)

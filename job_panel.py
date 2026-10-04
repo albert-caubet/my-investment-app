@@ -1,4 +1,4 @@
-"""Start a background job from a page and follow it; shared by the Macro and Screener pages.
+"""Start a background job from a page and follow it; shared by the Macro, Screener and Report pages.
 
 A job runs as its own process through ``invest.jobs.launcher``: exactly the command
 the scheduler and the command line use. Both jobs write the one market database, and
@@ -33,6 +33,12 @@ def _universe_size() -> int:
     return len(load_universe()[DEFAULT_UNIVERSE].tickers)
 
 
+def _weekly_steps() -> int:
+    from invest.jobs.weekly import STEPS
+
+    return len(STEPS)
+
+
 @dataclass(frozen=True)
 class Job:
     noun: str  # "Last <noun> from the app"
@@ -63,6 +69,16 @@ JOBS = {
         problems="finished with problems",
         problems_note="Companies that did arrive are in the table. The log below names the rest, and why.",
     ),
+    "weekly": Job(
+        noun="weekly report",
+        doing="Building the weekly report",
+        unit="steps done",
+        total=_weekly_steps,
+        ok="finished, report archived",
+        problems="finished with problems",
+        problems_note="The report was archived anyway; its \"Missing and failed\" section names what could not "
+                      "be produced, and the log below says why.",
+    ),
 }
 
 
@@ -72,17 +88,18 @@ def _registry() -> dict:
     return {"lock": threading.Lock(), "current": None, "last": {}}
 
 
-def start(name: str) -> None:
+def start(name: str, args: tuple[str, ...] = ()) -> None:
     registry = _registry()
     with registry["lock"]:
         current = registry["current"]
         if current is not None and current.running:
             return  # one at a time; the rerun shows the job already going
-        registry["current"] = launcher.start(name)
+        registry["current"] = launcher.start(name, args=args)
 
 
-def start_button(name: str, label: str, **kwargs) -> None:
-    st.button(label, on_click=start, args=(name,), **kwargs)
+def start_button(name: str, label: str, *, job_args: tuple[str, ...] = (), **kwargs) -> None:
+    """``job_args`` are options for the job's command line, e.g. ``("--skip-refresh",)``."""
+    st.button(label, on_click=start, args=(name, tuple(job_args)), **kwargs)
 
 
 def _finish(run: launcher.JobRun) -> None:

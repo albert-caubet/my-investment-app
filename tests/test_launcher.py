@@ -62,6 +62,28 @@ def test_registry_runs_the_same_command_as_the_cli():
     assert command[-2:] == ["-m", "invest.jobs.refresh"]
     assert "-u" in command  # unbuffered, or the log arrives in lumps
     assert launcher.JOBS["fundamentals"][-2:] == ["-m", "invest.jobs.fundamentals"]
+    assert launcher.JOBS["weekly"][-2:] == ["-m", "invest.jobs.weekly"]
+
+
+def test_args_go_after_the_command(tmp_path):
+    command = [sys.executable, "-c", "import sys; print(sys.argv[1:])"]
+    run = _wait(launcher.start("weekly", args=("--skip-refresh", "--skip-filings"), command=command,
+                               directory=tmp_path))
+    assert "['--skip-refresh', '--skip-filings']" in run.text()
+    assert run.command[-2:] == ["--skip-refresh", "--skip-filings"]
+
+
+def test_weekly_progress_counts_steps_not_series(tmp_path):
+    lines = [
+        "  US_UNRATE: 912 obs, 12 new",  # the refresh inside the weekly job
+        "[refresh] done, 183s",
+        "[13F holdings] FAILED SEC_USER_AGENT is not set",
+        "[fundamentals] skipped",
+        "  archived C:/data/reports/report_2026-10-03_0800.html",
+    ]
+    command = [sys.executable, "-c", f"print({chr(10).join(lines)!r})"]
+    run = _wait(launcher.start("weekly", command=command, directory=tmp_path))
+    assert run.done() == 3
 
 
 def test_start_writes_output_to_a_log_file(tmp_path):

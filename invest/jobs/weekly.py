@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+import time
 import traceback
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
@@ -41,6 +42,11 @@ SPARKLINE_YEARS = 2
 SPARKLINE_POINTS = 60
 INSIDER_LOOKBACK_DAYS = 180
 
+#: Each prints one line as it finishes ("[portfolio] done, 2s"), or "[refresh] skipped";
+#: the app counts those lines to show how far a run has got.
+STEPS = ("refresh", "13F holdings", "fundamentals", "portfolio", "macro scorecard", "positioning",
+         "opportunities", "hypothesis register")
+
 
 @dataclass
 class WeeklyResult:
@@ -57,13 +63,22 @@ class WeeklyResult:
 
 
 def _guard(ctx: ReportContext, name: str, fn, log=None):
+    started = time.monotonic()
     try:
-        return fn()
+        result = fn()
     except Exception as exc:
         ctx.failures[name] = f"{type(exc).__name__}: {exc}"
         if log:
-            log(f"  {name}: FAILED {exc}")
+            log(f"[{name}] FAILED {exc}")
         return None
+    if log:
+        log(f"[{name}] done, {time.monotonic() - started:.0f}s")
+    return result
+
+
+def _skipped(name: str, log=None) -> None:
+    if log:
+        log(f"[{name}] skipped")
 
 
 def _sparklines(store: Store, catalog, readings, today: date) -> dict[str, list[float]]:
@@ -143,23 +158,27 @@ def run_weekly(
             from invest.jobs.refresh import refresh
             from invest.secrets import fred_api_key
 
-            report = refresh(store, catalog, Fetcher(fred_api_key=fred_api_key()), releases=load_releases(), today=today, log=None)
+            report = refresh(store, catalog, Fetcher(fred_api_key=fred_api_key()), releases=load_releases(), today=today, log=log)
             for row in report.critical_failures:
                 ctx.failures[f"series {row.id}"] = f"{row.status}: {row.message}"
             return report
 
         _guard(ctx, "refresh", do_refresh, log)
+    else:
+        _skipped("refresh", log)
     if not skip_filings:
         def do_filings():
             from invest.data.edgar import EdgarClient
             from invest.jobs.filings import refresh_holdings
 
-            problems = refresh_holdings(store, EdgarClient(), load_managers(), log=None)
+            problems = refresh_holdings(store, EdgarClient(), load_managers(), log=log)
             for p in problems:
                 ctx.failures[f"13F {p.split(':')[0]}"] = p
             return problems
 
         _guard(ctx, "13F holdings", do_filings, log)
+    else:
+        _skipped("13F holdings", log)
     if run_fundamentals:
         def do_fundamentals():
             from invest.data.edgar import EdgarClient
@@ -167,7 +186,7 @@ def run_weekly(
             from invest.jobs import fundamentals as fj
 
             universe = load_universe()["sp500_core"]
-            problems = fj.refresh_universe(store, EdgarClient(), universe, log=None)
+            problems = fj.refresh_universe(store, EdgarClient(), universe, log=log)
             table = fj.build_metrics_table(store, universe)
             fj.save_screener_snapshot(store, run_id, universe, table, as_of=None)
             fj.store_breadth(store, list(universe.tickers))
@@ -176,6 +195,8 @@ def run_weekly(
             return table
 
         _guard(ctx, "fundamentals", do_fundamentals, log)
+    else:
+        _skipped("fundamentals", log)
 
     # 2. portfolio
     def do_portfolio():
