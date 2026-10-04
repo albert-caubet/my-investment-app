@@ -22,7 +22,7 @@ import streamlit as st
 HEIGHT_SCALE = 1.5
 DEFAULT_HEIGHT = 450  # what Streamlit and Plotly use when a figure sets none
 #: Heights, as drawn, that a page may let the viewer choose. Medium is a default chart's.
-HEIGHTS = {"Small": 450, "Medium": round(DEFAULT_HEIGHT * HEIGHT_SCALE), "Large": 900}
+HEIGHTS = {"Small": 350, "Medium": round(DEFAULT_HEIGHT * HEIGHT_SCALE), "Large": 800}
 
 FONT = 18  # 12 * 1.5
 AXIS_TITLE_FONT = 21  # 14 * 1.5
