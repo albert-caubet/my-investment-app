@@ -79,8 +79,7 @@ def test_notify_reports_a_failed_channel(monkeypatch):
 
 def test_firebase_credentials_from_environment_json(monkeypatch):
     payload = {"type": "service_account", "project_id": "p", "private_key": "k", "client_email": "e@example.com"}
-    monkeypatch.setenv(database.CREDENTIALS_JSON_ENV, json.dumps(payload))
+    monkeypatch.setenv("FIREBASE_CREDENTIALS_JSON", json.dumps(payload))
     assert database.credential_source() == payload
-    monkeypatch.delenv(database.CREDENTIALS_JSON_ENV)
-    source = database.credential_source()
-    assert isinstance(source, (str, dict))  # the file path, or a secrets section when one exists
+    monkeypatch.delenv("FIREBASE_CREDENTIALS_JSON")
+    assert database.credential_source() == database.CREDENTIALS_PATH

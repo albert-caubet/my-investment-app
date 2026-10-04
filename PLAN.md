@@ -624,8 +624,8 @@ scorecard and the transactions and asserts they land under "Missing and failed".
       weekly job records a problem) and run history (the `runs` table, shown on the Report
       page).
 - [x] Streamlit deployment behind Tailscale or Cloudflare Access with `st.login`; credentials
-      from secrets (`database.credential_source` reads `FIREBASE_CREDENTIALS_JSON` or the
-      `[firebase]` secrets section before falling back to the file). The compose file binds
+      from secrets (`database.credential_source` reads `FIREBASE_CREDENTIALS_JSON` before
+      falling back to the file). The compose file binds
       the app to localhost only; the tunnel and `st.login` configuration are documented in
       the README, not automated.
 - [x] Backups of DuckDB and the report archive (`python -m invest.jobs.backup`, nightly in the
