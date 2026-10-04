@@ -120,6 +120,50 @@ streamlit run app.py
 
 The app opens at `http://localhost:8501`.
 
+## Browse the market database with DuckDB UI
+
+DuckDB's browser interface lets you explore the tables, inspect their columns and run
+SQL queries. Use the project's Python environment; the separate `duckdb` command-line
+program is not required.
+
+1. From the repository root in **PowerShell**, with dependencies installed in `.venv`, run:
+
+   ```powershell
+   .\.venv\Scripts\python.exe -i -c "import duckdb; con = duckdb.connect('data/ui_catalog.duckdb'); con.execute('INSTALL ui; LOAD ui; CALL start_ui();')"
+   ```
+
+   The first run needs internet access to download the UI extension. The command opens
+   your browser and uses `data/ui_catalog.duckdb` for the UI's own storage, separate from
+   the market database. Keep the Python terminal open while using the viewer.
+
+2. Create a SQL notebook in the browser and attach the existing market database in
+   **read-only mode**:
+
+   ```sql
+   ATTACH 'data/market.duckdb' AS market (READ_ONLY);
+   USE market;
+   SHOW TABLES;
+   ```
+
+   The path is relative to the repository root where Python was started. If you set
+   `INVEST_DATA_DIR` or `INVEST_DB`, replace it with your actual database path. The market
+   database must already exist, created by a data refresh.
+
+3. Inspect a table's structure and sample records:
+
+   ```sql
+   DESCRIBE prices;
+   SELECT * FROM prices LIMIT 20;
+   ```
+
+4. When finished, type `exit()` at the Python terminal's `>>>` prompt. Closing only the
+   browser does not stop the process or release the database. Exit the viewer before
+   running refresh jobs or other writes; if attaching reports a lock conflict, wait
+   for the current writer to finish before retrying.
+
+See the [official DuckDB UI documentation](https://duckdb.org/docs/current/core_extensions/ui)
+for more details.
+
 ## Tests
 
 The money math lives in `portfolio_math.py`, which imports no Streamlit, no Firestore and
