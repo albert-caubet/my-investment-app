@@ -1,0 +1,63 @@
+{
+  "realtime_start": "2026-10-04",
+  "realtime_end": "2026-10-04",
+  "order_by": "search_rank",
+  "sort_order": "desc",
+  "count": 3,
+  "offset": 0,
+  "limit": 3,
+  "seriess": [
+    {
+      "id": "UNRATE",
+      "realtime_start": "2026-10-04",
+      "realtime_end": "2026-10-04",
+      "title": "Unemployment Rate",
+      "observation_start": "1948-01-01",
+      "observation_end": "2026-09-01",
+      "frequency": "Monthly",
+      "frequency_short": "M",
+      "units": "Percent",
+      "units_short": "%",
+      "seasonal_adjustment": "Seasonally Adjusted",
+      "seasonal_adjustment_short": "SA",
+      "last_updated": "2026-10-02 07:47:02-05",
+      "popularity": 95,
+      "group_popularity": 95,
+      "notes": "The unemployment rate represents the number of unemployed as a percentage of the labor force."
+    },
+    {
+      "id": "ICSA",
+      "realtime_start": "2026-10-04",
+      "realtime_end": "2026-10-04",
+      "title": "Initial Claims",
+      "observation_start": "1967-01-07",
+      "observation_end": "2026-09-26",
+      "frequency": "Weekly, Ending Saturday",
+      "frequency_short": "W",
+      "units": "Number",
+      "units_short": "Number",
+      "seasonal_adjustment": "Seasonally Adjusted",
+      "seasonal_adjustment_short": "SA",
+      "last_updated": "2026-10-01 07:31:04-05",
+      "popularity": 82,
+      "group_popularity": 82
+    },
+    {
+      "id": "UNRATENSA",
+      "realtime_start": "2026-10-04",
+      "realtime_end": "2026-10-04",
+      "title": "Unemployment Rate",
+      "observation_start": "1948-01-01",
+      "observation_end": "2026-09-01",
+      "frequency": "Monthly",
+      "frequency_short": "M",
+      "units": "Percent",
+      "units_short": "%",
+      "seasonal_adjustment": "Not Seasonally Adjusted",
+      "seasonal_adjustment_short": "NSA",
+      "last_updated": "2026-10-02 07:47:04-05",
+      "popularity": 57,
+      "group_popularity": 95
+    }
+  ]
+}
