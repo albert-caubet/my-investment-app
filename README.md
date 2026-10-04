@@ -94,7 +94,7 @@ Worth knowing, because these choices decide what the numbers mean:
 
 3. **Firebase Configuration**:
    - Place your Firebase service account JSON in the project root as
-     `firebaseServiceAccountKey.json`, or point `FIREBASE_CREDENTIALS` at it.
+     `firebaseServiceAccountKey.json`, or put its contents in `FIREBASE_CREDENTIALS_JSON`.
 
 ## How to Run
 
@@ -176,8 +176,8 @@ carrying its observation date and source, nothing filled in silently.
   nightly, keeping the last 14 copies) on one volume, with secrets in a `.env` file (see
   `.env.example`). The app binds to localhost only: reach it through Tailscale or a Cloudflare
   Access tunnel, and add `st.login` with an OIDC provider in `.streamlit/secrets.toml` for a
-  second layer. Firebase credentials can come from `FIREBASE_CREDENTIALS_JSON` or a
-  `[firebase]` secrets section instead of a key file. When the weekly job records a problem it
+  second layer. Firebase credentials can come from `FIREBASE_CREDENTIALS_JSON` (the key
+  file's contents) instead of a key file. When the weekly job records a problem it
   sends a one-line alert by Telegram or email.
 - **Research**: `invest/research/` holds the event-study and walk-forward utilities and
   `python -m invest.research.hypotheses H1|H5|H6|H7|H8|H11|rules`, which measures the
