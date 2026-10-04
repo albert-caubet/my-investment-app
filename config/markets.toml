@@ -1,0 +1,129 @@
+# Market charts on the Macro page. Each [[chart]] overlays its series, every one
+# rebased to its first close in the time range shown, so the lines compare as
+# % change from a common start. The refresh job downloads every symbol here from
+# Yahoo Finance into the prices table; the page reads them from there.
+#
+# Fields of a series:
+#   label     the name in the legend
+#   symbol    the Yahoo Finance symbol
+#   currency  what Yahoo quotes the closes in (USc: US cents); shown in the hover.
+#             Each line moves in its own currency, not in euros.
+#   about     what the index covers, in a few words; printed under the chart.
+#   proxy     set when the symbol stands in for the index: what it actually is.
+#             A proxy is marked * in the legend and described under the chart.
+#   note      a series with no symbol is not charted; the note says why, and is
+#             printed under the chart.
+#
+# Symbols checked against Yahoo on 2026-10-04. Yahoo has only a live quote, no
+# history, for the MSCI EM, MSCI World Mid Cap, Russell Midcap, OBX, WIG20, mWIG40,
+# sWIG80, BUX, FTSE Italia Mid Cap, IBEX Small Cap and OMX Stockholm Mid and Small Cap;
+# nothing for the PX or ^BCOM; and a history that stops on 2015-12-18 for the CAC Mid
+# 60, CAC Small, AScX, BEL Mid, BEL Small and FTSE Italia Small Cap, and in 2018 for
+# the IBEX Medium Cap. Those are charted through an ETF on the same index where one
+# trades, and through a close index otherwise.
+#
+# The DAX, MDAX and SDAX are Deutsche Börse's performance indices, with dividends
+# reinvested, as are the total-return proxies; the other indices are price indices.
+
+[[chart]]
+id = "world"
+title = "World main indices"
+series = [
+  { label = "S&P 500", symbol = "^GSPC", currency = "USD", about = "US, 500 large caps" },
+  { label = "STOXX Europe 600", symbol = "^STOXX", currency = "EUR", about = "Europe, 600 large, mid and small caps in 17 countries" },
+  { label = "Euro Stoxx 50", symbol = "^STOXX50E", currency = "EUR", about = "eurozone, 50 largest" },
+  { label = "MSCI Emerging Markets", symbol = "EEM", currency = "USD", about = "24 emerging countries, large and mid caps, led by China, Taiwan and India", proxy = "iShares MSCI Emerging Markets ETF" },
+  { label = "MSCI World", symbol = "^990100-USD-STRD", currency = "USD", about = "23 developed countries, large and mid caps; about 70% US" },
+  { label = "MSCI ACWI", symbol = "^892400-USD-STRD", currency = "USD", about = "47 developed and emerging countries, large and mid caps; about 65% US" },
+  { label = "NASDAQ Composite", symbol = "^IXIC", currency = "USD", about = "US, every stock listed on Nasdaq; tech-heavy" },
+]
+
+[[chart]]
+id = "world_small_mid"
+title = "World small and mid caps"
+series = [
+  { label = "Russell 2000", symbol = "^RUT", currency = "USD", about = "US small caps, the 2,000 after the 1,000 largest" },
+  { label = "Russell Midcap", symbol = "IWR", currency = "USD", about = "US mid caps, the 800 smallest of the 1,000 largest", proxy = "iShares Russell Mid-Cap ETF" },
+  { label = "STOXX Europe Small 200", symbol = "EXSE.DE", currency = "EUR", about = "Europe, the 200 smallest of the STOXX 600", proxy = "iShares STOXX Europe Small 200 UCITS ETF (DE)" },
+  { label = "STOXX Europe Mid 200", symbol = "EXSD.DE", currency = "EUR", about = "Europe, the middle 200 of the STOXX 600", proxy = "iShares STOXX Europe Mid 200 UCITS ETF (DE)" },
+  { label = "MSCI World Small Cap", symbol = "^106230-USD-STRD", currency = "USD", about = "23 developed countries, small caps" },
+  { label = "MSCI World Mid Cap", symbol = "IWSZ.L", currency = "USD", about = "23 developed countries, mid caps", proxy = "iShares MSCI World Mid-Cap Equal Weight UCITS ETF, equal-weighted where the index is cap-weighted" },
+  { label = "MSCI ACWI Small Cap", symbol = "^655045-USD-STRD", currency = "USD", about = "47 developed and emerging countries, small caps" },
+]
+
+[[chart]]
+id = "europe"
+title = "Europe main indices"
+series = [
+  { label = "FTSE 100", symbol = "^FTSE", currency = "GBP", about = "UK, 100 largest" },
+  { label = "CAC 40", symbol = "^FCHI", currency = "EUR", about = "France, 40 largest" },
+  { label = "DAX 40", symbol = "^GDAXI", currency = "EUR", about = "Germany, 40 largest" },
+  { label = "SMI", symbol = "^SSMI", currency = "CHF", about = "Switzerland, 20 largest" },
+  { label = "AEX", symbol = "^AEX", currency = "EUR", about = "Netherlands, 25 largest" },
+  { label = "OMXS30", symbol = "^OMX", currency = "SEK", about = "Sweden, 30 most traded" },
+  { label = "IBEX 35", symbol = "^IBEX", currency = "EUR", about = "Spain, 35 most traded" },
+  { label = "FTSE MIB", symbol = "FTSEMIB.MI", currency = "EUR", about = "Italy, 40 largest" },
+  { label = "OMXC25", symbol = "^OMXC25", currency = "DKK", about = "Denmark, 25 most traded" },
+  { label = "BEL 20", symbol = "^BFX", currency = "EUR", about = "Belgium, 20 largest" },
+  { label = "OMXH25", symbol = "^OMXH25", currency = "EUR", about = "Finland, 25 most traded" },
+  { label = "OBX", symbol = "OBXD.OL", currency = "NOK", about = "Norway, 25 most traded", proxy = "DNB OBX ETF" },
+  { label = "ATX", symbol = "^ATX", currency = "EUR", about = "Austria, 20 largest" },
+  { label = "ISEQ 20", symbol = "^IETP", currency = "EUR", about = "Ireland, 20 largest" },
+  { label = "PSI", symbol = "PSI20.LS", currency = "EUR", about = "Portugal, about 15 largest" },
+  { label = "WIG20", symbol = "ETFBW20TR.WA", currency = "PLN", about = "Poland, 20 largest", proxy = "Beta ETF WIG20TR, on the total-return WIG20" },
+  { label = "ATHEX Composite", symbol = "GD.AT", currency = "EUR", about = "Greece, 60 largest" },
+  { label = "PX", symbol = "CZX.DE", currency = "EUR", about = "Czechia, Prague's blue chips", proxy = "Expat Czech PX UCITS ETF, its Frankfurt listing in euros" },
+  { label = "BUX", symbol = "HUBE.DE", currency = "EUR", about = "Hungary, Budapest's blue chips", proxy = "Expat Hungary BUX UCITS ETF, its Frankfurt listing in euros" },
+]
+
+[[chart]]
+id = "europe_mid"
+title = "Europe mid caps"
+series = [
+  { label = "MDAX", symbol = "^MDAXI", currency = "EUR", about = "Germany, 50 mid caps after the DAX" },
+  { label = "FTSE 250", symbol = "^FTMC", currency = "GBP", about = "UK, the 250 after the FTSE 100" },
+  { label = "CAC Mid 60", symbol = "^CN20", currency = "EUR", about = "France, 60 mid caps after the 60 largest", proxy = "CAC Next 20 index, the 20 French stocks after the CAC 40; the one CAC Mid 60 ETF has been liquidated" },
+  { label = "IBEX Medium Cap", symbol = "^106225-USD-STRD", currency = "USD", about = "Spain, 20 mid caps after the IBEX 35", proxy = "MSCI Spain Small Cap index, in dollars; no ETF tracks the IBEX Medium Cap" },
+  { label = "FTSE Italia Mid Cap", symbol = "ITAMID.MI", currency = "EUR", about = "Italy, about 60 mid caps after the FTSE MIB", proxy = "Amundi FTSE Italia PMI PIR 2020 UCITS ETF, on the FTSE Italia PIR Mid Cap" },
+  { label = "AMX", symbol = "^AMX", currency = "EUR", about = "Netherlands, 25 mid caps after the AEX" },
+  { label = "SMIM", symbol = "CSSMIM.SW", currency = "CHF", about = "Switzerland, 30 mid caps after the SMI", proxy = "iShares SMIM ETF (CH)" },
+  { label = "BEL Mid", about = "Belgium, mid caps after the BEL 20", note = "no history on Yahoo since 2015 and no ETF tracks it" },
+  { label = "OMX Stockholm Mid Cap", about = "Sweden, companies worth €150m to €1bn", note = "a quote but no history on Yahoo, and no ETF tracks it" },
+  { label = "mWIG40", symbol = "ETFBM40TR.WA", currency = "PLN", about = "Poland, 40 mid caps after the WIG20", proxy = "Beta ETF mWIG40TR, on the total-return mWIG40" },
+]
+
+[[chart]]
+id = "europe_small"
+title = "Europe small caps"
+series = [
+  { label = "SDAX", symbol = "^SDAXI", currency = "EUR", about = "Germany, 70 small caps after the MDAX" },
+  { label = "FTSE SmallCap", symbol = "^FTSC", currency = "GBP", about = "UK, small caps below the FTSE 350" },
+  { label = "CAC Small", about = "France, small caps below the CAC Mid 60", note = "no history on Yahoo since 2015 and no ETF tracks it" },
+  { label = "IBEX Small Cap", about = "Spain, 30 small caps after the IBEX Medium Cap", note = "a quote but no history on Yahoo, and no ETF tracks it" },
+  { label = "FTSE Italia Small Cap", about = "Italy, small caps below the FTSE Italia Mid Cap", note = "no history on Yahoo since 2015 and no ETF tracks it" },
+  { label = "AScX", symbol = "^106220-USD-STRD", currency = "USD", about = "Netherlands, 25 small caps after the AMX", proxy = "MSCI Netherlands Small Cap index, in dollars; no ETF tracks the AScX" },
+  { label = "BEL Small", about = "Belgium, small caps below the BEL Mid", note = "no history on Yahoo since 2015 and no ETF tracks it" },
+  { label = "OMX Stockholm Small Cap", symbol = "XACT-SMABOLAG.ST", currency = "SEK", about = "Sweden, companies worth under €150m", proxy = "XACT Svenska Småbolag ETF" },
+  { label = "sWIG80", symbol = "ETFBS80TR.WA", currency = "PLN", about = "Poland, 80 small caps after the mWIG40", proxy = "Beta ETF sWIG80TR, on the total-return sWIG80" },
+]
+
+[[chart]]
+id = "commodities"
+title = "Commodities"
+series = [
+  { label = "Bloomberg Commodity Index", symbol = "DJP", currency = "USD", about = "about two dozen futures: energy, metals, crops and livestock", proxy = "iPath Bloomberg Commodity Index Total Return ETN; Yahoo has no history for ^BCOM" },
+  { label = "Brent crude", symbol = "BZ=F", currency = "USD", about = "North Sea oil, the world benchmark (ICE); dollars a barrel" },
+  { label = "WTI crude", symbol = "CL=F", currency = "USD", about = "US oil delivered at Cushing, Oklahoma (NYMEX); dollars a barrel" },
+  { label = "US natural gas", symbol = "NG=F", currency = "USD", about = "Henry Hub, Louisiana (NYMEX); dollars per million BTU" },
+  { label = "European natural gas (TTF)", symbol = "TTF=F", currency = "EUR", about = "Dutch TTF hub, Europe's benchmark (ICE Endex); euros a MWh" },
+  { label = "Gold", symbol = "GC=F", currency = "USD", about = "COMEX; dollars a troy ounce" },
+  { label = "Silver", symbol = "SI=F", currency = "USD", about = "COMEX; dollars a troy ounce" },
+  { label = "Platinum", symbol = "PL=F", currency = "USD", about = "NYMEX; dollars a troy ounce" },
+  { label = "Copper", symbol = "HG=F", currency = "USD", about = "COMEX; dollars a pound" },
+  { label = "Wheat", symbol = "ZW=F", currency = "USc", about = "CBOT soft red winter wheat; cents a bushel" },
+  { label = "Corn", symbol = "ZC=F", currency = "USc", about = "CBOT; cents a bushel" },
+  { label = "Soybeans", symbol = "ZS=F", currency = "USc", about = "CBOT; cents a bushel" },
+  { label = "Coffee", symbol = "KC=F", currency = "USc", about = "ICE arabica; cents a pound" },
+  { label = "Sugar", symbol = "SB=F", currency = "USc", about = "ICE raw sugar No. 11; cents a pound" },
+  { label = "Cocoa", symbol = "CC=F", currency = "USD", about = "ICE New York; dollars a tonne" },
+]

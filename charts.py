@@ -14,6 +14,7 @@ turns a preset into the dates it shows.
 """
 
 from datetime import date
+from typing import Sequence
 
 import pandas as pd
 import streamlit as st
@@ -32,14 +33,53 @@ HOVER_FONT = 20  # Plotly's 13 * 1.5, rounded
 #: Black on the light theme; white on the dark one, where black would vanish.
 TEXT_COLOR = {"light": "#000000", "dark": "#ffffff"}
 
+#: Line colours for a chart of several series, taken in this order and never
+#: generated past eight. The order keeps neighbouring colours apart for
+#: colour-blind readers; the dark theme has its own steps of the same hues.
+SERIES_COLORS = {
+    "light": ("#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#4a3aa7", "#e34948"),
+    "dark": ("#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#008300", "#9085e9", "#e66767"),
+}
+#: Past eight series the colours come round again with the next dash, so up to 24
+#: lines each look different. The legend and the hover name every line too.
+SERIES_DASHES = ("solid", "dash", "dot")
 
-def text_color() -> str:
-    """The text colour for the theme the viewer has on. Black when it cannot be told."""
+
+def _theme() -> str:
+    """``"dark"`` or ``"light"``, the theme the viewer has on. Light when it cannot be told."""
     try:
         theme = st.context.theme.type
     except Exception:  # no Streamlit session, e.g. a plain script
         theme = None
-    return TEXT_COLOR["dark" if theme == "dark" else "light"]
+    return "dark" if theme == "dark" else "light"
+
+
+def text_color() -> str:
+    """The text colour for the theme the viewer has on. Black when it cannot be told."""
+    return TEXT_COLOR[_theme()]
+
+
+def legend_rows(names: Sequence[str], width: float, font: int) -> int:
+    """About how many rows a horizontal legend of ``names`` takes across ``width`` pixels.
+
+    Plotly puts the entries in one row when they fit, and otherwise in a grid whose
+    columns are as wide as the widest entry. An estimate, because only the browser
+    knows the width of the text: an entry is its line sample and the gaps around it
+    (45px) and its text, at about 0.47 of the font size a character (measured at 14px).
+    """
+    widths = [45 + 0.47 * font * len(name) for name in names]
+    if not widths:
+        return 0
+    if sum(widths) <= width:
+        return 1
+    columns = max(1, int(width // max(widths)))
+    return -(-len(widths) // columns)
+
+
+def series_line(i: int) -> dict:
+    """The line of the ``i``-th series (from 0) of a chart: a colour, and past eight a dash."""
+    colors = SERIES_COLORS[_theme()]
+    return dict(color=colors[i % len(colors)], dash=SERIES_DASHES[(i // len(colors)) % len(SERIES_DASHES)], width=2)
 
 
 def readable(fig, *, height: int | None = None):
@@ -74,7 +114,7 @@ def readable(fig, *, height: int | None = None):
 
 
 #: The preset ranges a price chart offers, shortest first. Max is the whole stored history.
-RANGES = ("1M", "6M", "YTD", "1Y", "3Y", "5Y", "Max")
+RANGES = ("1M", "6M", "YTD", "1Y", "3Y", "5Y", "10Y", "Max")
 DEFAULT_RANGE = "1Y"
 _RANGE_OFFSETS = {
     "1M": pd.DateOffset(months=1),
@@ -82,6 +122,7 @@ _RANGE_OFFSETS = {
     "1Y": pd.DateOffset(years=1),
     "3Y": pd.DateOffset(years=3),
     "5Y": pd.DateOffset(years=5),
+    "10Y": pd.DateOffset(years=10),
 }
 
 

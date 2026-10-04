@@ -9,6 +9,7 @@ batch) are downloaded once per run and kept on the instance.
 from __future__ import annotations
 
 from datetime import date
+from typing import Sequence
 
 import pandas as pd
 
@@ -106,6 +107,22 @@ class Fetcher:
             self.yahoo_frames.update(yahoo.fetch_history(symbols, period="max"))
         except Exception as exc:
             self._errors["yahoo"] = f"yahoo batch download failed: {exc}"
+
+    def fetch_prices(self, symbols: Sequence[str]) -> dict[str, pd.DataFrame]:
+        """Daily closes for symbols outside the catalog (the Macro page's market charts).
+
+        One batched download for whatever the catalog's batch has not already
+        fetched. The frames join ``yahoo_frames``, which the refresh job stores.
+        A symbol Yahoo returned nothing for is absent from the result; a failed
+        download raises :class:`SourceError`.
+        """
+        wanted = [s for s in dict.fromkeys(symbols) if s not in self.yahoo_frames]
+        if wanted:
+            try:
+                self.yahoo_frames.update(yahoo.fetch_history(wanted, period="max"))
+            except Exception as exc:
+                raise SourceError(f"yahoo batch download failed: {exc}") from exc
+        return {s: self.yahoo_frames[s] for s in symbols if s in self.yahoo_frames}
 
     # -- dispatch ------------------------------------------------------------
 

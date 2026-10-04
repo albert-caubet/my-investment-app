@@ -15,7 +15,8 @@ and sells, and see valuation and performance in EUR.
     table of how far each category is off and the euros that would reach the design.
   - Portfolio distribution by category and by holding, Dry Powder included.
   - Per-asset price history with buy/sell markers, an average-cost line and the inflation
-    break-even, two charts to a row by default (1 to 3) at a chosen height (small, medium,
+    break-even, over a time range picked from presets (1M to 10Y and Max, three years by
+    default), two charts to a row by default (1 to 3) at a chosen height (small, medium,
     large), with the y axis in price or in % change from the first close of the time range;
     the choices are kept in the page URL.
   - Beta, Alpha and R² against the S&P 500, estimated in EUR over two years.
@@ -141,12 +142,25 @@ carrying its observation date and source, nothing filled in silently.
 - **Refresh**: `python -m invest.jobs.refresh` fetches the catalog, computes derived series,
   ingests releases and prints a freshness table (last observation, age, limit, status). It
   exits non-zero when a critical series failed or is older than its frequency and lag allow
-  and no fallback covers it. A second identical run adds no rows.
-- **Macro page** (`pages/macro.py`): the regime label with the rules behind it, a scorecard
-  by group (value, observation date, z-score, percentile, three-month change, concern),
-  a chart per indicator with NBER recession shading and rule thresholds, a "changed since
-  the previous run" panel, a form to record releases, and a freshness footer. It reads
-  DuckDB only; every figure shows its date.
+  and no fallback covers it. A second identical run adds no rows. A full run (no `--only`)
+  also downloads the daily closes of every symbol in `config/markets.toml` for the market
+  charts; a symbol with no data is named in the output and the fetch log, without changing
+  the exit status.
+- **Macro page** (`pages/macro.py`): market charts at the top, then the regime label with
+  the rules behind it, a scorecard by group (value, observation date, z-score, percentile,
+  three-month change, concern), a chart per indicator with NBER recession shading and rule
+  thresholds, a "changed since the previous run" panel, a form to record releases, and a
+  freshness footer. It reads DuckDB only; every figure shows its date.
+- **Market charts** (Macro page): world main indices, world small and mid caps, Europe's
+  national main indices, Europe's mid caps and small caps, and commodities, each chart
+  overlaying its series as the % change from each one's first close in the time range (1M
+  to 10Y and Max; Max starts where every line has data), in its own currency. Two charts to
+  a row by default (1 to 3) at a chosen height, as on the portfolio page; the choices are
+  kept in the page URL. The series, their Yahoo symbols and a few words on what each index
+  covers ("Greece, 60 largest"), printed under its chart, are in `config/markets.toml`.
+  Where Yahoo keeps no history for an index, an ETF on the same index (or a close index)
+  stands in, starred in the legend and described under the chart; an index with neither is
+  listed there as not charted.
 - **Fundamentals and screener**: `python -m invest.jobs.fundamentals` ingests XBRL company
   facts, SIC sectors and prices for a universe from `config/universe.toml`, builds one row per
   company (Greenblatt earnings yield and ROIC, FCF yield, margins and their slope, growth,
@@ -208,7 +222,7 @@ carrying its observation date and source, nothing filled in silently.
 - `pages/macro.py`, `pages/screener.py`, `pages/report.py`: the analysis pages; they read
   DuckDB only.
 - `invest/`: the analysis package. `data/` (DuckDB store and every source client), `macro/`
-  (catalog, indicators, derived series, regime rules, scorecard), `positioning/` (COT, 13F,
+  (catalog, indicators, derived series, regime rules, scorecard, market charts), `positioning/` (COT, 13F,
   Form 4), `fundamentals/` (facts, metrics, screens, valuation, universe), `portfolio/`
   (rebalancing, FIFO lots, valuation for the jobs), `report/` (build, render, deliver,
   hypotheses), `research/` (event studies, walk-forward, hypothesis scripts), `jobs/`

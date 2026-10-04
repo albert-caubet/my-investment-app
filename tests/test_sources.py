@@ -241,3 +241,37 @@ def test_release_before_its_period_is_refused():
 def test_release_without_value_is_refused():
     with pytest.raises(ValueError):
         parse_releases({"release": [{"series": "X", "period": "2026-08", "released": "2026-09-01"}]})
+
+
+def test_market_prices_reuse_the_catalogs_yahoo_batch(monkeypatch):
+    import pandas as pd
+
+    from invest.data import yahoo
+    from invest.data.sources import Fetcher
+
+    frame = pd.DataFrame({"close": [1.0], "adj_close": [1.0]}, index=pd.DatetimeIndex(["2026-10-02"]))
+    asked = []
+
+    def fetch_history(symbols, **kwargs):
+        asked.append(list(symbols))
+        return {s: frame for s in symbols if s != "NOPE.XX"}
+
+    monkeypatch.setattr(yahoo, "fetch_history", fetch_history)
+    fetcher = Fetcher()
+    fetcher.yahoo_frames["^GSPC"] = frame  # fetched with the catalog
+    got = fetcher.fetch_prices(["^GSPC", "GC=F", "NOPE.XX"])
+    assert asked == [["GC=F", "NOPE.XX"]]  # one batch, without what the catalog already has
+    assert set(got) == {"^GSPC", "GC=F"}
+    assert set(fetcher.yahoo_frames) == {"^GSPC", "GC=F"}  # what the refresh job stores
+
+
+def test_a_failed_market_download_is_a_source_error(monkeypatch):
+    from invest.data import yahoo
+    from invest.data.sources import Fetcher, SourceError
+
+    def fetch_history(symbols, **kwargs):
+        raise ConnectionError("timeout")
+
+    monkeypatch.setattr(yahoo, "fetch_history", fetch_history)
+    with pytest.raises(SourceError, match="yahoo batch download failed: timeout"):
+        Fetcher().fetch_prices(["GC=F"])

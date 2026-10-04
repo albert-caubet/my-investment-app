@@ -155,10 +155,11 @@ def run_weekly(
     if not skip_refresh:
         def do_refresh():
             from invest.data.sources import Fetcher
-            from invest.jobs.refresh import refresh
+            from invest.jobs.refresh import market_symbols, refresh
             from invest.secrets import fred_api_key
 
-            report = refresh(store, catalog, Fetcher(fred_api_key=fred_api_key()), releases=load_releases(), today=today, log=log)
+            report = refresh(store, catalog, Fetcher(fred_api_key=fred_api_key()), releases=load_releases(),
+                             markets=market_symbols(log=log), today=today, log=log)
             for row in report.critical_failures:
                 ctx.failures[f"series {row.id}"] = f"{row.status}: {row.message}"
             return report

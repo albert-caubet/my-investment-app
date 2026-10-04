@@ -108,6 +108,7 @@ def test_presets_count_back_from_the_last_price():
     assert charts.range_start("6M", FIRST, LAST) == date(2026, 4, 2)
     assert charts.range_start("1Y", FIRST, LAST) == date(2025, 10, 2)
     assert charts.range_start("5Y", FIRST, LAST) == date(2021, 10, 2)
+    assert charts.range_start("10Y", FIRST, LAST) == date(2016, 10, 2)
 
 
 def test_a_month_back_from_the_end_of_a_month_lands_on_the_shorter_months_end():
@@ -137,3 +138,35 @@ def test_a_window_is_cut_to_the_history():
 
 def test_a_window_outside_the_history_becomes_all_of_it():
     assert charts.clamp_window((date(2000, 1, 1), date(2001, 1, 1)), FIRST, LAST) == (FIRST, LAST)
+
+
+# --- charts of several series ------------------------------------------------------
+
+
+def test_series_take_the_palette_in_order_then_a_dash_past_eight():
+    lines = [charts.series_line(i) for i in range(19)]
+    assert [line["color"] for line in lines[:8]] == list(charts.SERIES_COLORS["light"])
+    assert {line["dash"] for line in lines[:8]} == {"solid"}
+    assert lines[8]["color"] == lines[0]["color"] and lines[8]["dash"] == "dash"
+    assert lines[16]["dash"] == "dot"
+    assert len({(line["color"], line["dash"]) for line in lines}) == 19  # no two lines alike
+
+
+def test_series_take_the_dark_steps_on_the_dark_theme(monkeypatch):
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(charts.st, "context", SimpleNamespace(theme=SimpleNamespace(type="dark")))
+    assert [charts.series_line(i)["color"] for i in range(8)] == list(charts.SERIES_COLORS["dark"])
+
+
+def test_a_legend_that_fits_takes_one_row():
+    assert charts.legend_rows(["Gold", "Silver"], width=400, font=14) == 1
+    assert charts.legend_rows([], width=400, font=14) == 0
+
+
+def test_a_legend_that_wraps_is_a_grid_as_wide_as_its_longest_name():
+    short = ["AEX", "SMI", "ATX", "PSI", "BUX"]
+    # too wide for one row, so a grid: the long name makes every column 216px, two to a row
+    # where the short names alone would sit seven to a row
+    assert charts.legend_rows(short + ["European natural gas (TTF)"], width=500, font=14) == 3
+    assert charts.legend_rows(short * 4, width=200, font=14) == 7  # 20 entries, three columns of 64px

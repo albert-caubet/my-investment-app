@@ -27,6 +27,12 @@ BENCHMARK_CCY = "USD"
 CAPM_PERIOD = "2y"
 SPOT_PERIOD = "7d"
 
+#: The yfinance period for each of the charts' time-range presets (``charts.RANGES``).
+#: yfinance turns a period it has no range for, such as "3y", into start and end dates.
+RANGE_PERIODS = {
+    "1M": "1mo", "6M": "6mo", "YTD": "ytd", "1Y": "1y", "3Y": "3y", "5Y": "5y", "10Y": "10y", "Max": "max",
+}
+
 #: US 10Y, shown for reference. Not used in CAPM -- it is the wrong currency for a
 #: EUR investor, and beta is insensitive to it anyway (a constant shift cancels out
 #: of the covariance), so only alpha would be affected.

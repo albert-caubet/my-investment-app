@@ -6,6 +6,11 @@ Exit status is non-zero when a *critical* series failed to fetch or is older
 than its frequency and publication lag allow (and no fallback covers it). A
 failed non-critical series is printed and stored in the fetch log, never hidden.
 
+A full run (no ``--only``) also downloads the daily closes of every symbol in
+``config/markets.toml``, for the Macro page's market charts. They are not
+catalog series: a symbol with no data is named in the output and the fetch log,
+and does not change the exit status.
+
 The job is the only writer of the DuckDB file. Everything it stores carries the
 run's fetch time, so a second identical run adds no rows.
 """
@@ -18,6 +23,7 @@ import traceback
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import Path
+from typing import Sequence
 
 import pandas as pd
 
@@ -26,6 +32,7 @@ from invest.data.releases import Release, load_releases
 from invest.data.sources import Fetcher, SourceError
 from invest.macro import derived
 from invest.macro.catalog import Catalog, SeriesSpec, load_catalog
+from invest.macro.markets import MarketsError, all_symbols, load_markets
 from invest.secrets import fred_api_key
 
 
@@ -59,6 +66,9 @@ class RefreshReport:
     rows: list[FreshnessRow] = field(default_factory=list)
     n_ok: int = 0
     n_failed: int = 0
+    #: The market charts' symbols: how many were stored, and which returned nothing.
+    markets_ok: int = 0
+    markets_failed: list[str] = field(default_factory=list)
 
     @property
     def failures(self) -> list[FreshnessRow]:
@@ -157,6 +167,46 @@ def ingest_releases(store: Store, releases: list[Release], catalog: Catalog, *, 
     return added
 
 
+def market_symbols(log=print) -> tuple[str, ...]:
+    """Every symbol of ``config/markets.toml``; none when the file is unusable, which is printed.
+
+    A mistake in the chart list must not stop the catalog's refresh.
+    """
+    try:
+        return all_symbols(load_markets())
+    except (OSError, MarketsError, ValueError) as exc:  # tomllib's TOMLDecodeError is a ValueError
+        if log:
+            log(f"  markets: not fetched, config/markets.toml: {exc}")
+        return ()
+
+
+def fetch_markets(store: Store, fetcher, symbols: Sequence[str], report: RefreshReport, *, log=print) -> None:
+    """Download the market charts' closes into ``fetcher.yahoo_frames``, logging each symbol.
+
+    The caller stores ``yahoo_frames`` afterwards, with the catalog's Yahoo prices.
+    """
+    started = utcnow()
+    message = "yahoo returned no data"
+    try:
+        got = fetcher.fetch_prices(symbols)
+    except SourceError as exc:
+        got, message = {}, str(exc)
+    for symbol in symbols:
+        frame = got.get(symbol)
+        if frame is None or frame.empty:
+            store.log_fetch(symbol, source="yahoo", key=symbol, status="failed", message=message, started=started)
+            report.markets_failed.append(symbol)
+        else:
+            store.log_fetch(symbol, source="yahoo", key=symbol, status="ok", n_rows=len(frame), started=started)
+            report.markets_ok += 1
+    if log:
+        # Not "markets: FAILED", which the app's progress bar would count as a catalog series.
+        line = f"  markets: {report.markets_ok} of {len(symbols)} symbols fetched"
+        if report.markets_failed:
+            line += f"; no data for {', '.join(report.markets_failed)} ({message})"
+        log(line)
+
+
 def compute_derived(
     store: Store, catalog: Catalog, *, fetched_at: datetime, log=None
 ) -> dict[str, tuple[str, str]]:
@@ -212,10 +262,12 @@ def refresh(
     *,
     only: set[str] | None = None,
     releases: list[Release] | None = None,
+    markets: Sequence[str] = (),
     skip_derived: bool = False,
     today: date | None = None,
     log=print,
 ) -> RefreshReport:
+    """``markets``: Yahoo symbols for the Macro page's market charts, stored as prices."""
     today = today or date.today()
     fetched_at = utcnow()
     run_id = store.start_run("refresh")
@@ -249,6 +301,8 @@ def refresh(
                 shown = message if len(message) <= 200 else f"{message[:70]} … {message[-120:]}"
                 log(f"  {spec.id}: FAILED {shown}")
 
+    if markets:
+        fetch_markets(store, fetcher, markets, report, log=log)
     for symbol, frame in fetcher.yahoo_frames.items():
         store.upsert_prices(symbol, frame, fetched_at=fetched_at)
     for result in fetcher.downloads:
@@ -304,7 +358,10 @@ def refresh(
         except Exception as exc:  # the data is stored; a scorecard problem must not lose the run
             if log:
                 log(f"  scorecard snapshot FAILED: {exc}")
-    notes = "; ".join(f"{r.id}: {r.status}" for r in report.failures)[:4000]
+    notes = "; ".join(
+        [f"{r.id}: {r.status}" for r in report.failures]
+        + ([f"markets: no data for {', '.join(report.markets_failed)}"] if report.markets_failed else [])
+    )[:4000]
     store.finish_run(run_id, ok=report.n_ok, failed=report.n_failed, notes=notes)
     return report
 
@@ -322,10 +379,13 @@ def main(argv: list[str] | None = None) -> int:
     only = {s.strip() for s in args.only.split(",") if s.strip()} or None
     log = (lambda *a, **k: None) if args.quiet else print
 
+    markets = () if only else market_symbols(log=print)  # --only names catalog series alone
+
     with Store(args.db) as store:
         fetcher = Fetcher(fred_api_key=fred_api_key())
         try:
-            report = refresh(store, catalog, fetcher, only=only, releases=releases, skip_derived=args.skip_derived, log=log)
+            report = refresh(store, catalog, fetcher, only=only, releases=releases, markets=markets,
+                             skip_derived=args.skip_derived, log=log)
         except Exception:
             traceback.print_exc()
             return 2
@@ -334,6 +394,9 @@ def main(argv: list[str] | None = None) -> int:
     print()
     print(f"run {report.run_id}: {report.n_ok} fetched, {report.n_failed} failed, "
           f"{len(report.critical_failures)} critical problem(s)")
+    if markets:
+        print(f"market charts: {report.markets_ok} of {len(markets)} symbols fetched"
+              + (f", no data for {', '.join(report.markets_failed)}" if report.markets_failed else ""))
     for row in report.critical_failures:
         print(f"  CRITICAL {row.id}: {row.status} {row.message}")
     return report.exit_code

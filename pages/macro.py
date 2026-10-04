@@ -1,4 +1,4 @@
-"""Macro page: regime, scorecard, charts, releases, freshness. Reads DuckDB only.
+"""Macro page: market charts, regime, scorecard, charts, releases, freshness. Reads DuckDB only.
 
 Every figure carries its observation date. Loading the page never calls the
 network: the data is whatever ``python -m invest.jobs.refresh`` last stored, and
@@ -22,6 +22,7 @@ from invest.data.releases import Release, append_release, load_releases
 from invest.jobs.refresh import ingest_releases
 from invest.macro import scorecard as sc
 from invest.macro.catalog import GROUPS, load_catalog
+from invest.macro import markets
 from invest.macro.indicators import format_value, recession_spans
 from invest.macro.regimes import thresholds_for
 from invest.paths import db_path
@@ -124,6 +125,151 @@ else:
 with right:
     job_panel.start_button("refresh", "Refresh now", help="Runs `python -m invest.jobs.refresh` in the background.")
 job_panel.last_result("refresh")
+
+# ==========================================================================================
+# Markets
+# ==========================================================================================
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def _market_closes(db: str, version: float, symbols: tuple[str, ...]) -> dict[str, pd.Series]:
+    """``{symbol: daily closes}`` for every symbol with prices stored; the others are absent."""
+    with Store(db, read_only=True) as store:
+        panel = store.read_price_panel(symbols, adjusted=False)
+    closes = {s: markets.weekdays(panel[s].dropna()) for s in symbols if s in panel.columns}
+    return {s: c for s, c in closes.items() if not c.empty}
+
+
+LEGEND_FONT = 14  # under charts.FONT: up to 19 names sit above a chart in half a row
+LEGEND_ROW = 21.2  # pixels a legend row takes at that size (measured)
+#: The plot's width, by charts per row, in a window 1440 pixels wide with the sidebar
+#: open (measured): what the legend's rows are estimated for. In a wider window the
+#: names take fewer rows, and the plot gets the height they leave.
+PLOT_WIDTH = {1: 880, 2: 350, 3: 185}
+
+
+def _market_chart(
+    chart: markets.MarketChart, closes: dict[str, pd.Series], preset: str, height: int, per_row: int
+) -> None:
+    stored = {s.symbol: closes[s.symbol] for s in chart.charted if s.symbol in closes}
+    if not stored:
+        st.info("No prices stored for this chart yet. The next refresh downloads them.")
+        _market_notes(chart)
+        return
+    first = min(c.index[0] for c in stored.values()).date()
+    last = max(c.index[-1] for c in stored.values()).date()
+    # Max is where every line has data, so they all start together at 0. From the
+    # very first close, one index with decades more history would dwarf the rest.
+    start = markets.common_start(stored) if preset == "Max" else charts.range_start(preset, first, last)
+    weekly = (last - start).days > markets.WEEKLY_AFTER_DAYS
+    late = pd.Timedelta(days=7)  # more than a week of holidays: the line starts or stops on its own date
+
+    fig = go.Figure()
+    fig.add_hline(y=0, line_width=1, line_color="rgba(128, 128, 128, 0.6)")
+    # Said under the chart rather than in the legend, where every name must stay short.
+    starts_late, ends_early, out_of_range = [], [], []
+    for i, series in enumerate(chart.charted):  # by place in the list, so a line keeps its look if another is missing
+        if series.symbol not in stored:
+            continue
+        change = markets.rebase(stored[series.symbol], start, last)
+        if change.empty:
+            out_of_range.append(f"{series.label} ({series.symbol}, last close {stored[series.symbol].index[-1]:%d %b %Y})")
+            continue
+        if change.index[0] - pd.Timestamp(start) > late:
+            starts_late.append(f"{series.label} on {change.index[0]:%d %b %Y}")
+        if pd.Timestamp(last) - change.index[-1] > late:
+            ends_early.append(f"{series.label} on {change.index[-1]:%d %b %Y}")
+        shown = markets.weekly(change) if weekly else change
+        fig.add_scatter(
+            x=shown.index, y=shown.to_numpy(), customdata=stored[series.symbol].reindex(shown.index).to_numpy(),
+            name=series.legend, mode="lines", line=charts.series_line(i),
+            hovertemplate=f"{series.legend}: %{{y:+.1%}} · %{{customdata:,.2f}} {series.currency}<extra></extra>",
+        )
+    fig.update_yaxes(tickformat="+.1~%", title_text=f"Change since {start:%d %b %Y}")
+    # The legend above the plot, as on the portfolio page, so it takes no width from the
+    # lines. The chart is taller by the rows the names take, so the plot keeps about the
+    # height chosen however many lines it has.
+    names = [trace.name for trace in fig.data]
+    fig.update_layout(
+        template="plotly_white", hovermode="x unified", showlegend=True, xaxis_hoverformat="%d %b %Y",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+    )
+    legend_height = round(charts.legend_rows(names, PLOT_WIDTH[per_row], LEGEND_FONT) * LEGEND_ROW)
+    charts.readable(fig, height=height + legend_height)
+    # After readable, which sets the app's 18px and 20px: at those sizes a dozen names take
+    # a third of the chart, and the hover's list of every line overflows the plot.
+    fig.update_layout(legend_font_size=LEGEND_FONT, hoverlabel_font_size=LEGEND_FONT)
+    st.plotly_chart(fig, width="stretch")
+
+    notes = [f"Latest close {last:%d %b %Y}" + (f"; Max starts on {start:%d %b %Y}, the first day with a close "
+                                                f"for every line" if preset == "Max" else "") + "."]
+    if starts_late:
+        notes.append(f"Starting later, at 0% on their first close: {', '.join(starts_late)}.")
+    if ends_early:
+        notes.append(f"Ending earlier, at their last close: {', '.join(ends_early)}.")
+    not_stored = [f"{s.label} ({s.symbol})" for s in chart.charted if s.symbol not in stored]
+    if not_stored:
+        notes.append(f"No prices stored for {', '.join(not_stored)}; the next refresh downloads them.")
+    if out_of_range:
+        notes.append(f"No close in the time range for {', '.join(out_of_range)}.")
+    st.caption(" ".join(notes))
+    _market_notes(chart)
+
+
+def _market_notes(chart: markets.MarketChart) -> None:
+    """What each line covers, which ones are proxies, and what the chart leaves out."""
+    covers = [f"{s.label}: {s.about}" for s in chart.charted if s.about]
+    if covers:
+        st.caption("**Covers.** " + " · ".join(covers))
+    proxies = [f"{s.label}: {s.symbol}, {s.proxy}." for s in chart.charted if s.proxy]
+    if proxies:
+        st.caption("\\* Proxies. " + " ".join(proxies))
+    left_out = [f"{s.label} ({s.about}): {s.note}" if s.about else f"{s.label}: {s.note}"
+                for s in chart.series if not s.symbol]
+    if left_out:
+        st.caption(f"Not charted: {'; '.join(left_out)}.")
+
+
+@st.fragment  # a control reruns the market charts only, not the scorecard below
+def _market_section(market_charts: tuple[markets.MarketChart, ...]) -> None:
+    st.subheader("Markets")
+    # Kept in the URL (?market_range=5Y&market_per_row=3&market_height=Large), as on the
+    # portfolio page, so a reload or a bookmark keeps the choice. Keys of their own: the
+    # portfolio page's would carry its choice over to this page, ahead of this page's URL.
+    controls = st.container(horizontal=True, vertical_alignment="bottom", gap="medium")
+    preset = controls.segmented_control(
+        "Time range", charts.RANGES, default=charts.DEFAULT_RANGE, required=True, key="market_range",
+        bind="query-params",
+    )
+    per_row = controls.segmented_control(
+        "Charts per row", (1, 2, 3), default=2, required=True, key="market_per_row", bind="query-params"
+    )
+    chart_height = controls.segmented_control(
+        "Chart height", tuple(charts.HEIGHTS), default="Medium", required=True, key="market_height",
+        bind="query-params",
+    )
+    st.caption(
+        "Each line is the % change from its first close in the time range, in its own currency; the hover "
+        "shows the close too. Most are price indices, without dividends; the DAX family and the total-return "
+        "proxies include them. Futures are Yahoo's front-month contracts, so a roll can show as a jump. Ranges "
+        "over two years plot weekly closes. Click a legend entry to hide its line, double-click to show it alone."
+    )
+    closes = _market_closes(str(DB), _db_version(), markets.all_symbols(market_charts))
+    for i, chart in enumerate(market_charts):
+        if i % per_row == 0:
+            cells = st.columns(per_row)  # a row per group, so neighbours line up at the top
+        # The chart has no title, which half a row could not fit: this label names it.
+        with cells[i % per_row].expander(f"📈 {chart.title}", expanded=True):
+            _market_chart(chart, closes, preset, charts.HEIGHTS[chart_height], per_row)
+
+
+try:
+    market_charts = markets.load_markets()
+except (OSError, ValueError) as exc:  # a MarketsError, or tomllib's TOMLDecodeError
+    st.subheader("Markets")
+    st.warning(f"The market charts are not shown: config/markets.toml: {exc}")
+else:
+    _market_section(market_charts)
 
 # ==========================================================================================
 # Regime

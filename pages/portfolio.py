@@ -701,22 +701,14 @@ if open_ids:
     st.markdown("---")
     st.subheader("Asset Performance & Transaction History")
 
-    time_options = {
-        "6 Months": "6mo",
-        "1 Year": "1y",
-        "3 Years": "3y",
-        "5 Years": "5y",
-        "10 Years": "10y",
-        "All Time": "max",
-    }
-    controls = st.container(horizontal=True, vertical_alignment="bottom", gap="medium")
-    selected_label = controls.selectbox(
-        "Select Time Range", options=list(time_options.keys()), index=2, width=250
-    )
-    selected_period = time_options[selected_label]
-    # All kept in the URL (?charts_per_row=3&chart_height=Large&y_axis=Change), so a
-    # reload or a bookmark keeps the choice. The URL carries an option's label, so the
+    # All kept in the URL (?time_range=5Y&charts_per_row=3&chart_height=Large&y_axis=Change),
+    # so a reload or a bookmark keeps the choice. The URL carries an option's label, so the
     # labels stay plain words: "% change" would read %25+change there.
+    controls = st.container(horizontal=True, vertical_alignment="bottom", gap="medium")
+    selected_range = controls.segmented_control(
+        "Time range", charts.RANGES, default="3Y", required=True, key="time_range", bind="query-params"
+    )
+    selected_period = md.RANGE_PERIODS[selected_range]
     per_row = controls.segmented_control(
         "Charts per row", (1, 2, 3), default=2, required=True, key="charts_per_row", bind="query-params"
     )

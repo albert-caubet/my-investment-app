@@ -162,3 +162,89 @@ def test_freshness_snapshot_is_saved(store):
     assert run_id == report.run_id
     assert {row["id"] for row in payload} == {s.id for s in CATALOG}
     assert "series" in report.table()
+
+
+# --- the market charts' prices ---------------------------------------------------------
+
+
+def _prices(closes: dict) -> pd.DataFrame:
+    index = pd.DatetimeIndex(list(closes))
+    return pd.DataFrame({"close": list(closes.values()), "adj_close": list(closes.values())}, index=index)
+
+
+class MarketFetcher(FakeFetcher):
+    """Yahoo as the refresh job sees it: ``fetch_prices`` keeps what it got in ``yahoo_frames``."""
+
+    def __init__(self, data: dict, prices: dict | Exception):
+        super().__init__(data)
+        self.prices = prices
+        self.asked = None
+
+    def fetch_prices(self, symbols):
+        self.asked = list(symbols)
+        if isinstance(self.prices, Exception):
+            raise self.prices
+        got = {s: self.prices[s] for s in symbols if s in self.prices}
+        self.yahoo_frames.update(got)
+        return got
+
+
+def test_market_symbols_are_stored_as_prices_and_a_missing_one_is_named(store):
+    fetcher = MarketFetcher(GOOD, {"^GSPC": _prices({"2026-09-08": 6500.0, "2026-09-09": 6550.0})})
+    report = refresh(store, CATALOG, fetcher, markets=("^GSPC", "NOPE.XX"), today=TODAY, log=None)
+    assert fetcher.asked == ["^GSPC", "NOPE.XX"]
+    assert list(store.read_prices("^GSPC")) == [6500.0, 6550.0]
+    assert (report.markets_ok, report.markets_failed) == (1, ["NOPE.XX"])
+    fetches = store.latest_fetches().set_index("series_id")
+    assert fetches.loc["^GSPC", "status"] == "ok"
+    assert fetches.loc["NOPE.XX", "status"] == "failed"
+    assert "NOPE.XX" in store.runs("refresh").iloc[0]["notes"]
+    # not catalog series: neither in the freshness table nor in the exit status
+    assert {r.id for r in report.rows} == {s.id for s in CATALOG}
+    assert report.exit_code == 0
+
+
+def test_a_failed_market_download_is_reported_for_every_symbol(store):
+    fetcher = MarketFetcher(GOOD, SourceError("yahoo batch download failed: timeout"))
+    lines = []
+    report = refresh(store, CATALOG, fetcher, markets=("^GSPC", "GC=F"), today=TODAY, log=lines.append)
+    assert report.markets_failed == ["^GSPC", "GC=F"]
+    assert store.latest_fetches().set_index("series_id").loc["GC=F", "message"].endswith("timeout")
+    assert any(l.startswith("  markets: 0 of 2 symbols fetched; no data for ^GSPC, GC=F") for l in lines)
+    assert report.exit_code == 0  # the catalog's critical series are what decide it
+
+
+def test_the_markets_line_is_not_counted_as_a_catalog_series():
+    """The app's progress bar counts "  ID: <n> obs" and "  ID: FAILED" lines, one per series."""
+    from invest.jobs.launcher import count_series_lines
+
+    assert count_series_lines("  markets: 0 of 61 symbols fetched; no data for ^GSPC (timeout)") == 0
+    assert count_series_lines("  markets: not fetched, config/markets.toml: bad") == 0
+
+
+def test_without_markets_nothing_is_asked_of_yahoo(store):
+    fetcher = MarketFetcher(GOOD, {})
+    report = refresh(store, CATALOG, fetcher, today=TODAY, log=None)
+    assert fetcher.asked is None
+    assert (report.markets_ok, report.markets_failed) == (0, [])
+
+
+def test_a_broken_markets_file_does_not_stop_the_refresh(monkeypatch):
+    from invest.jobs import refresh as job
+    from invest.macro.markets import MarketsError
+
+    def broken():
+        raise MarketsError("world: duplicate symbols ['^GSPC']")
+
+    monkeypatch.setattr(job, "load_markets", broken)
+    lines = []
+    assert job.market_symbols(log=lines.append) == ()
+    assert lines == ["  markets: not fetched, config/markets.toml: world: duplicate symbols ['^GSPC']"]
+
+
+def test_the_shipped_markets_file_gives_every_symbol_once():
+    from invest.jobs.refresh import market_symbols
+
+    symbols = market_symbols(log=None)
+    assert len(symbols) == len(set(symbols)) > 50
+    assert "^GSPC" in symbols and "TTF=F" in symbols

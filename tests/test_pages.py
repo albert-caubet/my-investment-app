@@ -235,6 +235,52 @@ def test_y_axis_is_read_from_the_url(canned):
     assert at.button_group(key="y_axis").value == "Change"
 
 
+@pytest.fixture
+def periods(canned, monkeypatch):
+    """The periods the price charts ask yfinance for, after the CAPM's own."""
+    asked = []
+    history = md.fetch_price_history
+
+    def recording(tickers, period, *, adjusted=True):
+        if not adjusted:  # the price charts; the CAPM series is adjusted
+            asked.append(period)
+        return history(tickers, period, adjusted=adjusted)
+
+    monkeypatch.setattr(md, "fetch_price_history", recording)
+    return asked
+
+
+def test_the_time_range_is_a_row_of_presets_three_years_by_default(periods):
+    at = _app().run()
+    assert not at.exception
+    assert not at.selectbox  # the dropdown it replaced
+    control = at.button_group(key="time_range")
+    assert control.options == list(charts.RANGES)
+    assert control.value == "3Y"
+    assert periods and set(periods) == {"3y"}
+
+
+@pytest.mark.parametrize("preset, period", [("YTD", "ytd"), ("10Y", "10y"), ("Max", "max")])
+def test_each_time_range_fetches_its_period(periods, preset, period):
+    at = _app().run()
+    periods.clear()
+    at.button_group(key="time_range").set_value(preset).run()
+    assert not at.exception
+    assert periods and set(periods) == {period}
+
+
+def test_time_range_is_read_from_the_url(canned):
+    at = _app()
+    at.query_params["time_range"] = "10Y"
+    at.run()
+    assert not at.exception
+    assert at.button_group(key="time_range").value == "10Y"
+
+
+def test_every_time_range_has_a_yahoo_period():
+    assert list(md.RANGE_PERIODS) == list(charts.RANGES)
+
+
 # --- transactions: create ----------------------------------------------------
 
 
