@@ -90,6 +90,7 @@ def test_weekly_report_runs_end_to_end_on_stored_data(seeded, tmp_path):
     assert "Magic formula" in md and "MMM" in md
     assert result.failures == {}
     assert result.paths["html"].exists() and (reports / "latest.html").exists()
+    assert result.paths["html"].name.startswith("report_2026-09-10_")  # named after the report date, not the clock
     assert "<svg" in result.html  # sparklines rendered
     assert any("archived" in s for s in result.statuses) and any("delivery skipped" in s for s in result.statuses)
     with Store(seeded, read_only=True) as store:

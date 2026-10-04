@@ -129,8 +129,8 @@ def run_weekly(
     reports_directory: Path | None = None,
     log=print,
 ) -> WeeklyResult:
-    today = today or date.today()
     now = datetime.now()
+    today = today or now.date()
     run_id = store.start_run("weekly")
     ctx = ReportContext(run_date=today, run_id=run_id)
     catalog = load_catalog()
@@ -265,7 +265,9 @@ def run_weekly(
     html_text = markdown_to_html(markdown_text, title=f"Weekly report {today.isoformat()}")
     summary = f"Weekly report {today.isoformat()}: regime {ctx.regime.label if ctx.regime else 'n/a'}; " \
               f"{len(ctx.plan.trades) if ctx.plan else 0} trade(s) proposed; {len(ctx.failures)} problem(s)."
-    paths, statuses = deliver_mod.deliver(markdown_text, html_text, now, summary=summary, directory=reports_directory, send=send)
+    # filed under the report date, so a backdated --today run sits with the week it reports on
+    filed_at = datetime.combine(today, now.time())
+    paths, statuses = deliver_mod.deliver(markdown_text, html_text, filed_at, summary=summary, directory=reports_directory, send=send)
     if ctx.failures and send:
         from invest.jobs.notify import notify
 
@@ -291,7 +293,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--fundamentals", action="store_true", help="also re-ingest the screener universe (slow)")
     parser.add_argument("--no-deliver", action="store_true", help="archive only")
     parser.add_argument("--transactions", default=None, help="JSON export of transactions instead of Firestore")
-    parser.add_argument("--today", default=None)
+    parser.add_argument("--today", default=None, help="build the report as of this date (YYYY-MM-DD); the archive is named after it")
     args = parser.parse_args(argv)
     if args.transactions:
         os.environ["INVEST_TRANSACTIONS_JSON"] = args.transactions
