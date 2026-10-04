@@ -1,10 +1,14 @@
 # Weekly report on GitHub Actions (PLAN.md section 8, Stage B).
 #
 # Runs every Saturday at 07:00 UTC and on demand. The DuckDB file is cached
-# between runs (restored from the newest cache when the week's key is new), so
+# between runs (each run restores the newest copy and saves its own), so
 # revision history and the scorecard snapshots accrue; if the cache is lost the
 # jobs rebuild everything from the sources. The report is uploaded as an
 # artifact and delivered by email or Telegram when the secrets are set.
+#
+# Each job exits non-zero when any source had a problem. The later steps run
+# anyway, as the local scripts do: the report lists what is missing, the
+# database is still saved, and the run is still marked failed so it shows.
 #
 # Repository secrets used (all optional except SEC_USER_AGENT for filings and
 # fundamentals): SEC_USER_AGENT, FRED_API_KEY, FIREBASE_CREDENTIALS_JSON (the
@@ -53,33 +57,45 @@ jobs:
           python-version: "3.13"
           cache: pip
 
-      - run: pip install -r requirements.txt
+      - id: install
+        run: pip install -r requirements.txt
 
-      - name: Week number for the cache key
+      - name: Week number for the artifact name
         id: week
         run: echo "week=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
 
+      # Restore and save are separate steps because actions/cache saves only
+      # when every step succeeded, and a run with any missing source does not.
       - name: Restore the market database
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: data/market.duckdb
-          key: market-duckdb-${{ steps.week.outputs.week }}
+          key: market-duckdb-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: |
             market-duckdb-
 
       - name: Refresh the indicator catalog
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: python -m invest.jobs.refresh --quiet
 
       - name: Refresh 13F holdings
-        if: env.SEC_USER_AGENT != ''
+        if: ${{ !cancelled() && steps.install.outcome == 'success' && env.SEC_USER_AGENT != '' }}
         run: python -m invest.jobs.filings
 
       - name: Refresh the screener universe
-        if: env.SEC_USER_AGENT != '' && (github.event_name == 'schedule' || inputs.fundamentals)
+        if: ${{ !cancelled() && steps.install.outcome == 'success' && env.SEC_USER_AGENT != '' && (github.event_name == 'schedule' || inputs.fundamentals) }}
         run: python -m invest.jobs.fundamentals
 
       - name: Build and deliver the report
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: python -m invest.jobs.weekly --skip-refresh --skip-filings
+
+      - name: Save the market database
+        if: ${{ !cancelled() && hashFiles('data/market.duckdb') != '' }}
+        uses: actions/cache/save@v4
+        with:
+          path: data/market.duckdb
+          key: market-duckdb-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Upload the report and the log
         if: always()
