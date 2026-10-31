@@ -222,6 +222,27 @@ def test_nyfed_recprob_rows_shift_target_month_back_a_year():
     assert last["target_month"].year - last["obs_date"].year == 1
 
 
+def test_nyfed_recprob_reads_the_text_dates_the_file_uses_now():
+    """The ``Date`` column now holds text; every row was skipped when only serials were read."""
+    rows = [
+        ["Date", "10y", "3m", "3m bey", "Spread", "Rec_prob", "NBER_Rec"],
+        ["01-Jan-1959", 4.02, 2.82, 2.879694086009773, 1.1403059139902267, "", 0.0],
+        ["01-Sep-2026", 4.99, 3.94, 4.034907660909513, 0.9550923390904869, 0.2741670985548616, 0.0],
+        ["01-Sep-2027", "", "", "", "", 0.12758666440605101, ""],
+        ["01-Foo-2027", "", "", "", "", 0.5, ""],
+    ]
+    frame = parse_nyfed_recprob_rows(rows)
+    assert list(frame["target_month"]) == [date(1959, 1, 1), date(2026, 9, 1), date(2027, 9, 1)]
+    assert list(frame["obs_date"]) == [date(1958, 1, 1), date(2025, 9, 1), date(2026, 9, 1)]
+    assert frame.iloc[0]["spread"] == pytest.approx(1.1403059, abs=1e-6)
+    assert frame.iloc[-1]["rec_prob"] == pytest.approx(0.12758666, abs=1e-6)
+
+
+def test_nyfed_recprob_rejects_a_sheet_with_no_data_rows():
+    with pytest.raises(ValueError, match="no NY Fed"):
+        parse_nyfed_recprob_rows([["Date", "Spread"], ["note", ""]])
+
+
 def test_hlw_rows_locate_rstar_columns_by_title():
     rows = _rows("hlw_estimates_rows.csv")
     frame = parse_hlw_rows(rows)

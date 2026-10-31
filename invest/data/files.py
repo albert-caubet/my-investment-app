@@ -256,6 +256,16 @@ def _excel_serial_to_date(serial) -> date | None:
     return (pd.Timestamp("1899-12-30") + pd.Timedelta(days=int(value))).date()
 
 
+def _nyfed_month(raw) -> date | None:
+    """The month of a ``Date`` cell: text like ``01-Jan-1959``, or an Excel serial in older files."""
+    match = re.fullmatch(r"\d{1,2}-([A-Za-z]{3})-(\d{4})", str(raw).strip())
+    if match:
+        month = _MONTHS.get(match.group(1).title())
+        return date(int(match.group(2)), month, 1) if month else None
+    day = _excel_serial_to_date(raw)
+    return date(day.year, day.month, 1) if day else None
+
+
 def parse_nyfed_recprob_rows(rows: Iterable[Sequence]) -> pd.DataFrame:
     """Sheet ``rec_prob``: Date, 10y, 3m, 3m (bond-equivalent), spread, Rec_prob, NBER_Rec.
 
@@ -269,10 +279,9 @@ def parse_nyfed_recprob_rows(rows: Iterable[Sequence]) -> pd.DataFrame:
     for row in rows:
         if not row:
             continue
-        target = _excel_serial_to_date(row[0])
+        target = _nyfed_month(row[0])
         if target is None:
             continue
-        target = date(target.year, target.month, 1)
         known = date(target.year - 1, target.month, 1)
         records.append(
             {
