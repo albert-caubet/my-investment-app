@@ -28,7 +28,7 @@ tickers = [
   "MDT", "VRTX", "REGN",
   # financials
   "BRK-B", "JPM", "V", "MA", "BAC", "WFC", "GS", "MS", "C", "AXP", "BLK", "SCHW", "SPGI", "CB", "PGR",
-  "MMC", "USB", "PNC",
+  "MRSH", "USB", "PNC",
   # industrials
   "CAT", "DE", "HON", "UNP", "UPS", "BA", "LMT", "RTX", "GE", "ETN", "ADP", "WM", "ITW", "EMR", "CSX",
   "NOC", "GD", "FDX", "MMM",
