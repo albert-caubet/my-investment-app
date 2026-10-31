@@ -10,6 +10,8 @@ Cached functions take **tuples**, not lists, so the cache key is immutable.
 
 from __future__ import annotations
 
+import re
+from datetime import date
 
 import numpy as np
 import pandas as pd
@@ -134,6 +136,36 @@ def fetch_historical_fx(date_iso: str, quote_ccy: str) -> float | None:
     return value if np.isfinite(value) and value > 0 else None
 
 
+def fetch_close_on(symbol: str, day: date) -> tuple[float, date]:
+    """The close of ``day``, or of the last day before it that traded, and which day that was.
+
+    Unadjusted: the price as it was quoted, which is what a trade was made at. An
+    adjusted close of a past day has every later dividend taken off it. Not cached, as
+    today's bar is still moving. Raises ``LookupError`` when there is no such close.
+    """
+    target = pd.Timestamp(day).normalize()
+    raw = yf.download(
+        symbol,
+        start=(target - pd.Timedelta(days=10)).strftime("%Y-%m-%d"),
+        end=(target + pd.Timedelta(days=1)).strftime("%Y-%m-%d"),  # end is exclusive
+        progress=False,
+        auto_adjust=False,
+    )
+    if raw is None or raw.empty:
+        raise LookupError(f"Yahoo Finance has no price for {symbol} up to {target:%Y-%m-%d}")
+    close = _flatten(raw)["Close"]
+    if isinstance(close, pd.DataFrame):
+        close = close.iloc[:, 0]
+    close = close.dropna()
+    index = pd.DatetimeIndex(close.index)
+    if index.tz is not None:
+        index = index.tz_localize(None)
+    close = close[index.normalize() <= target]
+    if close.empty:
+        raise LookupError(f"Yahoo Finance has no price for {symbol} up to {target:%Y-%m-%d}")
+    return float(close.iloc[-1]), pd.Timestamp(close.index[-1]).date()
+
+
 # ---------------------------------------------------------------------------
 # Metadata
 # ---------------------------------------------------------------------------
@@ -179,20 +211,6 @@ def fetch_listing_currency(tickers: tuple[str, ...]) -> dict[str, str | None]:
         except Exception:
             out[symbol] = None
     return out
-
-
-def fetch_listing_name(symbol: str) -> str | None:
-    """Display name from the quote summary.
-
-    This is the slow, flaky ``.info`` call. It is only made when the user presses
-    "Fetch Name" for one symbol, never on the dashboard path, and it is not cached
-    so that a transient failure can simply be retried by pressing again.
-    """
-    try:
-        info = yf.Ticker(symbol).info or {}
-    except Exception:
-        return None
-    return info.get("displayName") or info.get("shortName") or info.get("longName")
 
 
 @st.cache_data(ttl=86_400, show_spinner=False)
@@ -388,12 +406,53 @@ def live_valuations(
 # next run instead of being remembered as "nothing there" for hours.
 
 
+def reason(exc: Exception) -> str:
+    """An error as a reader wants it: the cause, without the URL a request error starts with."""
+    return re.sub(r"https?://\S+", "", str(exc)).strip(" :") or type(exc).__name__
+
+
 @st.cache_data(ttl=3_600, show_spinner=False)
 def search_yahoo(query: str) -> list[dict]:
     """Yahoo Finance's own search, by name, ticker or ISIN: its quote rows, best first."""
     return yf.Search(
         query, max_results=10, news_count=0, lists_count=0, include_cb=False, recommended=0, raise_errors=True
     ).quotes
+
+
+#: How many candidates one ISIN lookup checks with Yahoo. A click waits for them.
+ISIN_CANDIDATES = 20
+
+
+@st.cache_data(ttl=86_400, show_spinner=False)
+def fetch_isin(symbol: str, name: str) -> str:
+    """The ISIN of a Yahoo symbol, which Yahoo itself never says.
+
+    Onvista's search suggests candidates, and Yahoo's search for each has to name the
+    symbol: an ISIN is a position's identity, so a wrong one is worse than none, and
+    Onvista's answers include anything that looks alike. Failing that, another listing of
+    it, then Onvista's own word for it (see ``invest.data.search``). Raises ``LookupError``
+    when none of that holds.
+    """
+    from invest.data import onvista, search
+
+    candidates: dict[str, dict] = {}
+    other_listing = None
+    for query in search.isin_queries(symbol, name):
+        for row in onvista.search_instruments(query):
+            if row["isin"] in candidates or len(candidates) == ISIN_CANDIDATES:
+                continue
+            candidates[row["isin"]] = row
+            evidence = search.isin_evidence(symbol, name, search_yahoo(row["isin"]))
+            if evidence == 2:
+                return row["isin"]
+            if evidence == 1 and other_listing is None:
+                other_listing = row["isin"]
+    if other_listing:
+        return other_listing
+    for row in candidates.values():
+        if search.same_instrument(symbol, name, row):
+            return row["isin"]
+    raise LookupError(f"no ISIN found for {symbol}")
 
 
 @st.cache_data(ttl=43_200, show_spinner=False)

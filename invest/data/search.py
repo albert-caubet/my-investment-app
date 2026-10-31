@@ -37,6 +37,9 @@ YAHOO_KINDS = {
     "MONEYMARKET": "Money market",
 }
 
+#: The kinds of hit with an ISIN of their own.
+ISIN_KINDS = ("Stock", "ETF", "Fund", "Money market")
+
 #: Catalog sources whose key a reader might type: a FRED id or a Yahoo symbol. The
 #: SDMX keys of the ECB, Eurostat, the OECD and the BIS are dimension strings
 #: ("une_rt_m?geo=ES&s_adj=SA..."), and their fragments would match almost anything.
@@ -58,6 +61,23 @@ def parse_ref(ref: str) -> tuple[str, str]:
         if ref.startswith(prefix):
             return prefix[:-1], ref[len(prefix):]
     return "yahoo", ref
+
+
+def is_isin(text: str) -> bool:
+    """Shaped like an ISIN: a country, nine characters and a check digit. The digit is not verified."""
+    return re.fullmatch(r"[A-Z]{2}[A-Z0-9]{9}[0-9]", text.strip().upper()) is not None
+
+
+def plain(text: str) -> str:
+    """``text`` as it is, in a label Streamlit reads as Markdown: a "$" would open a formula."""
+    return re.sub(r"([\\`*_{}\[\]<>#+\-!|~$])", r"\\\1", text)
+
+
+def hit_label(hit: Hit) -> str:
+    """The name, then in grey its symbol or id, what it is and where: the name is what a reader scans for."""
+    code = parse_ref(hit.ref)[1]
+    rest = ([code] if code != hit.name else []) + [", ".join(p for p in (hit.kind, hit.detail) if p)]
+    return f"{plain(hit.name)} :gray[{plain(' · '.join(rest))}]"
 
 
 def tokens(text: str) -> list[str]:
@@ -169,3 +189,57 @@ def rank(query: str, groups: list[list[Hit]], *, limit: int = 10) -> list[Hit]:
     for *_, hit in scored:
         out.setdefault(hit.ref, hit)
     return list(out.values())[:limit]
+
+
+# ==========================================================================================
+# Is this ISIN that symbol? The evidence ``market_data.fetch_isin`` goes by
+# ==========================================================================================
+
+
+def isin_queries(symbol: str, name: str) -> list[str]:
+    """What to look a symbol's ISIN up by: its code, its name, and the first word of its name.
+
+    A source may call a company less than Yahoo does, "Ford" for "Ford Motor Company", and
+    then a search for the whole name finds only what mentions it.
+    """
+    words = name.split()
+    return list(dict.fromkeys(q for q in (symbol.split(".")[0], name.strip(), words[0] if words else "") if q))
+
+
+def _alike(name: str, other: str) -> bool:
+    """Two names with a word in common, a legal form like "S.A." or "AG" being too short to count."""
+    return bool({w for w in tokens(name) if len(w) > 3} & {w for w in tokens(other) if len(w) > 3})
+
+
+def isin_evidence(symbol: str, name: str, quotes: list[dict]) -> int:
+    """What Yahoo's answer to a search for an ISIN says of a symbol: 2, it lists that symbol; 1, another listing of it; 0, neither.
+
+    Yahoo names only a couple of an ISIN's listings (P911.DE and P911.F, not P911.MU), so
+    another listing counts: the same code on another exchange, under a like name, as the
+    same code can be two companies (SAN.MC is Santander, SAN.PA Sanofi). Only between
+    symbols with an exchange suffix. One without is US-listed, and may be an ADR with an
+    ISIN of its own while its code is the share's abroad (SAN and SAN.MC).
+    """
+    if any(quote.get("symbol") == symbol for quote in quotes):
+        return 2
+    code, dot, _ = symbol.partition(".")
+    if dot and any(
+        str(quote.get("symbol") or "").startswith(f"{code}.")
+        and _alike(name, f"{quote.get('longname') or ''} {quote.get('shortname') or ''}")
+        for quote in quotes
+    ):
+        return 1
+    return 0
+
+
+def same_instrument(symbol: str, name: str, row: dict) -> bool:
+    """A row of Onvista's search is this symbol by its own word, for what Yahoo's search does not know.
+
+    Yahoo finds nothing for VWCE.DE's ISIN. The row must have the symbol's code and a like
+    name, or exactly its name: share classes of a fund differ by a word as short as "Acc".
+    Not for a US-listed symbol, for the reason in :func:`isin_evidence`.
+    """
+    code, dot, _ = symbol.partition(".")
+    if not dot:
+        return False
+    return (row.get("symbol") == code and _alike(name, row.get("name") or "")) or tokens(name) == tokens(row.get("name") or "")

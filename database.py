@@ -104,6 +104,24 @@ def save_cash_accounts(accounts: list[dict]) -> None:
     get_cash_accounts.clear()
 
 
+def clear_cash_cache() -> None:
+    get_cash_accounts.clear()
+
+
+def record_transaction_with_balance(data: dict, account_name: str, balance_eur: float, updated: str) -> None:
+    """Save a transaction and the account balance it moved, in one atomic batch: both or neither."""
+    db = init_db()
+    account = next((doc for doc in db.collection(CASH_COLLECTION).stream() if doc.to_dict().get("name") == account_name), None)
+    if account is None:
+        raise LookupError(f"there is no account called {account_name} any more")
+    batch = db.batch()
+    batch.set(db.collection("transactions").document(), data)
+    batch.update(account.reference, {"balance_eur": balance_eur, "updated": updated})
+    batch.commit()
+    clear_transaction_cache()
+    get_cash_accounts.clear()
+
+
 # 5. Portfolio design: the target allocation, one document overwritten on each save
 DESIGN_COLLECTION = "portfolio_design"
 DESIGN_DOCUMENT = "current"

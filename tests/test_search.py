@@ -19,6 +19,29 @@ def _refs(hits):
     return [h.ref for h in hits]
 
 
+@pytest.mark.parametrize("text", ["DE000PAG9113", " de000pag9113 ", "IE00B4L5Y983"])
+def test_an_isin_is_recognised(text):
+    assert search.is_isin(text)
+
+
+@pytest.mark.parametrize("text", ["P911", "P911.DE", "Porsche AG", "DE000PAG911", "DE000PAG9113X", "DE000PAG911X"])
+def test_anything_else_is_not_an_isin(text):
+    assert not search.is_isin(text)
+
+
+@pytest.mark.parametrize(
+    "symbol, name, queries",
+    [
+        ("P911.DE", "Dr. Ing. h.c. F. Porsche AG", ["P911", "Dr. Ing. h.c. F. Porsche AG", "Dr."]),
+        ("F", "Ford Motor Company", ["F", "Ford Motor Company", "Ford"]),
+        ("SAP.DE", "SAP", ["SAP"]),  # each once
+        ("XYZ", "", ["XYZ"]),
+    ],
+)
+def test_an_isin_is_looked_up_by_code_then_name_then_first_word(symbol, name, queries):
+    assert search.isin_queries(symbol, name) == queries
+
+
 def _yahoo(symbol, kind="EQUITY", name=None, exchange="NASDAQ", **extra):
     return {"symbol": symbol, "quoteType": kind, "longname": name or symbol, "exchDisp": exchange, **extra}
 

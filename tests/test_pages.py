@@ -7,6 +7,7 @@ itself: loading, replaying, rendering, and the create / edit / delete flows.
 
 import base64
 import json
+from datetime import date
 from pathlib import Path
 
 import numpy as np
@@ -35,10 +36,14 @@ CASH = [
 @pytest.fixture
 def canned(monkeypatch):
     """Canned data sources, plus a recorder for every write the pages attempt."""
-    writes = {"added": [], "updated": [], "deleted": [], "cash": [], "design": []}
+    writes = {"added": [], "updated": [], "deleted": [], "cash": [], "design": [], "synced": []}
 
     monkeypatch.setattr(database, "get_cash_accounts", lambda: [dict(a) for a in CASH])
+    monkeypatch.setattr(database, "clear_cash_cache", lambda: None)
     monkeypatch.setattr(database, "save_cash_accounts", lambda accounts: writes["cash"].append(accounts))
+    monkeypatch.setattr(
+        database, "record_transaction_with_balance", lambda *args: writes["synced"].append(args)
+    )
     monkeypatch.setattr(database, "get_portfolio_design", lambda: None)  # none saved; tests override
     monkeypatch.setattr(database, "save_portfolio_design", lambda design: writes["design"].append(design))
     monkeypatch.setattr(database, "get_all_transactions", lambda: [dict(d) for d in FIXTURE])
@@ -59,7 +64,6 @@ def canned(monkeypatch):
     monkeypatch.setattr(
         md, "fetch_listing_currency", lambda tickers: {t: ("USD" if t == "USST" else "EUR") for t in tickers}
     )
-    monkeypatch.setattr(md, "fetch_listing_name", lambda symbol: "Canned Name")
     monkeypatch.setattr(md, "fetch_spot_prices", lambda tickers: {t: 12.0 for t in tickers})
     monkeypatch.setattr(md, "fetch_spot_fx", lambda currencies: {"EUR": 1.0, "USD": 1.17})
     monkeypatch.setattr(md, "fetch_historical_fx", lambda date_iso, ccy: 1.0 if ccy == "EUR" else 1.17)
@@ -72,6 +76,12 @@ def canned(monkeypatch):
     )
     monkeypatch.setattr(md, "fetch_hicp_annual_rate", lambda area=None: (0.03, "2025-12"))
     monkeypatch.setattr(md, "resolve_isin", lambda isin: None)
+    monkeypatch.setattr(md, "search_yahoo", lambda query: [])
+
+    def no_isin(symbol, name):
+        raise LookupError(f"no ISIN found for {symbol}")
+
+    monkeypatch.setattr(md, "fetch_isin", no_isin)
     return writes
 
 
@@ -106,7 +116,7 @@ def test_portfolio_page_renders_on_canned_data(canned):
         assert expected in labels
     # Nothing was left unvalued: every canned symbol had a price and a currency.
     assert not any("could not be valued" in w.value for w in at.warning)
-    assert canned == {"added": [], "updated": [], "deleted": [], "cash": [], "design": []}
+    assert canned == {"added": [], "updated": [], "deleted": [], "cash": [], "design": [], "synced": []}
 
 
 def test_portfolio_refuses_to_value_an_unknown_listing_currency(canned, monkeypatch):
@@ -292,12 +302,18 @@ def test_transactions_page_renders_the_history(canned):
     assert len(at.dataframe[0].value) == len(FIXTURE)
 
 
+def _trade(at: AppTest, ticker: str = "ABC", quantity: float = 10.0, price: float = 100.0, fees: float = 9.95) -> AppTest:
+    if ticker:
+        at.text_input(key="tx_ticker").set_value(ticker)
+    at.number_input(key="tx_quantity").set_value(quantity)
+    at.number_input(key="tx_price").set_value(price)
+    at.number_input(key="tx_fees").set_value(fees)
+    return at
+
+
 def test_logging_a_trade_writes_a_schema_v2_document(canned):
-    at = _transactions_page(_app().run())
-    at.text_input[0].set_value("ABC")  # ticker
-    at.number_input[0].set_value(10.0)  # quantity
-    at.number_input[1].set_value(100.0)  # price
-    at.number_input[2].set_value(9.95)  # fees
+    at = _trade(_transactions_page(_app().run()))
+    at.checkbox(key="tx_sync").uncheck()
     at.button(key="save_trade").click().run()
 
     assert not at.exception
@@ -310,15 +326,555 @@ def test_logging_a_trade_writes_a_schema_v2_document(canned):
     assert doc["cost_eur"] == pytest.approx(1009.95)
     assert doc["schema_version"] == 2
     assert "timestamp" in doc
+    assert canned["synced"] == []
 
 
 def test_logging_without_an_identifier_is_refused(canned):
-    at = _transactions_page(_app().run())
-    at.number_input[0].set_value(10.0)
-    at.number_input[1].set_value(100.0)
+    at = _trade(_transactions_page(_app().run()), ticker="")
     at.button(key="save_trade").click().run()
     assert at.error
-    assert canned["added"] == []
+    assert canned["added"] == [] and canned["synced"] == []
+
+
+def test_quantity_and_price_start_blank(canned):
+    at = _transactions_page(_app().run())
+    assert not at.exception
+    assert at.number_input(key="tx_quantity").value is None
+    assert at.number_input(key="tx_price").value is None
+    assert at.number_input(key="tx_fees").value == 0.0  # no fees is a real answer, unlike no quantity
+
+
+@pytest.mark.parametrize(
+    "quantity, price, complaint",
+    [(None, 100.0, "Quantity"), (0.0, 100.0, "Quantity"), (10.0, None, "Price"), (10.0, 0.0, "Price")],
+)
+def test_a_blank_or_zero_quantity_or_price_is_refused(canned, quantity, price, complaint):
+    at = _trade(_transactions_page(_app().run()), quantity=quantity, price=price)
+    at.button(key="save_trade").click().run()
+    assert not at.exception
+    assert any(f"{complaint} must be greater than 0" in e.value for e in at.error)
+    assert canned["added"] == [] and canned["synced"] == []
+
+
+def test_a_saved_trade_clears_the_form_for_the_next_one(canned):
+    at = _trade(_transactions_page(_app().run()))
+    at.selectbox(key="tx_category").select("ETF")
+    at.button(key="save_trade").click().run()
+    assert not at.exception
+    assert at.text_input(key="tx_ticker").value == ""
+    assert at.number_input(key="tx_quantity").value is None
+    assert at.number_input(key="tx_price").value is None
+    assert at.selectbox(key="tx_category").value == "ETF"  # the next trade is likely alike
+
+
+# --- transactions: finding the asset -----------------------------------------
+
+
+PORSCHE = [
+    {"symbol": "P911.DE", "quoteType": "EQUITY", "longname": "Dr. Ing. h.c. F. Porsche AG", "exchDisp": "XETRA"},
+    {"symbol": "P911.F", "quoteType": "EQUITY", "longname": "Dr. Ing. h.c. F. Porsche AG", "exchDisp": "Frankfurt"},
+]
+
+
+def _search(at: AppTest, query: str) -> AppTest:
+    at.text_input(key="tx_ticker").set_value(query)
+    return at.run()
+
+
+def _offered(at: AppTest) -> list[str]:
+    return [b.key for b in at.button if (b.key or "").startswith("tx_hit_")]
+
+
+def _isins(monkeypatch, found: str = "DE000PAG9113") -> list[str]:
+    """Canned Porsche search results and ISIN lookup, and a record of what the lookup was asked."""
+    asked = []
+
+    def fetch_isin(symbol, name):
+        asked.append(symbol)
+        return found
+
+    monkeypatch.setattr(md, "search_yahoo", lambda query: PORSCHE)
+    monkeypatch.setattr(md, "fetch_isin", fetch_isin)
+    return asked
+
+
+def test_an_empty_ticker_box_lists_nothing(canned, monkeypatch):
+    _isins(monkeypatch)
+    assert _offered(_transactions_page(_app().run())) == []
+
+
+def test_a_ticker_box_entry_lists_what_it_finds(canned, monkeypatch):
+    _isins(monkeypatch)
+    at = _search(_transactions_page(_app().run()), "P911")
+    assert not at.exception
+    assert _offered(at) == ["tx_hit_0", "tx_hit_1"]
+    assert "P911.DE" in at.button(key="tx_hit_0").label and "Porsche" in at.button(key="tx_hit_0").label
+    assert at.text_input(key="tx_ticker").value == "P911"  # still what was typed: nothing is chosen for you
+    assert at.text_input(key="tx_isin").value == "" and at.text_input(key="tx_name").value == ""
+    assert canned["added"] == [] and canned["synced"] == []
+
+
+def test_picking_a_result_fills_the_ticker_isin_and_name(canned, monkeypatch):
+    _isins(monkeypatch)
+    at = _search(_transactions_page(_app().run()), "P911")
+    at.button(key="tx_hit_0").click().run()
+
+    assert not at.exception
+    assert at.text_input(key="tx_ticker").value == "P911.DE"
+    assert at.text_input(key="tx_isin").value == "DE000PAG9113"
+    assert at.text_input(key="tx_name").value == "Dr. Ing. h.c. F. Porsche AG"
+    assert at.selectbox(key="tx_category").value == "Stock"
+    assert _offered(at) == []  # this search is done
+    assert canned["added"] == [] and canned["synced"] == []  # a pick saves nothing
+
+
+def test_what_a_pick_filled_can_be_edited_without_a_new_search(canned, monkeypatch):
+    _isins(monkeypatch)
+    at = _search(_transactions_page(_app().run()), "P911")
+    at.button(key="tx_hit_0").click().run()
+
+    at.text_input(key="tx_isin").set_value("DE000PAG9999")
+    at.text_input(key="tx_name").set_value("Porsche")
+    at.run()
+    assert _offered(at) == []
+    assert at.text_input(key="tx_isin").value == "DE000PAG9999"
+    assert at.text_input(key="tx_name").value == "Porsche"
+    assert at.text_input(key="tx_ticker").value == "P911.DE"
+
+    at = _trade(at, ticker="")
+    at.button(key="save_trade").click().run()
+    (doc, *_), = canned["synced"]
+    assert (doc["ticker"], doc["isin"], doc["name"]) == ("P911.DE", "DE000PAG9999", "Porsche")
+
+
+def test_changing_the_ticker_after_a_pick_searches_again(canned, monkeypatch):
+    _isins(monkeypatch)
+    at = _search(_transactions_page(_app().run()), "P911")
+    at.button(key="tx_hit_0").click().run()
+    at = _search(at, "P911.F")
+    assert _offered(at) == ["tx_hit_0", "tx_hit_1"]
+
+
+def test_searching_by_isin_keeps_it_without_a_lookup(canned, monkeypatch):
+    asked = _isins(monkeypatch, found="XX0000000000")
+    at = _search(_transactions_page(_app().run()), "de000pag9113")
+    at.button(key="tx_hit_0").click().run()
+    assert at.text_input(key="tx_isin").value == "DE000PAG9113"
+    assert asked == []
+
+
+def test_a_pick_with_no_isin_leaves_the_box_empty_and_says_so(canned, monkeypatch):
+    monkeypatch.setattr(md, "search_yahoo", lambda query: PORSCHE)  # the canned lookup finds nothing
+    at = _search(_transactions_page(_app().run()), "Porsche")
+    at.button(key="tx_hit_0").click().run()
+    assert not at.exception
+    assert at.text_input(key="tx_isin").value == ""
+    assert at.text_input(key="tx_name").value == "Dr. Ing. h.c. F. Porsche AG"
+    assert any("No ISIN found for P911.DE" in c.value for c in at.caption)
+
+
+def test_a_pick_does_not_inherit_the_isin_of_the_previous_pick(canned, monkeypatch):
+    _isins(monkeypatch)
+    at = _search(_transactions_page(_app().run()), "P911")
+    at.button(key="tx_hit_0").click().run()
+    assert at.text_input(key="tx_isin").value == "DE000PAG9113"
+
+    def no_isin(symbol, name):
+        raise LookupError("none")
+
+    monkeypatch.setattr(md, "fetch_isin", no_isin)
+    at = _search(at, "Porsche")
+    at.button(key="tx_hit_1").click().run()
+    assert at.text_input(key="tx_ticker").value == "P911.F"
+    assert at.text_input(key="tx_isin").value == ""
+
+
+def test_an_isin_typed_by_hand_survives_a_pick_that_finds_none(canned, monkeypatch):
+    monkeypatch.setattr(md, "search_yahoo", lambda query: PORSCHE)
+    at = _transactions_page(_app().run())
+    at.text_input(key="tx_isin").set_value("DE000PAG9113")
+    at = _search(at, "Porsche")
+    at.button(key="tx_hit_0").click().run()
+    assert at.text_input(key="tx_isin").value == "DE000PAG9113"
+
+
+def test_what_has_no_isin_is_not_looked_up(canned, monkeypatch):
+    asked = _isins(monkeypatch)
+    bitcoin = [{"symbol": "BTC-USD", "quoteType": "CRYPTOCURRENCY", "longname": "Bitcoin USD", "exchDisp": "CCC"}]
+    monkeypatch.setattr(md, "search_yahoo", lambda query: bitcoin)
+    at = _search(_transactions_page(_app().run()), "bitcoin")
+    at.button(key="tx_hit_0").click().run()
+    assert at.text_input(key="tx_isin").value == ""
+    assert at.selectbox(key="tx_category").value == "Crypto"
+    assert asked == []
+    assert not any("No ISIN found" in c.value for c in at.caption)
+
+
+def test_a_result_without_a_name_leaves_the_name_empty(canned, monkeypatch):
+    monkeypatch.setattr(md, "search_yahoo", lambda query: [{"symbol": "XYZ.DE", "quoteType": "EQUITY"}])
+    at = _search(_transactions_page(_app().run()), "XYZ")
+    at.button(key="tx_hit_0").click().run()
+    assert at.text_input(key="tx_ticker").value == "XYZ.DE"
+    assert at.text_input(key="tx_name").value == ""
+
+
+def test_a_holding_already_logged_keeps_its_isin_when_found_again(canned, monkeypatch):
+    # A position is keyed by ISIN first: logging it without one would open a second position.
+    asked = _isins(monkeypatch, found="XX0000000000")
+    logged = {**FIXTURE[0], "ticker": "P911.DE", "isin": "DE000PAG9113"}
+    monkeypatch.setattr(database, "get_all_transactions", lambda: [dict(logged)])
+    at = _search(_transactions_page(_app().run()), "Porsche")
+    at.button(key="tx_hit_0").click().run()
+    assert at.text_input(key="tx_isin").value == "DE000PAG9113"
+    assert asked == []
+
+
+def test_a_holding_logged_without_an_isin_is_not_given_one(canned, monkeypatch):
+    # The other way round: an ISIN it never had would open a second position too.
+    asked = _isins(monkeypatch)
+    logged = {key: value for key, value in FIXTURE[0].items() if key != "isin"} | {"ticker": "P911.DE"}
+    monkeypatch.setattr(database, "get_all_transactions", lambda: [dict(logged)])
+    at = _search(_transactions_page(_app().run()), "P911")
+    at.button(key="tx_hit_0").click().run()
+    assert at.text_input(key="tx_isin").value == ""
+    assert asked == []
+    assert any("already logged without an ISIN" in c.value for c in at.caption)
+
+
+def test_a_failed_search_says_so_and_the_page_survives(canned, monkeypatch):
+    def down(query):
+        raise ConnectionError("https://query2.finance.yahoo.com/search failed: timed out")
+
+    monkeypatch.setattr(md, "search_yahoo", down)
+    at = _search(_transactions_page(_app().run()), "Porsche")
+    assert not at.exception
+    assert any("did not answer: failed: timed out" in c.value for c in at.caption)
+
+
+def test_a_search_that_finds_nothing_says_so(canned):
+    at = _search(_transactions_page(_app().run()), "NOPE")
+    assert any("Nothing found for" in c.value for c in at.caption)
+
+
+def test_an_isin_left_in_the_ticker_box_is_saved_as_the_isin(canned, monkeypatch):
+    monkeypatch.setattr(md, "search_yahoo", lambda query: PORSCHE)
+    monkeypatch.setattr(md, "resolve_isin", lambda isin: "P911.DE")
+    at = _trade(_transactions_page(_app().run()), ticker="DE000PAG9113")
+    at.button(key="save_trade").click().run()
+    (doc, *_), = canned["synced"]
+    assert doc["isin"] == "DE000PAG9113" and doc["resolved_ticker"] == "P911.DE"
+    assert "ticker" not in doc
+
+
+def test_a_name_left_in_the_ticker_box_is_not_saved_as_a_ticker(canned):
+    at = _trade(_transactions_page(_app().run()), ticker="Porsche AG")
+    at.button(key="save_trade").click().run()
+    assert any("Pick the asset from the list" in e.value for e in at.error)
+    assert canned["added"] == [] and canned["synced"] == []
+
+
+# --- transactions: fetching the price ----------------------------------------
+
+
+def _closes(prices: dict[str, float], asked: list[str] | None = None):
+    def fetch_close_on(symbol, day):
+        if asked is not None:
+            asked.append(symbol)
+        if symbol not in prices:
+            raise LookupError(f"no price for {symbol}")
+        return prices[symbol], day
+
+    return fetch_close_on
+
+
+def test_fetch_price_finds_the_listing_of_a_bare_ticker(canned, monkeypatch):
+    priced = []
+    monkeypatch.setattr(md, "fetch_close_on", _closes({"P911.DE": 46.720001220703125}, priced))
+    monkeypatch.setattr(md, "search_yahoo", lambda query: PORSCHE)
+    at = _transactions_page(_app().run())
+    at.text_input(key="tx_ticker").set_value("P911")
+    at.button(key="fetch_price").click().run()
+
+    assert not at.exception and not at.error
+    assert at.number_input(key="tx_price").value == 46.72
+    assert at.text_input(key="tx_ticker").value == "P911.DE"  # what the dashboard can price
+    assert any("P911 is P911.DE" in c.value for c in at.caption)
+    assert priced == ["P911.DE"]  # yfinance logs an error for a symbol Yahoo does not have, so P911 is never asked
+
+
+def test_picking_the_asset_just_priced_keeps_its_price_and_picking_another_does_not(canned, monkeypatch):
+    _isins(monkeypatch)
+    monkeypatch.setattr(md, "fetch_close_on", _closes({"P911.DE": 46.72}))
+    at = _transactions_page(_app().run())
+    at.text_input(key="tx_ticker").set_value("P911")
+    at.button(key="fetch_price").click().run()
+    assert _offered(at)  # the list stays, to fill in the ISIN and the name
+
+    at.button(key="tx_hit_0").click().run()
+    assert at.text_input(key="tx_ticker").value == "P911.DE"
+    assert at.text_input(key="tx_isin").value == "DE000PAG9113"
+    assert at.number_input(key="tx_price").value == 46.72
+
+    at = _search(at, "Porsche")
+    at.button(key="tx_hit_1").click().run()
+    assert at.text_input(key="tx_ticker").value == "P911.F"
+    assert at.number_input(key="tx_price").value is None
+
+
+def test_fetch_price_uses_a_symbol_yahoo_has_as_it_is(canned, monkeypatch):
+    priced = []
+    monkeypatch.setattr(md, "fetch_close_on", _closes({"SAP": 200.0, "SAP.DE": 180.0}, priced))
+    monkeypatch.setattr(md, "search_yahoo", lambda query: [{"symbol": "SAP.DE", "quoteType": "EQUITY"},
+                                                           {"symbol": "SAP", "quoteType": "EQUITY"}])
+    at = _transactions_page(_app().run())
+    at.text_input(key="tx_ticker").set_value("SAP")
+    at.button(key="fetch_price").click().run()
+    assert at.number_input(key="tx_price").value == 200.0
+    assert at.text_input(key="tx_ticker").value == "SAP"
+    assert priced == ["SAP"]
+
+
+def test_fetch_price_with_the_search_down_still_tries_the_ticker(canned, monkeypatch):
+    def down(query):
+        raise ConnectionError("timed out")
+
+    monkeypatch.setattr(md, "fetch_close_on", _closes({"ABC": 12.5}))
+    monkeypatch.setattr(md, "search_yahoo", down)
+    at = _transactions_page(_app().run())
+    at.text_input(key="tx_ticker").set_value("ABC")
+    at.button(key="fetch_price").click().run()
+    assert at.number_input(key="tx_price").value == 12.5
+
+
+def test_fetch_price_takes_an_isin_left_in_the_ticker_box_as_the_isin(canned, monkeypatch):
+    monkeypatch.setattr(md, "fetch_close_on", _closes({"DE000PAG9113": 46.72}))
+    monkeypatch.setattr(md, "search_yahoo", lambda query: PORSCHE)
+    at = _transactions_page(_app().run())
+    at.text_input(key="tx_ticker").set_value("DE000PAG9113")
+    at.button(key="fetch_price").click().run()
+    assert not at.error
+    assert at.number_input(key="tx_price").value == 46.72
+
+
+def test_fetch_price_does_not_price_a_name_left_in_the_ticker_box(canned, monkeypatch):
+    priced = []
+    monkeypatch.setattr(md, "fetch_close_on", _closes({}, priced))
+    monkeypatch.setattr(md, "search_yahoo", lambda query: PORSCHE)
+    at = _transactions_page(_app().run())
+    at.text_input(key="tx_ticker").set_value("Porsche AG")
+    at.button(key="fetch_price").click().run()
+    assert at.error
+    assert priced == []
+
+
+def test_fetch_price_will_not_take_a_lookalike_for_the_ticker(canned, monkeypatch):
+    monkeypatch.setattr(md, "fetch_close_on", _closes({"P911.DE": 46.72, "PAH3.DE": 40.0}))
+    monkeypatch.setattr(md, "search_yahoo", lambda query: [{"symbol": "PAH3.DE", "quoteType": "EQUITY"}])
+    at = _transactions_page(_app().run())
+    at.text_input(key="tx_ticker").set_value("P911")
+    at.button(key="fetch_price").click().run()
+
+    assert at.error
+    assert at.number_input(key="tx_price").value is None
+    assert at.text_input(key="tx_ticker").value == "P911"
+
+
+def test_fetch_price_works_from_the_isin_alone(canned, monkeypatch):
+    monkeypatch.setattr(md, "fetch_close_on", _closes({"DE000PAG9113": 46.72}))
+    at = _transactions_page(_app().run())
+    at.text_input(key="tx_isin").set_value("DE000PAG9113")
+    at.button(key="fetch_price").click().run()
+    assert at.number_input(key="tx_price").value == 46.72
+    assert at.text_input(key="tx_ticker").value == ""
+
+
+def test_a_fetched_price_goes_when_the_asset_changes_and_a_typed_one_stays(canned, monkeypatch):
+    monkeypatch.setattr(md, "fetch_close_on", _closes({"ABC": 12.5}))
+    at = _transactions_page(_app().run())
+    at.text_input(key="tx_ticker").set_value("ABC")
+    at.button(key="fetch_price").click().run()
+    assert at.number_input(key="tx_price").value == 12.5
+
+    at.text_input(key="tx_ticker").set_value("XYZ").run()
+    assert at.number_input(key="tx_price").value is None
+
+    at.number_input(key="tx_price").set_value(33.0).run()
+    at.text_input(key="tx_ticker").set_value("QRS").run()
+    assert at.number_input(key="tx_price").value == 33.0
+
+
+def test_a_fetched_price_in_another_currency_is_flagged(canned, monkeypatch):
+    monkeypatch.setattr(md, "fetch_close_on", _closes({"USST": 100.0}))
+    at = _transactions_page(_app().run())
+    at.text_input(key="tx_ticker").set_value("USST")  # canned as USD-listed; the form is in EUR
+    at.button(key="fetch_price").click().run()
+    assert any("That price is in USD" in w.value for w in at.warning)
+
+
+# --- transactions: the total -------------------------------------------------
+
+
+def _metric_value(at: AppTest, label: str) -> str:
+    return next(m.value for m in at.metric if m.label == label)
+
+
+def test_the_total_shows_only_after_the_button_and_includes_fees(canned):
+    at = _trade(_transactions_page(_app().run())).run()
+    assert not [m for m in at.metric if m.label == "Total cost"]
+    at.button(key="calculate_total").click().run()
+    assert not at.exception
+    assert _metric_value(at, "Total cost") == "€1,009.95"
+
+
+def test_sell_proceeds_are_net_of_fees(canned):
+    at = _trade(_transactions_page(_app().run()))
+    at.selectbox(key="tx_action").select("Sell")
+    at.button(key="calculate_total").click().run()
+    assert _metric_value(at, "Total proceeds") == "€990.05"
+
+
+def test_a_total_does_not_outlive_a_change_to_the_quantity(canned):
+    at = _trade(_transactions_page(_app().run()))
+    at.button(key="calculate_total").click().run()
+    at.number_input(key="tx_quantity").set_value(20.0).run()
+    assert not [m for m in at.metric if m.label == "Total cost"]
+
+
+@pytest.mark.parametrize("quantity, price", [(None, None), (10.0, None), (None, 100.0), (0.0, 100.0)])
+def test_a_total_needs_a_quantity_and_a_price(canned, quantity, price):
+    at = _trade(_transactions_page(_app().run()), quantity=quantity, price=price)
+    at.button(key="calculate_total").click().run()
+    assert not at.exception
+    assert at.error
+    assert not [m for m in at.metric if m.label == "Total cost"]
+
+
+def test_a_usd_total_is_also_shown_in_euros(canned):
+    at = _trade(_transactions_page(_app().run()), fees=0.0)
+    at.selectbox(key="tx_currency").select("USD")
+    at.button(key="calculate_total").click().run()
+    assert _metric_value(at, "Total cost") == "1,000.00 USD"
+    assert any("€854.70 at FX 1.1700" in c.value for c in at.caption)
+
+
+# --- transactions: Dry Powder sync -------------------------------------------
+
+
+def test_a_buy_takes_its_cost_from_dry_powder(canned):
+    at = _trade(_transactions_page(_app().run()))
+    assert at.checkbox(key="tx_sync").value is True  # ticked by default
+    at.button(key="save_trade").click().run()
+
+    assert not at.exception and not at.error
+    assert canned["added"] == []  # saved together with the balance, never on its own
+    (doc, account, balance, updated), = canned["synced"]
+    assert doc["cost_eur"] == pytest.approx(1009.95)
+    assert account == "Broker cash"
+    assert balance == pytest.approx(1490.05)
+    assert updated == date.today().isoformat()
+    assert any("€2,500.00 → €1,490.05" in s.value for s in at.success)
+
+
+def test_a_sell_adds_its_proceeds_to_dry_powder(canned):
+    at = _trade(_transactions_page(_app().run()))
+    at.selectbox(key="tx_action").select("Sell")
+    at.button(key="save_trade").click().run()
+    (doc, account, balance, _), = canned["synced"]
+    assert doc["cost_eur"] == pytest.approx(990.05)
+    assert balance == pytest.approx(3490.05)
+
+
+def test_a_usd_buy_moves_its_cost_in_euros(canned):
+    at = _trade(_transactions_page(_app().run()), fees=0.0)
+    at.selectbox(key="tx_currency").select("USD")
+    at.button(key="save_trade").click().run()
+    (_, _, balance, _), = canned["synced"]
+    assert balance == pytest.approx(round(2500.0 - 1000.0 / 1.17, 2))
+
+
+def test_unticking_the_sync_leaves_dry_powder_alone(canned):
+    at = _trade(_transactions_page(_app().run()))
+    at.checkbox(key="tx_sync").uncheck()
+    at.button(key="save_trade").click().run()
+    assert len(canned["added"]) == 1
+    assert canned["synced"] == [] and canned["cash"] == []
+
+
+def test_a_buy_dry_powder_cannot_cover_saves_nothing(canned):
+    at = _trade(_transactions_page(_app().run()), quantity=100.0)
+    at.button(key="save_trade").click().run()
+    assert not at.exception
+    assert any("more than the €2,500.00" in e.value for e in at.error)
+    assert canned["added"] == [] and canned["synced"] == []
+    assert at.text_input(key="tx_ticker").value == "ABC"  # the form is kept, to correct it
+
+
+def test_the_sync_refuses_to_guess_without_a_dry_powder_account(canned, monkeypatch):
+    monkeypatch.setattr(database, "get_cash_accounts", lambda: [dict(CASH[0])])  # the Cash account only
+    at = _trade(_transactions_page(_app().run()))
+    at.button(key="save_trade").click().run()
+    assert any("no Dry Powder account" in e.value for e in at.error)
+    assert canned["added"] == [] and canned["synced"] == []
+
+
+def test_the_cash_reserve_is_never_offered_for_the_sync(canned, monkeypatch):
+    two = CASH + [{"name": "Savings", "category": "Dry Powder", "balance_eur": 9000.0, "updated": "2026-09-20"}]
+    monkeypatch.setattr(database, "get_cash_accounts", lambda: [dict(a) for a in two])
+    at = _trade(_transactions_page(_app().run()))
+    pick = at.selectbox(key="tx_sync_account")
+    assert pick.options == ["Broker cash (€2,500.00)", "Savings (€9,000.00)"]
+    pick.select("Savings")
+    at.button(key="save_trade").click().run()
+    (_, account, balance, _), = canned["synced"]
+    assert account == "Savings"
+    assert balance == pytest.approx(7990.05)
+
+
+def test_the_sync_uses_the_balance_as_it_is_at_save_time(canned, monkeypatch):
+    # Moved on another device since this page was drawn.
+    at = _trade(_transactions_page(_app().run()))
+    moved = [CASH[0], {**CASH[1], "balance_eur": 1500.0}]
+    monkeypatch.setattr(database, "get_cash_accounts", lambda: [dict(a) for a in moved])
+    at.button(key="save_trade").click().run()
+    assert canned["synced"][0][2] == pytest.approx(490.05)
+
+
+def test_a_failed_write_keeps_the_form_and_reports_it(canned, monkeypatch):
+    def down(*args):
+        raise ConnectionError("Firestore is unavailable")
+
+    monkeypatch.setattr(database, "record_transaction_with_balance", down)
+    at = _trade(_transactions_page(_app().run()))
+    at.button(key="save_trade").click().run()
+    assert any("Firestore is unavailable" in e.value for e in at.error)
+    assert at.text_input(key="tx_ticker").value == "ABC"
+
+
+def test_a_ticker_yahoo_does_not_know_is_saved_as_its_listing(canned, monkeypatch):
+    # Recorded after the page has drawn: the page itself is not what is under test here.
+    at = _trade(_transactions_page(_app().run()), ticker="P911")
+    asked = []
+
+    def currency(tickers):
+        asked.extend(tickers)
+        return {t: ("EUR" if t == "P911.DE" else None) for t in tickers}
+
+    monkeypatch.setattr(md, "fetch_listing_currency", currency)
+    monkeypatch.setattr(md, "search_yahoo", lambda query: PORSCHE)
+    at.button(key="save_trade").click().run()
+    (doc, *_), = canned["synced"]
+    assert doc["ticker"] == "P911.DE"
+    assert doc["listing_ccy"] == "EUR"
+    assert "P911" not in asked  # yfinance logs an error for a symbol Yahoo does not have
+
+
+def test_a_ticker_nobody_knows_is_saved_with_a_warning(canned, monkeypatch):
+    monkeypatch.setattr(md, "fetch_listing_currency", lambda tickers: {t: None for t in tickers})
+    monkeypatch.setattr(md, "search_yahoo", lambda query: [])
+    at = _trade(_transactions_page(_app().run()), ticker="NOPE")
+    at.button(key="save_trade").click().run()
+    assert canned["synced"][0][0]["ticker"] == "NOPE"
+    assert any("could not confirm NOPE" in w.value for w in at.warning)
 
 
 # --- transactions: edit and delete -------------------------------------------

@@ -617,6 +617,12 @@ def audit_transaction(doc: Mapping) -> list[str]:
 # Firestore document writing
 # ---------------------------------------------------------------------------
 
+def trade_total(action: str, quantity: float, price_nominal: float, fees: float) -> float:
+    """The cash that moved, in the trade's currency: cost including fees on a buy, proceeds net of fees on a sell."""
+    gross = float(price_nominal) * float(quantity)
+    return gross + float(fees or 0.0) if action == "Buy" else gross - float(fees or 0.0)
+
+
 def trade_document(
     *,
     trade_date: date,
@@ -659,7 +665,6 @@ def trade_document(
     if code == BASE_CCY and fx_rate != 1.0:
         raise ValueError(f"a {BASE_CCY} trade must carry fx_rate 1.0, not {fx_rate}")
 
-    gross = float(price_nominal) * float(quantity)
     fees = float(fees or 0.0)
     doc: dict = {
         "date": trade_date.strftime("%Y-%m-%d"),
@@ -670,7 +675,7 @@ def trade_document(
         "fees": fees,  # always written, so a real 0.0 is not dropped
         "fx_rate": float(fx_rate),
         "fx_source": fx_source,
-        "cost_eur": (gross + fees) / fx_rate if action == "Buy" else (gross - fees) / fx_rate,
+        "cost_eur": trade_total(action, quantity, price_nominal, fees) / fx_rate,
         "schema_version": 2,
     }
     for key, value, upper in (
@@ -1004,6 +1009,18 @@ def account_documents(accounts: Iterable[CashAccount], previous: Iterable[CashAc
             }
         )
     return documents
+
+
+def balance_after_trade(balance_eur: float, action: str, cost_eur: float) -> float:
+    """An account's balance once a trade has moved its cash, to the cent: a buy takes it, a sell adds it.
+
+    Raises ``ValueError`` for a buy the account cannot cover. A negative balance is not
+    one :func:`clean_cash_accounts` accepts, so it would take the account off every page.
+    """
+    after = round(balance_eur - cost_eur if action == "Buy" else balance_eur + cost_eur, 2) + 0.0  # never -0.0
+    if after < 0:
+        raise ValueError(f"the buy costs €{cost_eur:,.2f}, more than the €{balance_eur:,.2f} in the account")
+    return after
 
 
 #: The categories a portfolio design sets a target for, in drawing order. The cash

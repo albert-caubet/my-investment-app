@@ -1,20 +1,22 @@
-from datetime import date, datetime
+from datetime import date
 
 import pandas as pd
 import streamlit as st
-import yfinance as yf
 
 import market_data as md
 import portfolio_math as pm
 from database import (
+    clear_cash_cache,
     delete_transaction,
     get_all_transactions,
     get_cash_accounts,
     get_timestamp,
     record_transaction,
+    record_transaction_with_balance,
     save_cash_accounts,
     update_transaction,
 )
+from invest.data import search
 
 st.title("Log New Transaction")
 
@@ -33,6 +35,29 @@ ASSET_CLASSES = [
 
 SUPPORTED_CCY = ["EUR", "USD"]
 
+#: The asset category of what a search found. A kind that is not here leaves the choice as it is.
+KIND_CATEGORIES = {
+    "Stock": "Stock",
+    "ETF": "ETF",
+    "Fund": "Fund",
+    "Crypto": "Crypto",
+    "Money market": "Cash/Money Market",
+    "Future": "Commodity",
+}
+
+#: The fields that describe one trade, emptied once it is saved. The date, category, action
+#: and currency stay for the next one, and so does the Dry Powder sync.
+TRADE_FIELDS = {
+    "tx_ticker": "", "tx_isin": "", "tx_name": "",
+    "tx_quantity": None, "tx_price": None, "tx_fees": 0.0, "tx_fx": 0.0,
+}
+
+if st.session_state.pop("tx_reset", False):
+    # Set, not removed: the browser would go on showing the value of a widget whose state is merely gone.
+    st.session_state.update(TRADE_FIELDS)
+    for held in ("tx_picked", "tx_listing", "tx_fetched", "tx_total_for"):
+        st.session_state.pop(held, None)
+
 
 def _detect_currency(identifier: str) -> str | None:
     """Listing currency for a ticker or ISIN; cached per symbol for a day."""
@@ -47,166 +72,374 @@ def _fx_blocked(currency: str, day: date) -> str:
     )
 
 
-# Create the form
-with st.form("trade_form", clear_on_submit=False):
-    col1, col2 = st.columns(2)
-    with col1:
-        date_input = st.date_input("Transaction Date", value=datetime.now())
-        category = st.selectbox("Asset Category", options=ASSET_CLASSES)
-        ticker = st.text_input("Ticker").upper().strip()
-        isin = st.text_input("ISIN").upper().strip()
+def _trade_fx(currency: str, manual_fx: float, day: date) -> tuple[float | None, str]:
+    """``(rate, source)``. An FX rate that cannot be established is ``None``, never a default:
+    a silent 1.0 permanently understates a USD cost basis by ~15%, and the wrong rate gets
+    frozen into the database.
+    """
+    if currency == pm.BASE_CCY:
+        return 1.0, "base"
+    if manual_fx > 0:
+        return manual_fx, "manual"
+    return md.fetch_historical_fx(day.strftime("%Y-%m-%d"), currency), "yahoo"
 
-        identifier = ticker or isin
-        # Detection is keyed to the identifier, so changing the ticker invalidates a
-        # previously detected currency instead of leaving a stale one behind.
-        if identifier and st.session_state.get("detected_for") != identifier:
-            st.session_state.pop("detected_ccy", None)
-            st.session_state.pop("fetched_name", None)
 
-        # --- Fetch Name & Detect Currency ---
-        if st.form_submit_button("Fetch Name", key="fetch_name"):
-            if identifier:
-                st.session_state["detected_for"] = identifier
-                st.session_state["detected_ccy"] = _detect_currency(identifier)
-                found_name = md.fetch_listing_name(identifier)
-                if found_name:
-                    st.session_state["fetched_name"] = found_name
-                else:
-                    st.warning("No name found.")
-            else:
-                st.error("Enter a Ticker or ISIN first.")
+def _clean(field: str) -> str:
+    return str(st.session_state.get(field) or "").upper().strip()
 
-        name = st.text_input("Asset Name", value=st.session_state.get("fetched_name", ""))
 
-    with col2:
-        action = st.selectbox("Action", ["Buy", "Sell"])
-        currency = st.selectbox("Transaction Currency", SUPPORTED_CCY, index=0)
-        st.caption("The currency the cash left your account in.")
+def _identifiers() -> tuple[str, str]:
+    """``(ticker, ISIN)`` as the boxes say. An ISIN searched in the Ticker box and left there is the ISIN."""
+    ticker, isin = _clean("tx_ticker"), _clean("tx_isin")
+    return ("", isin or ticker) if search.is_isin(ticker) else (ticker, isin)
 
-        detected = st.session_state.get("detected_ccy")
-        if detected and detected != currency:
-            # Not an error: paying euros for a USD-listed asset is normal. Cost basis
-            # follows the transaction currency, market value the listing currency.
-            st.info(
-                f"Asset is listed in **{detected}**; you are paying in **{currency}**. "
-                f"That is fine — both are handled separately."
+
+def _forget_fetched_price() -> None:
+    """A fetched close belongs to one asset on one day. Changing either takes it out of the form; a price typed over it stays."""
+    fetched = st.session_state.pop("tx_fetched", None)
+    if fetched and st.session_state.get("tx_price") == fetched["price"]:
+        st.session_state["tx_price"] = None
+
+
+def _isin_for(hit: search.Hit, query: str) -> tuple[str, str]:
+    """The ISIN to log a search result under and, when there is none, what to tell the reader.
+
+    A position is keyed by its ISIN first and its ticker second, so a holding already
+    logged keeps the identifiers it was logged with: an ISIN it did not have would open a
+    second position.
+    """
+    for doc in get_all_transactions():
+        if hit.ref in (doc.get("ticker"), doc.get("resolved_ticker")):
+            isin = str(doc.get("isin") or "")
+            return isin, "" if isin else (
+                f"Left empty: {hit.ref} is already logged without an ISIN, and one here would open a second position."
             )
-        if detected and detected not in SUPPORTED_CCY:
+    if search.is_isin(query):
+        return query.upper(), ""
+    if hit.kind not in search.ISIN_KINDS:
+        return "", ""
+    try:
+        return md.fetch_isin(hit.ref, hit.name), ""
+    except Exception:
+        return "", f"No ISIN found for {hit.ref}. Enter it here if you have it."
+
+
+def _pick(hit: search.Hit, query: str) -> None:
+    """Fill the form from a search result. Yahoo's symbol is the ticker: it is the one the dashboard can price."""
+    isin, note = _isin_for(hit, query)
+    # One typed by hand stays when nothing better was found; one from the previous pick does not.
+    typed = _clean("tx_isin")
+    if not isin and typed != st.session_state.get("tx_picked", {}).get("isin"):
+        isin = typed
+    st.session_state["tx_ticker"] = hit.ref
+    st.session_state["tx_isin"] = isin
+    st.session_state["tx_name"] = "" if hit.name == hit.ref else hit.name  # Yahoo gave it no name
+    if hit.kind in KIND_CATEGORIES:
+        st.session_state["tx_category"] = KIND_CATEGORIES[hit.kind]
+    st.session_state["tx_listing"] = (hit.ref, _detect_currency(hit.ref))
+    st.session_state["tx_picked"] = {"ticker": hit.ref, "isin": isin, "note": note}
+    if st.session_state.get("tx_fetched", {}).get("symbol") != hit.ref:  # otherwise it is still this asset's price
+        _forget_fetched_price()
+
+
+def _results(query: str) -> None:
+    """What the Ticker box finds, each a button that fills the form with it."""
+    try:
+        hits = search.rank(query, [search.yahoo_hits(md.search_yahoo(query))])
+    except Exception as exc:
+        st.caption(f"Yahoo Finance did not answer: {md.reason(exc)}")
+        return
+    if not hits:
+        st.caption(f"Nothing found for “{query}”.")
+    found = st.container(gap=None)  # a list, not a column of separate buttons
+    for n, hit in enumerate(hits):
+        found.button(search.hit_label(hit), key=f"tx_hit_{n}", on_click=_pick, args=(hit, query),
+                     type="tertiary", icon=":material/add:")
+
+
+def _listed_as(ticker: str) -> str | None:
+    """Yahoo's symbol for a ticker: itself when Yahoo has it, or its listing when typed without one: P911 is P911.DE.
+
+    Only that very ticker. Yahoo's search also answers with whatever looks alike, and
+    the price of another company would be worse than no price. Asked before Yahoo is asked
+    for the ticker's prices or currency, as those log an error for a symbol it does not know.
+    """
+    try:
+        symbols = [hit.ref for hit in search.yahoo_hits(md.search_yahoo(ticker))]
+    except Exception:
+        return None
+    return ticker if ticker in symbols else next((s for s in symbols if s.split(".")[0] == ticker), None)
+
+
+def _price_symbols(ticker: str, isin: str):
+    """What to ask Yahoo for a price, in order. Lazy: an ISIN that may not be needed costs no request."""
+    if ticker:
+        listed = _listed_as(ticker)
+        if listed:
+            yield listed
+        elif " " not in ticker:  # the search is not exhaustive, but a name left in the box is no symbol
+            yield ticker
+    if isin:
+        yield isin
+
+
+def _fetch_price() -> None:
+    ticker, isin = _identifiers()
+    day = st.session_state["tx_date"]
+    if not ticker and not isin:
+        st.session_state["tx_price_error"] = "Enter a Ticker or ISIN first."
+        return
+    for symbol in _price_symbols(ticker, isin):
+        try:
+            close, on = md.fetch_close_on(symbol, day)
+        except Exception:
+            continue
+        break
+    else:
+        st.session_state["tx_price_error"] = (
+            f"No price found for {ticker or isin} up to {day:%Y-%m-%d}. "
+            f"Yahoo Finance may list it under another symbol: press Enter in the Ticker box and pick one from the list."
+        )
+        return
+    # A ticker Yahoo does not know would be unpriced on the dashboard too.
+    renamed = ""
+    if ticker and symbol != ticker:
+        renamed = ticker
+        st.session_state["tx_ticker"] = "" if symbol == isin else symbol
+    listing_ccy = _detect_currency(symbol)
+    st.session_state["tx_listing"] = (_identifiers()[0] or isin, listing_ccy)
+    # Yahoo's closes are single precision: 46.72 arrives as 46.720001220703125.
+    fetched_price = round(close, 4)
+    st.session_state["tx_price"] = fetched_price
+    st.session_state["tx_fetched"] = {
+        "price": fetched_price, "on": on, "symbol": symbol, "currency": listing_ccy, "renamed": renamed,
+    }
+
+
+stored_accounts, stored_problems = pm.clean_cash_accounts(get_cash_accounts())
+dry_powder = [a for a in stored_accounts if a.category != pm.RESERVE_CATEGORY]
+
+# No st.form: nothing here is saved until the Save button is clicked, and Enter in a field
+# only confirms that field. The search, Fetch Price and the total all work on what the
+# fields say at that moment, which a form would hold back until it is submitted.
+col1, col2 = st.columns(2)
+with col1:
+    date_input = st.date_input("Transaction Date", value=date.today(), key="tx_date", on_change=_forget_fetched_price)
+    category = st.selectbox("Asset Category", options=ASSET_CLASSES, key="tx_category")
+    typed_ticker = st.text_input(
+        "Ticker", key="tx_ticker", placeholder="Ticker, name or ISIN, then Enter", icon=":material/search:",
+        on_change=_forget_fetched_price,
+    ).strip()
+    # Until a result is picked, what the box says is a search, as on the Custom charts page.
+    picked = st.session_state.get("tx_picked", {})
+    if typed_ticker and typed_ticker != picked.get("ticker"):
+        _results(typed_ticker)
+    st.text_input("ISIN", key="tx_isin", on_change=_forget_fetched_price)
+    if picked.get("note") and typed_ticker == picked.get("ticker") and not _clean("tx_isin"):
+        st.caption(picked["note"])
+    name = st.text_input("Asset Name", key="tx_name")
+
+    ticker, isin = _identifiers()
+    identifier = ticker or isin
+    # Keyed to the identifier, so changing the ticker invalidates a previously
+    # detected currency instead of leaving a stale one behind.
+    listing = st.session_state.get("tx_listing")
+    detected = listing[1] if listing and listing[0] == identifier else None
+
+with col2:
+    action = st.selectbox("Action", ["Buy", "Sell"], key="tx_action")
+    currency = st.selectbox("Transaction Currency", SUPPORTED_CCY, key="tx_currency")
+    st.caption("The currency the cash left your account in.")
+
+    if detected and detected != currency:
+        # Not an error: paying euros for a USD-listed asset is normal. Cost basis
+        # follows the transaction currency, market value the listing currency.
+        st.info(
+            f"Asset is listed in **{detected}**; you are paying in **{currency}**. "
+            f"That is fine — both are handled separately."
+        )
+    if detected and detected not in SUPPORTED_CCY:
+        st.warning(
+            f"This asset is listed in **{detected}**, which the dashboard cannot "
+            f"value yet. It will appear with a 'no rate' note until "
+            f"{detected} support is added."
+        )
+
+    # Blank until entered, as a 0 would have to be deleted first. Each reads None while it is.
+    quantity = st.number_input("Quantity", value=None, min_value=0.0, step=0.01, format="%.4f", key="tx_quantity")
+
+    # --- Fetch Historical Price ---
+    st.button("Fetch Price", key="fetch_price", on_click=_fetch_price)
+    price_error = st.session_state.pop("tx_price_error", None)
+    if price_error:
+        st.error(price_error)
+
+    price = st.number_input("Price (Nominal)", value=None, min_value=0.0, step=0.01, format="%.4f", key="tx_price")
+    fetched = st.session_state.get("tx_fetched")
+    if fetched and price == fetched["price"]:
+        st.caption(
+            (f"{fetched['renamed']} is {fetched['symbol']} on Yahoo Finance, so the ticker now says that. "
+             if fetched["renamed"] and ticker == fetched["symbol"] else "")
+            + f"Close of {fetched['on']:%Y-%m-%d} on {fetched['symbol']}, in {fetched['currency'] or 'an unknown currency'}."
+        )
+        if fetched["currency"] and fetched["currency"] != currency:
             st.warning(
-                f"This asset is listed in **{detected}**, which the dashboard cannot "
-                f"value yet. It will appear with a 'no rate' note until "
-                f"{detected} support is added."
+                f"That price is in {fetched['currency']} and this transaction is in {currency}. "
+                f"Enter what you paid in {currency}, or change the transaction currency."
             )
+    fees = st.number_input("Fees", min_value=0.0, step=0.01, key="tx_fees")
+    st.caption("Included in the cost basis.")
 
-        quantity = st.number_input("Quantity", min_value=0.0, step=0.01)
+    manual_fx = st.number_input(
+        f"FX override ({currency} per 1 EUR, 0 = look up automatically)",
+        min_value=0.0, step=0.0001, format="%.4f", key="tx_fx",
+    )
 
-        # --- Fetch Historical Price ---
-        if st.form_submit_button("Fetch Price", key="fetch_price"):
-            if identifier:
-                try:
-                    if not st.session_state.get("detected_ccy"):
-                        st.session_state["detected_for"] = identifier
-                        st.session_state["detected_ccy"] = _detect_currency(identifier)
+# --- Total ---
+# Kept with what it was calculated from, so a total never outlives a change to any of it.
+total_inputs = (action, currency, quantity, price, fees, manual_fx, date_input)
+if st.button("Calculate total", key="calculate_total"):
+    if quantity and price:
+        st.session_state["tx_total_for"] = total_inputs
+    else:
+        st.error("Set a quantity and a price first.")
 
-                    target = pd.to_datetime(date_input)
-                    hist = yf.download(
-                        identifier,
-                        start=(target - pd.Timedelta(days=7)).strftime("%Y-%m-%d"),
-                        end=(target + pd.Timedelta(days=1)).strftime("%Y-%m-%d"),
-                        progress=False,
-                    )
-                    if not hist.empty:
-                        if isinstance(hist.columns, pd.MultiIndex):
-                            hist.columns = hist.columns.get_level_values(0)
-                        close = hist["Close"].dropna()
-                        if isinstance(close, pd.DataFrame):
-                            close = close.iloc[:, 0]
-                        st.session_state["fetched_price"] = float(close.iloc[-1])
-                        st.success(f"Price for {target.strftime('%Y-%m-%d')} fetched.")
-                    else:
-                        st.warning("No historical data found.")
-                except Exception as exc:
-                    st.error(f"Error: {exc}")
-            else:
-                st.error("Enter a Ticker or ISIN first.")
+total_eur = None
+if st.session_state.get("tx_total_for") == total_inputs:
+    total = pm.trade_total(action, quantity, price, fees)
+    total_fx, _ = _trade_fx(currency, manual_fx, date_input)
+    total_label = "Total cost" if action == "Buy" else "Total proceeds"
+    st.metric(total_label, f"€{total:,.2f}" if currency == pm.BASE_CCY else f"{total:,.2f} {currency}")
+    if total_fx is None:
+        st.warning(_fx_blocked(currency, date_input))
+    else:
+        total_eur = total / total_fx
+        if currency != pm.BASE_CCY:
+            st.caption(f"€{total_eur:,.2f} at FX {total_fx:.4f}.")
 
-        price = st.number_input(
-            "Price (Nominal)", min_value=0.0, step=0.01,
-            value=st.session_state.get("fetched_price", 0.0),
+# --- Dry Powder ---
+sync = st.checkbox(
+    "Sync with Dry Powder reserve", value=True, key="tx_sync",
+    help="Saving a Buy takes its cost, fees included, from the Dry Powder account. Saving a Sell adds its proceeds.",
+)
+sync_account = None
+if sync and not dry_powder:
+    st.warning("There is no Dry Powder account to sync with. Add one under Cash accounts below, or untick this box.")
+elif sync:
+    balances = {a.name: a.balance_eur for a in dry_powder}
+    sync_name = dry_powder[0].name
+    if len(dry_powder) > 1:
+        sync_name = st.selectbox(
+            "Dry Powder account", list(balances), key="tx_sync_account",
+            format_func=lambda account: f"{account} (€{balances[account]:,.2f})",
         )
-        fees = st.number_input("Fees", min_value=0.0, step=0.01)
-        st.caption("Included in the cost basis.")
+    sync_account = next(a for a in dry_powder if a.name == sync_name)
+    effect = "takes its cost from" if action == "Buy" else "adds its proceeds to"
+    line = f"This {action.lower()} {effect} {search.plain(sync_name)}, which holds €{sync_account.balance_eur:,.2f}."
+    if total_eur is not None:
+        try:
+            line += f" That leaves €{pm.balance_after_trade(sync_account.balance_eur, action, total_eur):,.2f}."
+        except ValueError as exc:
+            st.warning(f"Saving will be refused: {exc}.")
+    st.caption(line)
 
-        manual_fx = st.number_input(
-            f"FX override ({currency} per 1 EUR, 0 = look up automatically)",
-            min_value=0.0, step=0.0001, format="%.4f", value=0.0,
+
+def _save_trade() -> None:
+    if not ticker and not isin:
+        st.error("ERROR: You must provide at least a Ticker or an ISIN.")
+        return
+    if " " in ticker:
+        st.error("ERROR: The Ticker box holds a search, not a ticker. Pick the asset from the list under it.")
+        return
+    if not quantity:
+        st.error("ERROR: Quantity must be greater than 0.")
+        return
+    if not price:
+        st.error("ERROR: Price must be greater than 0.")
+        return
+    if sync and sync_account is None:
+        st.error("Not saved: there is no Dry Powder account to sync with. Add one under Cash accounts below, or untick the box.")
+        return
+
+    fx_rate, fx_source = _trade_fx(currency, manual_fx, date_input)
+    if fx_rate is None:
+        st.error(_fx_blocked(currency, date_input))
+        return
+
+    try:
+        # A ticker Yahoo does not know is saved as its listing, as Fetch Price does:
+        # otherwise the position sits on the dashboard with no price.
+        saved_ticker, listing_ccy = ticker, detected
+        if not listing_ccy:
+            saved_ticker = (_listed_as(ticker) or ticker) if ticker else ""
+            listing_ccy = _detect_currency(saved_ticker or isin)
+
+        resolved = None
+        if isin and not saved_ticker:
+            # Stored so the pricing path never has to run a live ISIN
+            # search, which can resolve to another exchange listing.
+            resolved = md.resolve_isin(isin)
+
+        trade_data = pm.trade_document(
+            trade_date=date_input,
+            category=category,
+            action=action,
+            currency=currency,
+            quantity=quantity,
+            price_nominal=price,
+            fees=fees,
+            fx_rate=fx_rate,
+            fx_source=fx_source,
+            ticker=saved_ticker,
+            isin=isin,
+            name=name,
+            listing_ccy=listing_ccy,
+            resolved_ticker=resolved,
         )
+        trade_data["timestamp"] = get_timestamp()
 
-    submitted = st.form_submit_button("🚀 Save Transaction", key="save_trade", width="stretch")
-
-    if submitted:
-        ticker_clean = ticker.strip().upper()
-        isin_clean = isin.strip().upper()
-
-        if not ticker_clean and not isin_clean:
-            st.error("ERROR: You must provide at least a Ticker or an ISIN.")
-        elif quantity <= 0:
-            st.error("ERROR: Quantity must be greater than 0.")
-        elif price <= 0:
-            st.error("ERROR: Price must be greater than 0.")
+        synced = ""
+        if sync:
+            # The balance as it is now, not the minute-old copy this page was drawn from.
+            clear_cash_cache()
+            current, _ = pm.clean_cash_accounts(get_cash_accounts())
+            account = next((a for a in current if a.name == sync_account.name), None)
+            if account is None:
+                st.error(f"Not saved: there is no account called {sync_account.name} any more.")
+                return
+            try:
+                after = pm.balance_after_trade(account.balance_eur, action, trade_data["cost_eur"])
+            except ValueError as exc:
+                st.error(f"Not saved: {exc}. Top it up under Cash accounts below, or untick the sync box.")
+                return
+            record_transaction_with_balance(trade_data, account.name, after, date.today().isoformat())
+            synced = f" {search.plain(account.name)}: €{account.balance_eur:,.2f} → €{after:,.2f}."
+            # The cash table keeps its own copy of what it was given; a new key redraws it.
+            st.session_state["cash_rev"] = st.session_state.get("cash_rev", 0) + 1
         else:
-            # An FX rate that cannot be established is refused rather than defaulted.
-            # A silent 1.0 permanently understates a USD cost basis by ~15%, and the
-            # wrong rate gets frozen into the database.
-            if currency == pm.BASE_CCY:
-                fx_rate, fx_source = 1.0, "base"
-            elif manual_fx > 0:
-                fx_rate, fx_source = manual_fx, "manual"
-            else:
-                fx_rate = md.fetch_historical_fx(date_input.strftime("%Y-%m-%d"), currency)
-                fx_source = "yahoo"
+            record_transaction(trade_data)
+    except Exception as exc:
+        st.error(f"Error processing transaction: {exc}")
+        return
 
-            if fx_rate is None:
-                st.error(_fx_blocked(currency, date_input))
-            else:
-                try:
-                    resolved = None
-                    if isin_clean and not ticker_clean:
-                        # Stored so the pricing path never has to run a live ISIN
-                        # search, which can resolve to another exchange listing.
-                        resolved = md.resolve_isin(isin_clean)
+    moved = "cost" if action == "Buy" else "proceeds"
+    st.session_state["tx_flash"] = (
+        f"Recorded {action} of {quantity:g} {saved_ticker or isin} "
+        f"— {moved} €{trade_data['cost_eur']:,.2f} "
+        f"(FX {fx_rate:.4f}, {fx_source}).{synced}"
+    )
+    if not listing_ccy:
+        st.session_state["tx_flash_warning"] = (
+            f"Yahoo Finance could not confirm {saved_ticker or isin}, so the dashboard may not be able to price it. "
+            f"Select the row in the history log to change its ticker to the listing Yahoo Finance uses."
+        )
+    st.session_state["tx_reset"] = True
+    st.session_state["tx_log_rev"] = st.session_state.get("tx_log_rev", 0) + 1
+    st.rerun()
 
-                    trade_data = pm.trade_document(
-                        trade_date=date_input,
-                        category=category,
-                        action=action,
-                        currency=currency,
-                        quantity=quantity,
-                        price_nominal=price,
-                        fees=fees,
-                        fx_rate=fx_rate,
-                        fx_source=fx_source,
-                        ticker=ticker_clean,
-                        isin=isin_clean,
-                        name=name,
-                        listing_ccy=detected,
-                        resolved_ticker=resolved,
-                    )
-                    trade_data["timestamp"] = get_timestamp()
-                    record_transaction(trade_data)
 
-                    moved = "cost" if action == "Buy" else "proceeds"
-                    st.success(
-                        f"Recorded {action} of {quantity:g} {ticker_clean or isin_clean} "
-                        f"— {moved} €{trade_data['cost_eur']:,.2f} "
-                        f"(FX {fx_rate:.4f}, {fx_source})"
-                    )
-
-                    for key in ("fetched_name", "fetched_price", "detected_ccy", "detected_for"):
-                        st.session_state.pop(key, None)
-
-                except Exception as exc:
-                    st.error(f"Error processing transaction: {exc}")
+if st.button("🚀 Save Transaction", key="save_trade", width="stretch"):
+    _save_trade()
 
 
 # ======================================================================================================================
@@ -282,7 +515,7 @@ def _edit_form(original: dict) -> None:
         return f"edit_{field}_{doc_id}"
 
     st.subheader("Edit selected transaction")
-    with st.form(f"edit_form_{doc_id}"):
+    with st.form(f"edit_form_{doc_id}", enter_to_submit=False):
         col1, col2 = st.columns(2)
         with col1:
             e_date = st.date_input("Transaction Date", value=d["date"], key=k("date"))
@@ -330,6 +563,7 @@ def _edit_form(original: dict) -> None:
                     f"Kept unless the date or currency changes, in which case it is looked up again."
                 )
 
+        st.caption("Editing or deleting a transaction does not move Dry Powder: correct the balance under Cash accounts.")
         confirm = st.checkbox("Yes, delete this transaction permanently", key=k("confirm"))
         b_save, b_delete = st.columns(2)
         save = b_save.form_submit_button(
@@ -432,6 +666,9 @@ st.subheader("Transaction History Log")
 flash = st.session_state.pop("tx_flash", None)
 if flash:
     st.success(flash)
+flash_warning = st.session_state.pop("tx_flash_warning", None)
+if flash_warning:
+    st.warning(flash_warning)
 
 raw_logs = get_all_transactions()
 
@@ -535,7 +772,6 @@ cash_flash = st.session_state.pop("cash_flash", None)
 if cash_flash:
     st.success(cash_flash)
 
-stored_accounts, stored_problems = pm.clean_cash_accounts(get_cash_accounts())
 for problem in stored_problems:
     st.warning(f"Stored account skipped: {problem}")
 

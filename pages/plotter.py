@@ -14,7 +14,6 @@ searches and send the histories, and ``market_data.py`` caches both.
 from __future__ import annotations
 
 import os
-import re
 from collections import Counter
 
 import duckdb
@@ -126,23 +125,6 @@ def _keep_series(chart_id: int) -> None:
 # ==========================================================================================
 
 
-def _reason(exc: Exception) -> str:
-    """An error as a reader wants it: the cause, without the URL a request error starts with."""
-    return re.sub(r"https?://\S+", "", str(exc)).strip(" :") or type(exc).__name__
-
-
-def _plain(text: str) -> str:
-    """``text`` as it is, in a label Streamlit reads as Markdown: a "$" would open a formula."""
-    return re.sub(r"([\\`*_{}\[\]<>#+\-!|~$])", r"\\\1", text)
-
-
-def _hit_label(hit: search.Hit) -> str:
-    """The name, then in grey its symbol or id, what it is and where: the name is what a reader scans for."""
-    code = search.parse_ref(hit.ref)[1]
-    rest = ([code] if code != hit.name else []) + [", ".join(p for p in (hit.kind, hit.detail) if p)]
-    return f"{_plain(hit.name)} :gray[{_plain(' · '.join(rest))}]"
-
-
 def _results(chart_id: int, query: str, refs: list[str]) -> None:
     """What a search finds, each a button that adds it to the chart, ticked off when it is on it already."""
     if len(query) < 2:
@@ -157,19 +139,19 @@ def _results(chart_id: int, query: str, refs: list[str]) -> None:
         try:
             groups.append(search.yahoo_hits(md.search_yahoo(query)))
         except Exception as exc:
-            notes.append(f"Yahoo Finance did not answer: {_reason(exc)}")
+            notes.append(f"Yahoo Finance did not answer: {md.reason(exc)}")
         if fred_search:
             try:
                 groups.append(search.fred_hits(md.search_fred(query)))
             except Exception as exc:
-                notes.append(f"FRED did not answer: {_reason(exc)}")
+                notes.append(f"FRED did not answer: {md.reason(exc)}")
     hits = search.rank(query, groups)
     if not hits and not notes:
         st.caption(f"Nothing found for “{query}”.")
     found = st.container(gap=None)  # a list, not a column of separate buttons
     for n, hit in enumerate(hits):
         shown = hit.ref in refs
-        found.button(_hit_label(hit), key=f"plotter_hit_{chart_id}_{n}", on_click=_add_series, args=(chart_id, hit),
+        found.button(search.hit_label(hit), key=f"plotter_hit_{chart_id}_{n}", on_click=_add_series, args=(chart_id, hit),
                      type="tertiary", icon=":material/check:" if shown else ":material/add:", disabled=shown)
     for note in notes:
         st.caption(note)
@@ -213,7 +195,7 @@ def _online_series(ref: str) -> pd.Series | str:
     try:
         return md.fetch_fred_series(key) if source == "fred" else md.fetch_close_history(key)
     except Exception as exc:
-        return _reason(exc)
+        return md.reason(exc)
 
 
 @st.cache_data(ttl=300, show_spinner=False)
@@ -337,7 +319,7 @@ def _draw(chart: dict, about: dict[str, tuple[str, str]], preset: str, in_pct: b
         try:
             loaded[ref] = _load(ref)
         except Exception as exc:
-            failed[ref] = _reason(exc)
+            failed[ref] = md.reason(exc)
     view = charts.window_series(loaded, preset, rebase=in_pct)
     if view.series:
         fig = _figure(view, about, chart["slots"], in_pct, room)

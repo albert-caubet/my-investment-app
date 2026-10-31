@@ -22,7 +22,20 @@ and sells, and see valuation and performance in EUR.
   - Beta, Alpha and R² against the S&P 500, estimated in EUR over two years.
 - **Transaction Logging**
   - Buys and sells across Stocks, ETFs, Funds, Crypto and more.
-  - Ticker or ISIN, with ISINs resolved to a Yahoo symbol once at entry.
+  - The Ticker box searches, as on Custom charts: type a ticker, name or ISIN, press Enter
+    and pick from the list. That fills in Yahoo's symbol, the name and the ISIN where one
+    can be established, all still editable. Yahoo never says a symbol's ISIN, so candidates
+    from Onvista's website search have to be confirmed by Yahoo's search for that ISIN; if
+    not, the box stays empty rather than guess, as an ISIN is a position's identity.
+  - Or skip the list: an ISIN is resolved to a Yahoo symbol once at entry, and a ticker
+    without its exchange (P911) becomes its listing (P911.DE).
+  - Fetch Price takes the unadjusted close of the trade date, or of the last day before it
+    that traded. Calculate total shows the cost or proceeds, fees included.
+  - Saving moves the trade's cash in a Dry Powder account, unless the sync is unticked: a
+    buy takes its cost, a sell adds its proceeds, written together with the transaction.
+    A buy the account cannot cover is refused. Editing or deleting a transaction does not
+    move the balance back.
+  - Only the Save button saves: Enter in a field does not.
   - Historical FX captured on the trade date; fees included in the cost basis.
   - Select a row in the history log to edit or delete it. Saving rebuilds the document
     in the current schema, so a legacy row is upgraded on its first edit.
