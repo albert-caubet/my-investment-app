@@ -132,6 +132,12 @@ def test_watchlist_round_trip(store):
     assert store.watchlist().empty
 
 
+def test_a_tickers_cik_is_the_one_stored_for_its_company(store):
+    store.upsert_companies([{"cik": 320193, "ticker": "AAPL", "name": "Apple Inc."}])
+    assert store.cik_of("aapl") == 320193
+    assert store.cik_of("IWDA.AS") is None  # not a company the fundamentals job stored
+
+
 def test_facts_as_of_filters_by_filing_date(store):
     frame = pd.DataFrame(
         [

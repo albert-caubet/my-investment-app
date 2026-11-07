@@ -61,6 +61,16 @@ and sells, and see valuation and performance in EUR.
     rather than a second scale. A series keeps its colour when another is taken off.
   - The charts are kept in the page URL (`?chart=AAPL,MSFT&chart=macro:US_CPI`), with the
     controls, so a reload or a bookmark brings them back.
+- **Watchlist** (Analysis)
+  - The stocks put on the watchlist from the Screener or the Stock explorer, listed with
+    Yahoo Finance's last close, the day's change and the change over the time range, plus
+    the screener table's conservative value, margin of safety and F-score for a company in
+    it, and where and when each was added.
+  - The dashboard's time range, charts per row, chart height and y axis, then one chart of
+    every stock together (in price, a panel per currency; in % change, all from the first
+    day they all have data) and a chart of each, a stock in the same colour on all of them.
+    The close button on a stock's chart takes it off the watchlist.
+  - Stored in DuckDB, in the `watchlist` table the weekly report reads too.
 - **Cloud Database**
   - Firebase Firestore, for multi-device sync.
 
@@ -294,8 +304,13 @@ carrying its observation date and source, nothing filled in silently.
   DuckDB only.
 - `pages/plotter.py`: Stock explorer. Searches through `invest/data/search.py` (the catalog,
   Yahoo's and FRED's answers, ranked as one list) and fetches through `market_data.py`.
-- `charts.py`: the look every chart shares, the time-range presets and the grid controls
-  the dashboard and the Stock explorer both offer.
+- `pages/watchlist.py`: Watchlist. Fetches its prices through `market_data.py`, as the Stock
+  explorer does.
+- `watchlist.py`: reads and changes the watchlist in DuckDB for the Screener, the Stock
+  explorer and the Watchlist page.
+- `charts.py`: the look every chart shares, the time-range presets, the grid controls the
+  dashboard, the Stock explorer and the Watchlist offer, and the chart of several series
+  the last two draw.
 - `invest/`: the analysis package. `data/` (DuckDB store and every source client), `macro/`
   (catalog, indicators, derived series, regime rules, scorecard, market charts), `positioning/` (COT, 13F,
   Form 4), `fundamentals/` (facts, metrics, screens, valuation, universe), `portfolio/`

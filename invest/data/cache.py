@@ -595,6 +595,11 @@ class Store:
     def companies(self) -> pd.DataFrame:
         return self.con.execute("SELECT * FROM companies ORDER BY ticker").df()
 
+    def cik_of(self, ticker: str) -> int | None:
+        """The CIK stored for ``ticker``; None for a company the fundamentals job has not stored."""
+        row = self.con.execute("SELECT cik FROM companies WHERE ticker = ? LIMIT 1", [ticker.upper()]).fetchone()
+        return int(row[0]) if row else None
+
     # ------------------------------------------------------------------
     # 13F holdings and insider transactions
     # ------------------------------------------------------------------
