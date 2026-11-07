@@ -1,10 +1,11 @@
-"""Screener page: ranked companies from the stored metrics table, detail and watchlist.
+"""Screener page: ranked companies from the stored metrics table, and the detail of one.
 
 Reads the latest ``screener`` snapshot written by ``python -m invest.jobs.fundamentals``
 and the facts behind each company. Every row shows its inputs; the footer says
 which universe, as of when, and whether the data is point-in-time. The build
 button runs that same command in a separate process, so fetching happens only
-when asked for.
+when asked for. The company in the detail can be put on the watchlist, which the
+Watchlist page shows.
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ import streamlit as st
 
 import charts
 import job_panel
+import watchlist
 from invest import secrets
 from invest.data.cache import Store
 from invest.data.edgar import SEC_USER_AGENT_HELP, user_agent_ok
@@ -77,13 +79,11 @@ def _load(db: str, version: float) -> dict | None:
             return None
         run_id, created_at, payload = snap
         previous = store.load_snapshot("screener", offset=1)
-        watch = store.watchlist()
     return {
         "run_id": run_id,
         "created_at": created_at,
         "payload": payload,
         "previous_rows": previous[2].get("rows", []) if previous else None,
-        "watchlist": watch,
     }
 
 
@@ -277,8 +277,40 @@ def _company_label(ticker: str) -> str:
     return f"{name} ({ticker})" if pd.notna(name) and name else ticker
 
 
-pick = st.selectbox("Company", tickers, index=0, format_func=_company_label)
+def _watch(ticker: str, cik: int, label: str, screen_name: str) -> None:
+    try:
+        watchlist.add(ticker, cik=cik, note=f"from {screen_name} on {datetime.now():%Y-%m-%d}")
+    except Exception as exc:
+        st.toast(f"Could not change the watchlist: {exc}", icon=":material/error:")
+    else:
+        st.toast(f"{label} is on the watchlist.", icon=":material/star:")
+
+
+def _unwatch(ticker: str, label: str) -> None:
+    try:
+        watchlist.remove(ticker)
+    except Exception as exc:
+        st.toast(f"Could not change the watchlist: {exc}", icon=":material/error:")
+    else:
+        st.toast(f"{label} is off the watchlist.", icon=":material/star_border:")
+
+
+picker = st.container(horizontal=True, vertical_alignment="bottom")
+pick = picker.selectbox("Company", tickers, index=0, format_func=_company_label)
 row = ranked[ranked["ticker"] == pick].iloc[0]
+try:
+    watched = pick.upper() in watchlist.symbols()
+except Exception as exc:  # the market database is held by a job
+    picker.button("Add to watchlist", icon=":material/star_border:", key="watch_add", disabled=True,
+                  help=f"The watchlist could not be read: {exc}")
+else:
+    if watched:
+        picker.button("Remove from watchlist", icon=":material/star:", key="watch_remove", on_click=_unwatch,
+                      args=(pick, _company_label(pick)), help="It is on the watchlist, which the Watchlist page charts.")
+    else:
+        picker.button("Add to watchlist", icon=":material/star_border:", key="watch_add", on_click=_watch,
+                      args=(pick, int(row["cik"]), _company_label(pick), screen),
+                      help="The Watchlist page charts every stock on the watchlist.")
 d1, d2, d3, d4 = st.columns(4)
 d1.metric("Price", f"{row.get('price'):,.2f}" if pd.notna(row.get("price")) else "–", help=f"as of {row.get('price_date')}")
 d2.metric("Conservative value / share", f"{row.get('value_conservative'):,.2f}" if pd.notna(row.get("value_conservative")) else "–",
@@ -322,41 +354,6 @@ try:
         st.dataframe(shown.style.format("{:,.3g}", na_rep="–"), width="stretch")
 except Exception as exc:
     st.caption(f"History unavailable: {exc}")
-
-# ==========================================================================================
-# Watchlist
-# ==========================================================================================
-
-st.subheader("Watchlist")
-watch = data["watchlist"]
-w1, w2 = st.columns([1, 3])
-if w1.button(f"Add {pick} to watchlist", key="watch_add"):
-    try:
-        with Store(DB) as writer:
-            writer.add_watch(pick, cik=int(row["cik"]), note=f"from {screen} on {datetime.now():%Y-%m-%d}")
-        _load.clear()
-        st.success(f"{pick} added.")
-    except Exception as exc:
-        st.error(f"Could not write the watchlist: {exc}")
-if not watch.empty:
-    merged = watch.merge(table[["ticker", "name", "price", "price_date", "value_conservative", "mos_conservative", "f_score"]],
-                         left_on="symbol", right_on="ticker", how="left")
-    st.dataframe(
-        merged[["symbol", "name", "price", "value_conservative", "mos_conservative", "f_score", "note", "added_at"]]
-        .style.format({"price": "{:,.2f}", "value_conservative": "{:,.2f}", "mos_conservative": "{:+.0%}", "f_score": "{:.0f}"}, na_rep="–"),
-        width="stretch", hide_index=True,
-    )
-    remove = w2.selectbox("Remove from watchlist", ["–"] + watch["symbol"].tolist(), key="watch_remove")
-    if remove != "–" and st.button("Remove", key="watch_remove_btn"):
-        try:
-            with Store(DB) as writer:
-                writer.remove_watch(remove)
-            _load.clear()
-            st.rerun()
-        except Exception as exc:
-            st.error(f"Could not write the watchlist: {exc}")
-else:
-    st.caption("Empty. Add a company from the detail above; price against value and the margin of safety show here.")
 
 # ==========================================================================================
 # Footer

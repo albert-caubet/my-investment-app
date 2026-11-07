@@ -50,12 +50,13 @@ def _screener(at: AppTest) -> AppTest:
     return at.switch_page("pages/screener.py").run()
 
 
-def test_screener_page_renders_ranked_table_detail_and_watchlist(seeded_db):
+def test_screener_page_renders_ranked_table_and_detail(seeded_db):
     at = _screener(AppTest.from_file(str(ROOT / "app.py"), default_timeout=120).run())
     assert not at.exception
     headers = [h.value for h in at.subheader]
     assert any(h.startswith("Magic formula") for h in headers)
-    assert "Company detail" in headers and "Watchlist" in headers
+    assert "Company detail" in headers
+    assert "Watchlist" not in headers  # it has a page of its own
     # the bank is excluded from the magic formula by default; the two others rank
     first_table = at.dataframe[0].value
     assert "JPM" not in first_table["Ticker"].tolist()
@@ -129,3 +130,33 @@ def test_the_range_carries_over_to_the_next_company(seeded_db):
 
     at.button_group(key="price_range").set_value("YTD").run()
     assert at.slider(key="price_window").value == (date(2026, 1, 1), date(2026, 9, 9))
+
+
+def _watched(path: Path) -> pd.DataFrame:
+    with Store(path, read_only=True) as store:
+        return store.watchlist()
+
+
+def test_the_company_in_the_detail_goes_on_the_watchlist_and_off_it(seeded_db):
+    at = _screener(AppTest.from_file(str(ROOT / "app.py"), default_timeout=120).run())
+    _company(at).select("SAP").run()
+    assert not at.exception
+    assert not [b for b in at.button if b.key == "watch_remove"]
+    at.button(key="watch_add").click().run()
+    assert not at.exception
+    sap = _watched(seeded_db).set_index("symbol").loc["SAP"]
+    assert sap["cik"] == 1000184
+    assert sap["note"].startswith("from magic_formula on ")
+    assert [t.value for t in at.toast] == ["SAP SE (SAP) is on the watchlist."]
+
+    at.button(key="watch_remove").click().run()
+    assert not at.exception
+    assert _watched(seeded_db)["symbol"].tolist() == ["MMM"]  # as seeded
+    assert at.button(key="watch_add").label == "Add to watchlist"
+
+
+def test_a_company_already_on_the_watchlist_offers_to_take_it_off(seeded_db):
+    at = _screener(AppTest.from_file(str(ROOT / "app.py"), default_timeout=120).run())
+    _company(at).select("MMM").run()  # seeded on the watchlist
+    assert not at.exception
+    assert at.button(key="watch_remove").label == "Remove from watchlist"
