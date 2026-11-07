@@ -1,4 +1,4 @@
-"""The search behind the custom charts page: references, the catalog search, Yahoo's and
+"""The search behind the Stock explorer page: references, the catalog search, Yahoo's and
 FRED's answers as hits, and one ranking over all three. Pure; no network."""
 
 import json

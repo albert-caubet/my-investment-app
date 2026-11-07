@@ -22,7 +22,7 @@ and sells, and see valuation and performance in EUR.
   - Beta, Alpha and R² against the S&P 500, estimated in EUR over two years.
 - **Transaction Logging**
   - Buys and sells across Stocks, ETFs, Funds, Crypto and more.
-  - The Ticker box searches, as on Custom charts: type a ticker, name or ISIN, press Enter
+  - The Ticker box searches, as on the Stock explorer: type a ticker, name or ISIN, press Enter
     and pick from the list. That fills in Yahoo's symbol, the name and the ISIN where one
     can be established, all still editable. Yahoo never says a symbol's ISIN, so candidates
     from Onvista's website search have to be confirmed by Yahoo's search for that ISIN; if
@@ -49,7 +49,7 @@ and sells, and see valuation and performance in EUR.
     the unlocked others, in proportion to their size, and a lock keeps a category fixed.
   - Today's allocation and the design are drawn as two bars, with the euros each category
     would need to move to get there. Save the design; the dashboard measures against it.
-- **Custom charts** (Analysis)
+- **Stock explorer** (Analysis)
   - A sandbox: add as many charts as you like, each with up to eight series, found with the
     search box on the chart. It searches Yahoo Finance by name, ticker or ISIN (stocks,
     ETFs, funds, indices, futures, currencies, crypto), the macro catalog the refresh job
@@ -274,7 +274,7 @@ carrying its observation date and source, nothing filled in silently.
   lags applied, results stored with the code version). `python -m invest.jobs.vintages` loads
   ALFRED vintages for the revision-prone series when a FRED key is available.
 - **Secrets**: from the environment or `.streamlit/secrets.toml` (gitignored):
-  `FRED_API_KEY` (optional; it adds ALFRED vintages and FRED's search on the Custom charts
+  `FRED_API_KEY` (optional; it adds ALFRED vintages and FRED's search on the Stock explorer
   page, and is blanked out of every request error), `SEC_USER_AGENT` (an app name plus a
   contact address, required by EDGAR; the client refuses to run without one).
 - **Paths**: `INVEST_DATA_DIR` moves the database, downloads and report archive together;
@@ -286,16 +286,16 @@ carrying its observation date and source, nothing filled in silently.
 - `portfolio_math.py`: Pure calculation engine — positions, cost basis, valuation, CAPM.
   No I/O, so every figure it produces is unit-testable.
 - `market_data.py`: All network access and caching (prices, FX, metadata, ISIN lookup, and
-  the searches and histories behind Custom charts).
+  the searches and histories behind the Stock explorer).
 - `database.py`: Firestore initialisation and helpers.
 - `pages/portfolio.py`: Dashboard — loads, computes, renders.
 - `pages/transactions.py`: Trade entry and history log.
 - `pages/macro.py`, `pages/screener.py`, `pages/report.py`: the analysis pages; they read
   DuckDB only.
-- `pages/plotter.py`: Custom charts. Searches through `invest/data/search.py` (the catalog,
+- `pages/plotter.py`: Stock explorer. Searches through `invest/data/search.py` (the catalog,
   Yahoo's and FRED's answers, ranked as one list) and fetches through `market_data.py`.
 - `charts.py`: the look every chart shares, the time-range presets and the grid controls
-  the dashboard and Custom charts both offer.
+  the dashboard and the Stock explorer both offer.
 - `invest/`: the analysis package. `data/` (DuckDB store and every source client), `macro/`
   (catalog, indicators, derived series, regime rules, scorecard, market charts), `positioning/` (COT, 13F,
   Form 4), `fundamentals/` (facts, metrics, screens, valuation, universe), `portfolio/`

@@ -230,7 +230,7 @@ with col1:
         "Ticker", key="tx_ticker", placeholder="Ticker, name or ISIN, then Enter", icon=":material/search:",
         on_change=_forget_fetched_price,
     ).strip()
-    # Until a result is picked, what the box says is a search, as on the Custom charts page.
+    # Until a result is picked, what the box says is a search, as on the Stock explorer page.
     picked = st.session_state.get("tx_picked", {})
     if typed_ticker and typed_ticker != picked.get("ticker"):
         _results(typed_ticker)

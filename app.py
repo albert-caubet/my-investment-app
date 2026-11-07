@@ -18,7 +18,7 @@ screener_page = st.Page("pages/screener.py", title="Screener", icon="🔎")
 report_page = st.Page("pages/report.py", title="Weekly report", icon="📄")
 # A sandbox: charts of anything found by search. Unlike the other analysis pages it
 # fetches from Yahoo Finance and FRED itself, as the dashboard does.
-plotter_page = st.Page("pages/plotter.py", title="Custom charts", icon="📈")
+plotter_page = st.Page("pages/plotter.py", title="Stock explorer", icon="📈")
 
 # Create Navigation
 pg = st.navigation(

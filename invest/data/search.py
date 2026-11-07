@@ -1,6 +1,6 @@
 """Find a series to chart: one search over the macro catalog, Yahoo Finance and FRED.
 
-Every hit carries a *reference*, the one string the custom charts page keeps per
+Every hit carries a *reference*, the one string the Stock explorer page keeps per
 series, in its URL too:
 
 - a Yahoo symbol as it is: ``AAPL``, ``^GSPC``, ``IWDA.AS``, ``EURUSD=X``, ``GC=F``;

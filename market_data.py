@@ -399,7 +399,7 @@ def live_valuations(
 
 
 # ---------------------------------------------------------------------------
-# Any symbol or series, found by search (the custom charts page)
+# Any symbol or series, found by search (the Stock explorer page)
 # ---------------------------------------------------------------------------
 # Each of these raises when it gets nothing, rather than returning something empty:
 # Streamlit does not cache a call that raises, so a failed request is retried on the

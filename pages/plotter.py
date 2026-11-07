@@ -1,4 +1,4 @@
-"""Custom charts: a sandbox to chart anything, alone or side by side.
+"""Stock explorer: a sandbox to chart anything, alone or side by side.
 
 A chart holds one or more series, found with the search box on it: stocks, ETFs, funds,
 indices, futures, currencies and crypto by name, ticker or ISIN, from Yahoo Finance's own
@@ -31,7 +31,7 @@ from invest.macro.catalog import load_catalog
 from invest.macro.derived import apply_transform
 from invest.paths import db_path
 
-st.title("Custom charts")
+st.title("Stock explorer")
 
 DB = db_path()
 CHARTS = "plotter_charts"  # [{"id": int, "refs": [reference, ...], "slots": {reference: colour slot}}]

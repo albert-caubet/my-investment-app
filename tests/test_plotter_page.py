@@ -1,4 +1,4 @@
-"""Headless tests for the Custom charts page, on canned search answers and histories. No network.
+"""Headless tests for the Stock explorer page, on canned search answers and histories. No network.
 
 Every Yahoo and FRED call the page makes goes through ``market_data``, replaced here
 before each run; macro series come from a seeded temporary database, as on the Macro page.

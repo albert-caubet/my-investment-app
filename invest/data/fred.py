@@ -8,7 +8,7 @@ Two routes to the same numbers:
   give: **vintages**. ``fetch_vintages`` asks for every real-time period, which
   is what a point-in-time backtest of CPI, unemployment or claims needs. The key
   also opens FRED's own **search** over every series it publishes, which the
-  custom charts page offers next to Yahoo's.
+  Stock explorer page offers next to Yahoo's.
 
 The parsers are pure and tested on saved responses. A blank or ``"."`` value is
 a holiday or a not-yet-published observation, and is dropped rather than filled.
