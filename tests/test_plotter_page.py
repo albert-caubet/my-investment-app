@@ -320,3 +320,58 @@ def test_without_a_database_a_macro_series_says_where_it_comes_from(canned, monk
     assert not at.exception
     assert not _figures(at)
     assert any("no market database yet" in c.value for c in at.caption)
+
+
+# --- the watchlist -----------------------------------------------------------------------------
+
+
+def _watched(path: Path) -> pd.DataFrame:
+    with Store(path, read_only=True) as store:
+        return store.watchlist()
+
+
+def test_a_charts_stocks_go_on_the_watchlist_and_off_it_by_their_pills(canned, seeded_db):
+    with Store(seeded_db) as store:
+        store.upsert_companies([{"cik": 320193, "ticker": "AAPL", "name": "Apple Inc."}])
+    at = _page(chart=["AAPL,MSFT,macro:US_UNRATE"])
+    pills = at.button_group(key="plotter_watch_0")
+    assert pills.options == ["Apple Inc.", "Microsoft Corporation"]  # a macro series is no stock
+    assert pills.value == []
+
+    pills.select("AAPL").run()
+    assert not at.exception
+    watched = _watched(seeded_db)
+    assert watched["symbol"].tolist() == ["AAPL"]
+    assert watched.iloc[0]["cik"] == 320193  # the screener's, for the weekly report's insider trades
+    assert watched.iloc[0]["note"].startswith("from the Stock explorer on ")
+    assert at.button_group(key="plotter_watch_0").value == ["AAPL"]
+    assert [t.value for t in at.toast] == ["Apple Inc. is on the watchlist."]
+
+    at.button_group(key="plotter_watch_0").unselect("AAPL").run()
+    assert not at.exception
+    assert _watched(seeded_db).empty
+    assert at.button_group(key="plotter_watch_0").value == []
+
+
+def test_a_stock_put_on_the_watchlist_elsewhere_is_lit(canned, seeded_db):
+    with Store(seeded_db) as store:
+        store.add_watch("MSFT", note="from the screener")
+    at = _page(chart=["AAPL,MSFT", "GOOG"])
+    assert at.button_group(key="plotter_watch_0").value == ["MSFT"]
+    assert at.button_group(key="plotter_watch_1").value == []
+
+
+def test_a_chart_of_macro_series_has_no_watchlist_pills(canned):
+    at = _page(chart=["macro:US_UNRATE"])
+    assert not at.exception
+    assert not [g for g in at.button_group if str(g.key).startswith("plotter_watch_")]
+
+
+def test_the_first_stock_put_on_the_watchlist_creates_the_database(canned, monkeypatch, tmp_path):
+    path = tmp_path / "new.duckdb"
+    monkeypatch.setenv("INVEST_DB", str(path))
+    at = _page(chart=["AAPL"])
+    assert not path.exists()  # reading the watchlist never creates it
+    at.button_group(key="plotter_watch_0").select("AAPL").run()
+    assert not at.exception
+    assert _watched(path)["symbol"].tolist() == ["AAPL"]

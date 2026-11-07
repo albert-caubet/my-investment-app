@@ -61,6 +61,9 @@ and sells, and see valuation and performance in EUR.
     rather than a second scale. A series keeps its colour when another is taken off.
   - The charts are kept in the page URL (`?chart=AAPL,MSFT&chart=macro:US_CPI`), with the
     controls, so a reload or a bookmark brings them back.
+  - Under each chart, a pill for each of its Yahoo series (stocks, ETFs, funds and the
+    rest; not the macro or FRED series) puts it on the watchlist, lit while it is on it;
+    a second click takes it off.
 - **Watchlist** (Analysis)
   - The stocks put on the watchlist from the Screener or the Stock explorer, listed with
     Yahoo Finance's last close, the day's change and the change over the time range, plus

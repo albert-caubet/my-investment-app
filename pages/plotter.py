@@ -6,6 +6,7 @@ search; the macro series the refresh job stores (the catalog in ``config/series.
 read from the database as on the Macro page; and, with a FRED API key, any series FRED
 publishes. The charts are kept in the page URL with the controls above them
 (``?chart=AAPL,MSFT&chart=macro:US_CPI``), so a reload or a bookmark brings them back.
+A chart's Yahoo series can be put on the watchlist from it, for the Watchlist page.
 
 Unlike the other analysis pages, this one asks the network: Yahoo and FRED answer the
 searches and send the histories, and ``market_data.py`` caches both.
@@ -14,6 +15,7 @@ searches and send the histories, and ``market_data.py`` caches both.
 from __future__ import annotations
 
 import os
+from datetime import date
 
 import duckdb
 import pandas as pd
@@ -21,6 +23,7 @@ import streamlit as st
 
 import charts
 import market_data as md
+import watchlist
 from invest import secrets
 from invest.data import search
 from invest.data.cache import Store
@@ -265,6 +268,47 @@ def _draw(chart: dict, about: dict[str, tuple[str, str]], preset: str, in_pct: b
         st.caption(f"Every line starts on {view.start:%d %b %Y}, the first day in the range that all of them have data.")
 
 
+# ==========================================================================================
+# Watchlist
+# ==========================================================================================
+
+
+def _watch_changed(key: str, was: list[str], labels: dict[str, str]) -> None:
+    """Puts the stock just picked on the watchlist, or takes the one just unpicked off it."""
+    now = st.session_state[key] or []
+    try:
+        for ref in now:
+            if ref not in was:
+                watchlist.add(ref, note=f"from the Stock explorer on {date.today():%Y-%m-%d}")
+                st.toast(f"{labels[ref]} is on the watchlist.", icon=":material/star:")
+        for ref in was:
+            if ref not in now:
+                watchlist.remove(ref)
+                st.toast(f"{labels[ref]} is off the watchlist.", icon=":material/star_border:")
+    except Exception as exc:
+        st.toast(f"Could not change the watchlist: {md.reason(exc)}", icon=":material/error:")
+
+
+def _watch_pills(chart_id: int, refs: list[str], labels: dict[str, str]) -> None:
+    """A pill for each of the chart's Yahoo series, lit while it is on the watchlist. Macro and FRED series are no stocks."""
+    stocks = [ref for ref in refs if search.parse_ref(ref)[0] == "yahoo"]
+    if not stocks:
+        return
+    try:
+        watched = set(watchlist.symbols())
+    except Exception as exc:  # the market database is held by a job
+        st.caption(f"The watchlist could not be read: {md.reason(exc)}")
+        return
+    key = f"plotter_watch_{chart_id}"
+    on = [ref for ref in stocks if ref.upper() in watched]
+    # The watchlist is the truth: set before the widget and never as its default, so a change
+    # made on another page shows here too.
+    st.session_state[key] = on
+    st.pills("Watchlist", stocks, selection_mode="multi", key=key, format_func=lambda ref: search.plain(labels[ref]),
+             on_change=_watch_changed, args=(key, on, labels),
+             help="Pick a stock to put it on the watchlist, and again to take it off. The Watchlist page charts them.")
+
+
 def _card(chart: dict, preset: str, in_pct: bool, height: int, room: int) -> None:
     chart_id, refs = chart["id"], chart["refs"]
     with st.container(border=True):
@@ -289,6 +333,7 @@ def _card(chart: dict, preset: str, in_pct: bool, height: int, room: int) -> Non
         st.multiselect("Series on this chart", refs, key=f"plotter_series_{chart_id}", label_visibility="collapsed",
                        format_func=labels.get, on_change=_keep_series, args=(chart_id,))
         _draw(chart, about, preset, in_pct, height, room)
+        _watch_pills(chart_id, refs, labels)
 
 
 # ==========================================================================================
