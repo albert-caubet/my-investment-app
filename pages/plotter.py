@@ -14,12 +14,9 @@ searches and send the histories, and ``market_data.py`` caches both.
 from __future__ import annotations
 
 import os
-from collections import Counter
 
 import duckdb
-import numpy as np
 import pandas as pd
-import plotly.graph_objects as go
 import streamlit as st
 
 import charts
@@ -247,72 +244,6 @@ def _describe(ref: str) -> tuple[str, str]:
 # ==========================================================================================
 
 
-#: Characters a legend entry has room for, by charts per row, in a window about 1280 pixels
-#: wide. Plotly does not wrap one, and the page cannot know the window's width.
-LEGEND_ROOM = {1: 70, 2: 32, 3: 22}
-
-
-def _labels(about: dict[str, tuple[str, str]]) -> dict[str, str]:
-    """What the chips and the legend call each series: its name, with its symbol or id when two names are alike."""
-    names = Counter(name for name, _ in about.values())
-    return {ref: f"{name} ({search.parse_ref(ref)[1]})" if names[name] > 1 else name for ref, (name, _) in about.items()}
-
-
-def _fit(label: str, ref: str, room: int) -> str:
-    """``label`` cut to ``room`` characters. A cut one ends with its symbol or id, so two cut alike still differ."""
-    if len(label) <= room:
-        return label
-    code = search.parse_ref(ref)[1]
-    return f"{label[:max(room - len(code) - 4, 8)].rstrip()}… ({code})"
-
-
-def _figure(view: charts.SeriesWindow, about: dict[str, tuple[str, str]], slots: dict[str, int],
-            in_pct: bool, room: int) -> go.Figure:
-    """One line per series. In % change they share one axis; in value, each unit gets a panel.
-
-    Panels stack on one time axis, so their dates line up, rather than a second scale on
-    the right: two scales on one plot line up wherever their ranges happen to put them,
-    which shows a relationship the data does not have.
-    """
-    units = [None] if in_pct else list(dict.fromkeys(about[ref][1] for ref in view.series))
-    labels = _labels(about)
-    gap = 0.08
-    tall = (1 - gap * (len(units) - 1)) / len(units)
-    fig = go.Figure()
-    for n, unit in enumerate(units):  # top to bottom
-        top = 1 - n * (tall + gap)
-        title = f"Change since {view.start:%d %b %Y}" if in_pct else unit or None
-        fig.update_layout({f"yaxis{n + 1 if n else ''}": dict(domain=[max(top - tall, 0.0), top], anchor="x",
-                                                                title=title)})
-    for ref, values in view.series.items():
-        name, unit = _fit(labels[ref], ref, room), about[ref][1]
-        base = float(values.iloc[0])
-        change = values / base - 1 if base > 0 else pd.Series(np.nan, index=values.index)
-        panel = 0 if in_pct else units.index(unit)
-        hover = f"%{{customdata[0]:{',.2f' if values.abs().max() >= 1 else ',.4f'}}}" + (f" {unit}" if unit else "")
-        if base > 0:
-            hover += " · %{customdata[1]:+.1%}"
-        line = charts.series_line(slots[ref])
-        fig.add_scatter(
-            x=values.index, y=change if in_pct else values, name=name, yaxis=f"y{panel + 1 if panel else ''}",
-            mode="lines" if len(values) > 1 else "markers",
-            line=line, marker=dict(color=line["color"], size=8),
-            customdata=np.column_stack([values.to_numpy(), change.to_numpy()]),
-            hovertemplate=hover + "<extra></extra>",
-        )
-    if in_pct:
-        fig.update_yaxes(tickformat="+.1~%")  # +12%, -0.5%: no trailing zeros
-    fig.update_layout(
-        template="plotly_white", hovermode="x unified", hoversubplots="axis",
-        xaxis=dict(anchor=f"y{len(units) if len(units) > 1 else ''}", hoverformat="%d %b %Y"),
-        # A legend only where it tells lines apart; the chips above the chart name a single one.
-        # In a row above the plot, so it takes no width from a chart in a narrow column.
-        showlegend=len(view.series) > 1,
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
-    )
-    return fig
-
-
 def _draw(chart: dict, about: dict[str, tuple[str, str]], preset: str, in_pct: bool, height: int, room: int) -> None:
     loaded, failed = {}, {}
     for ref in chart["refs"]:
@@ -321,12 +252,14 @@ def _draw(chart: dict, about: dict[str, tuple[str, str]], preset: str, in_pct: b
         except Exception as exc:
             failed[ref] = md.reason(exc)
     view = charts.window_series(loaded, preset, rebase=in_pct)
+    labels = search.series_labels(about)
     if view.series:
-        fig = _figure(view, about, chart["slots"], in_pct, room)
+        names = {ref: search.fit_label(labels[ref], ref, room) for ref in view.series}
+        units = {ref: unit for ref, (_, unit) in about.items()}
+        fig = charts.lines_figure(view, names, units, chart["slots"], in_pct)
         st.plotly_chart(charts.readable(fig, height=height), width="stretch", key=f"plotter_figure_{chart['id']}")
     left_out = failed | view.missing
     if left_out:
-        labels = _labels(about)
         st.caption("Not drawn: " + "; ".join(f"{labels[ref]}, {why}" for ref, why in left_out.items()) + ".")
     if view.common_start:
         st.caption(f"Every line starts on {view.start:%d %b %Y}, the first day in the range that all of them have data.")
@@ -349,7 +282,7 @@ def _card(chart: dict, preset: str, in_pct: bool, height: int, room: int) -> Non
             st.caption("Search for a stock, fund, ETF, index or macro series, then pick it to chart it.")
             return
         about = {ref: _describe(ref) for ref in refs}
-        labels = _labels(about)
+        labels = search.series_labels(about)
         # The chart's list is the truth: set before the widget and never as its default, so a
         # series added by a search shows here, and taking one off removes it from the chart.
         st.session_state[f"plotter_series_{chart_id}"] = list(refs)
@@ -382,7 +315,7 @@ for n in range(len(cards) + 1):  # one cell more, for the button that adds a cha
         cells = st.columns(per_row)  # a row per group, so neighbours line up at the top
     with cells[n % per_row]:
         if n < len(cards):
-            _card(cards[n], preset, in_pct, height, LEGEND_ROOM[per_row])
+            _card(cards[n], preset, in_pct, height, charts.LEGEND_ROOM[per_row])
         else:
             st.button("Add chart", icon=":material/add:", key="plotter_add_chart", on_click=_add_chart,
                       width="stretch")

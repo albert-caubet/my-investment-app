@@ -245,3 +245,37 @@ def test_nothing_to_show():
     assert charts.window_series({}, "1Y") == charts.SeriesWindow({}, None, {})
     view = charts.window_series({"empty": pd.Series(dtype=float)}, "Max", rebase=True)
     assert view.series == {} and view.start is None
+
+
+# --- a chart of series ---------------------------------------------------------------------
+
+
+def test_values_in_different_units_get_a_panel_each_on_one_time_axis():
+    view = charts.window_series({"a": _daily("2020-01-01"), "b": _daily("2020-01-01", value=50.0),
+                                 "c": _daily("2020-01-01")}, "1Y")
+    fig = charts.lines_figure(view, {"a": "A", "b": "B", "c": "C"}, {"a": "USD", "b": "EUR", "c": "USD"},
+                              {"a": 0, "b": 1, "c": 2}, in_pct=False)
+    layout = fig.layout
+    assert [t.yaxis for t in fig.data] == ["y", "y2", "y"]  # the two in USD share one
+    assert layout.yaxis.title.text == "USD" and layout.yaxis2.title.text == "EUR"
+    assert layout.yaxis.domain[0] > layout.yaxis2.domain[1]  # stacked, not overlaid
+    assert layout.xaxis.anchor == "y2"  # the dates under the bottom panel
+
+
+def test_in_change_the_lines_share_one_axis_and_each_takes_the_look_of_its_slot():
+    view = charts.window_series({"a": _daily("2020-01-01"), "b": _daily("2026-03-02")}, "1Y", rebase=True)
+    fig = charts.lines_figure(view, {"a": "A", "b": "B"}, {"a": "USD", "b": "EUR"}, {"a": 3, "b": 9}, in_pct=True)
+    assert [t.yaxis for t in fig.data] == ["y", "y"]
+    assert [float(t.y[0]) for t in fig.data] == [0.0, 0.0]
+    assert fig.layout.yaxis.title.text == "Change since 02 Mar 2026"
+    assert fig.layout.yaxis.tickformat == "+.1~%"
+    assert [t.line.color for t in fig.data] == [charts.series_line(3)["color"], charts.series_line(9)["color"]]
+    assert fig.data[1].line.dash == "dash"  # past eight, the colours come round with a dash
+    assert fig.layout.showlegend is True
+
+
+def test_a_single_line_has_no_legend():
+    view = charts.window_series({"a": _daily("2020-01-01")}, "1Y")
+    fig = charts.lines_figure(view, {"a": "Apple Inc."}, {"a": "USD"}, {"a": 0}, in_pct=False)
+    assert fig.layout.showlegend is False
+    assert fig.data[0].name == "Apple Inc."

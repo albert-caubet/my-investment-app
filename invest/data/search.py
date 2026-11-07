@@ -11,12 +11,14 @@ A Yahoo symbol never contains a colon, so the prefixes cannot be mistaken for on
 
 The catalog is searched here, offline. Yahoo and FRED are asked live, by
 ``market_data.py``, which caches what they answer; this module turns their answers
-into hits and ranks the lot. Everything here is pure.
+into hits and ranks the lot, and names a chart's series. Everything here is pure.
 """
 
 from __future__ import annotations
 
 import re
+from collections import Counter
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 from invest.macro.catalog import GROUPS, Catalog, SeriesSpec
@@ -78,6 +80,21 @@ def hit_label(hit: Hit) -> str:
     code = parse_ref(hit.ref)[1]
     rest = ([code] if code != hit.name else []) + [", ".join(p for p in (hit.kind, hit.detail) if p)]
     return f"{plain(hit.name)} :gray[{plain(' · '.join(rest))}]"
+
+
+def series_labels(about: Mapping[str, tuple[str, str]]) -> dict[str, str]:
+    """What the chips and the legend call each series of ``about`` (``{reference: (name, unit)}``):
+    its name, with its symbol or id when two names are alike."""
+    names = Counter(name for name, _ in about.values())
+    return {ref: f"{name} ({parse_ref(ref)[1]})" if names[name] > 1 else name for ref, (name, _) in about.items()}
+
+
+def fit_label(label: str, ref: str, room: int) -> str:
+    """``label`` cut to ``room`` characters. A cut one ends with its symbol or id, so two cut alike still differ."""
+    if len(label) <= room:
+        return label
+    code = parse_ref(ref)[1]
+    return f"{label[:max(room - len(code) - 4, 8)].rstrip()}… ({code})"
 
 
 def tokens(text: str) -> list[str]:

@@ -10,8 +10,9 @@ figure through :func:`readable` once, last, right before ``st.plotly_chart``, so
 also reaches annotations added along the way.
 
 The time-range presets a price chart offers live here too, with the arithmetic that
-turns a preset into the dates it shows, and the controls of a grid of charts, so the
-pages that show one offer the same choices.
+turns a preset into the dates it shows, the controls of a grid of charts, so the
+pages that show one offer the same choices, and the figure of a chart of series, so
+the Stock explorer and the Watchlist draw theirs alike.
 """
 
 from collections.abc import Mapping
@@ -19,7 +20,9 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Sequence
 
+import numpy as np
 import pandas as pd
+import plotly.graph_objects as go
 import streamlit as st
 
 #: Every chart is this much taller than the height its page asks for.
@@ -206,6 +209,61 @@ def window_series(series: Mapping[str, pd.Series], preset: str, *, rebase: bool 
         shown = {key: s for key, s in shown.items() if key not in out}
         if not shown:
             return SeriesWindow({}, None, missing)
+
+
+#: Characters a legend entry has room for, by charts per row, in a window about 1280 pixels
+#: wide. Plotly does not wrap one, and the page cannot know the window's width.
+LEGEND_ROOM = {1: 70, 2: 32, 3: 22}
+
+
+def lines_figure(view: SeriesWindow, names: Mapping[str, str], units: Mapping[str, str],
+                 slots: Mapping[str, int], in_pct: bool) -> go.Figure:
+    """One line per series of ``view``. In % change they share one axis; in value, each unit gets a panel.
+
+    ``names`` are what the legend and the hover call each series, ``units`` what its values
+    are in, and ``slots`` its place in :func:`series_line`: a series keeps its look when
+    another is taken off the chart, and on every chart it is on.
+
+    Panels stack on one time axis, so their dates line up, rather than a second scale on
+    the right: two scales on one plot line up wherever their ranges happen to put them,
+    which shows a relationship the data does not have.
+    """
+    panels = [None] if in_pct else list(dict.fromkeys(units[key] for key in view.series))
+    gap = 0.08
+    tall = (1 - gap * (len(panels) - 1)) / len(panels)
+    fig = go.Figure()
+    for n, unit in enumerate(panels):  # top to bottom
+        top = 1 - n * (tall + gap)
+        title = f"Change since {view.start:%d %b %Y}" if in_pct else unit or None
+        fig.update_layout({f"yaxis{n + 1 if n else ''}": dict(domain=[max(top - tall, 0.0), top], anchor="x",
+                                                                title=title)})
+    for key, values in view.series.items():
+        unit = units[key]
+        base = float(values.iloc[0])
+        change = values / base - 1 if base > 0 else pd.Series(np.nan, index=values.index)
+        panel = 0 if in_pct else panels.index(unit)
+        hover = f"%{{customdata[0]:{',.2f' if values.abs().max() >= 1 else ',.4f'}}}" + (f" {unit}" if unit else "")
+        if base > 0:
+            hover += " · %{customdata[1]:+.1%}"
+        line = series_line(slots[key])
+        fig.add_scatter(
+            x=values.index, y=change if in_pct else values, name=names[key], yaxis=f"y{panel + 1 if panel else ''}",
+            mode="lines" if len(values) > 1 else "markers",
+            line=line, marker=dict(color=line["color"], size=8),
+            customdata=np.column_stack([values.to_numpy(), change.to_numpy()]),
+            hovertemplate=hover + "<extra></extra>",
+        )
+    if in_pct:
+        fig.update_yaxes(tickformat="+.1~%")  # +12%, -0.5%: no trailing zeros
+    fig.update_layout(
+        template="plotly_white", hovermode="x unified", hoversubplots="axis",
+        xaxis=dict(anchor=f"y{len(panels) if len(panels) > 1 else ''}", hoverformat="%d %b %Y"),
+        # A legend only where it tells lines apart; the page names a single one above its chart.
+        # In a row above the plot, so it takes no width from a chart in a narrow column.
+        showlegend=len(view.series) > 1,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+    )
+    return fig
 
 
 def grid_controls(container, *, value: str, change_help: str) -> tuple[int, int, bool]:

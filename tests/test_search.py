@@ -187,3 +187,17 @@ def test_each_reference_once_and_no_more_than_the_limit():
     yahoo = search.yahoo_hits([_yahoo(f"S{n}", name="Apple") for n in range(20)])
     ranked = search.rank("apple", [yahoo, yahoo], limit=10)
     assert _refs(ranked) == [f"S{n}" for n in range(10)]
+
+
+def test_series_go_by_name_and_two_alike_by_their_symbol_or_id_too():
+    about = {"GOOGL": ("Alphabet Inc.", "USD"), "GOOG": ("Alphabet Inc.", "USD"), "macro:US_CPI": ("US CPI", "%")}
+    assert search.series_labels(about) == {
+        "GOOGL": "Alphabet Inc. (GOOGL)", "GOOG": "Alphabet Inc. (GOOG)", "macro:US_CPI": "US CPI",
+    }
+
+
+def test_a_label_too_long_for_its_room_is_cut_and_ends_with_its_symbol_or_id():
+    assert search.fit_label("Apple Inc.", "AAPL", 22) == "Apple Inc."
+    cut = search.fit_label("iShares Core MSCI World UCITS ETF USD (Acc)", "IWDA.AS", 22)
+    assert cut == "iShares Cor… (IWDA.AS)" and len(cut) == 22
+    assert search.fit_label("A very long macro series label indeed", "macro:US_CPI", 22) == "A very long… (US_CPI)"
