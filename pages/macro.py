@@ -140,14 +140,6 @@ def _market_closes(db: str, version: float, symbols: tuple[str, ...]) -> dict[st
     return {s: c for s, c in closes.items() if not c.empty}
 
 
-LEGEND_FONT = 14  # under charts.FONT: up to 19 names sit above a chart in half a row
-LEGEND_ROW = 21.2  # pixels a legend row takes at that size (measured)
-#: The plot's width, by charts per row, in a window 1440 pixels wide with the sidebar
-#: open (measured): what the legend's rows are estimated for. In a wider window the
-#: names take fewer rows, and the plot gets the height they leave.
-PLOT_WIDTH = {1: 880, 2: 350, 3: 185}
-
-
 def _market_chart(
     chart: markets.MarketChart, closes: dict[str, pd.Series], preset: str, height: int, per_row: int
 ) -> None:
@@ -194,11 +186,10 @@ def _market_chart(
         template="plotly_white", hovermode="x unified", showlegend=True, xaxis_hoverformat="%d %b %Y",
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
     )
-    legend_height = round(charts.legend_rows(names, PLOT_WIDTH[per_row], LEGEND_FONT) * LEGEND_ROW)
-    charts.readable(fig, height=height + legend_height)
+    charts.readable(fig, height=height + charts.legend_height(names, per_row))
     # After readable, which sets the app's 18px and 20px: at those sizes a dozen names take
     # a third of the chart, and the hover's list of every line overflows the plot.
-    fig.update_layout(legend_font_size=LEGEND_FONT, hoverlabel_font_size=LEGEND_FONT)
+    fig.update_layout(legend_font_size=charts.LEGEND_FONT, hoverlabel_font_size=charts.LEGEND_FONT)
     st.plotly_chart(fig, width="stretch")
 
     notes = [f"Latest close {last:%d %b %Y}" + (f"; Max starts on {start:%d %b %Y}, the first day with a close "
@@ -371,10 +362,6 @@ CHART_RANGE = "10Y"  # most indicators are monthly: a year is a dozen points
 THRESHOLD_COLOR = "rgba(214, 39, 40, 0.8)"
 
 
-def _in_url() -> list[str]:
-    return [sid.strip() for sid in st.query_params.get(CHART_URL, "").split(",") if sid.strip()]
-
-
 def _scorecard() -> list[str]:
     """The scorecard's tables, one per group. Returns the ids of the rows ticked in them, in table order."""
     st.subheader("Scorecard")
@@ -384,7 +371,7 @@ def _scorecard() -> list[str]:
         "of concern, so red means the indicator sits where it has historically been worrying. "
         "Tick rows, in any of the tables, to chart them below."
     )
-    in_url = set(_in_url())
+    in_url = set(charts.in_url(CHART_URL))
     ticked = []
     for group in catalog.groups():
         rows = [r for r in readings if r.group == group]
@@ -445,11 +432,9 @@ def _indicator_chart(ids: list[str], slots: dict[str, int], preset: str, height:
                               line=dict(dash="dash", color=THRESHOLD_COLOR, width=1.5))
                 fig.add_annotation(xref="paper", yref=axis[names[sid]], y=level, text=", ".join(rule_names),
                                    showarrow=False, yanchor="bottom", **side)
-        legend = 0
-        if len(view.series) > 1:
-            legend = round(charts.legend_rows(list(names.values()), PLOT_WIDTH[1], LEGEND_FONT) * LEGEND_ROW)
+        legend = charts.legend_height(list(names.values())) if len(view.series) > 1 else 0
         charts.readable(fig, height=height + legend)
-        fig.update_layout(legend_font_size=LEGEND_FONT, hoverlabel_font_size=LEGEND_FONT)
+        fig.update_layout(legend_font_size=charts.LEGEND_FONT, hoverlabel_font_size=charts.LEGEND_FONT)
         st.plotly_chart(fig, width="stretch", key=f"macro_figure_{'_'.join(ids)}")
     if view.missing:
         st.caption("Not drawn: " + "; ".join(f"{names[sid]}, {why}" for sid, why in view.missing.items()) + ".")
@@ -467,53 +452,29 @@ def _indicator_notes(sid: str, *, named: bool) -> None:
 
 def _chart_section(ticked: list[str]) -> None:
     st.subheader("Chart")
-    controls = st.container(horizontal=True, vertical_alignment="bottom", gap="medium")
-    together = controls.segmented_control(
-        "Layout", ("Separate", "Together"), default="Separate", required=True, key="macro_layout",
-        bind="query-params",
-        help="Separate: a chart for each indicator. Together: one chart, with a panel for each unit on a shared "
-             "time axis, so indicators in the same unit are drawn on the same scale.",
-    ) == "Together"
-    preset = controls.segmented_control(
-        "Time range", charts.RANGES, default=CHART_RANGE, required=True, key="macro_range", bind="query-params"
-    )
-    per_row = controls.segmented_control(
-        "Charts per row", (1, 2, 3), default=2, required=True, key="macro_per_row", bind="query-params",
-        disabled=together,
-    )
-    height = charts.HEIGHTS[controls.segmented_control(
-        "Chart height", tuple(charts.HEIGHTS), default="Medium", required=True, key="macro_height",
-        bind="query-params",
-    )]
+    layout = charts.ticked_layout(st.container(horizontal=True, vertical_alignment="bottom", gap="medium"),
+                                  "macro", noun="indicators", default_range=CHART_RANGE)
     if not ticked:
         st.info("Tick one or more rows of the scorecard above to chart them.", icon=":material/check_box:")
         return
     st.caption("Shaded: NBER recessions. Dashed red lines: the levels at which a regime rule fires.")
     slots = {sid: n for n, sid in enumerate(ticked)}
-    if together:
-        _indicator_chart(ticked, slots, preset, height)
+    if layout.together:
+        _indicator_chart(ticked, slots, layout.preset, layout.height)
         for sid in ticked:
             _indicator_notes(sid, named=True)
         return
     for n, sid in enumerate(ticked):
-        if n % per_row == 0:
-            cells = st.columns(per_row)  # a row per group, so neighbours line up at the top
-        with cells[n % per_row].expander(f"📊 {catalog[sid].label}", expanded=True):
-            _indicator_chart([sid], slots, preset, height)
+        if n % layout.per_row == 0:
+            cells = st.columns(layout.per_row)  # a row per group, so neighbours line up at the top
+        with cells[n % layout.per_row].expander(f"📊 {catalog[sid].label}", expanded=True):
+            _indicator_chart([sid], slots, layout.preset, layout.height)
             _indicator_notes(sid, named=False)
 
 
 @st.fragment  # ticking a row reruns the scorecard and the chart only
 def _scorecard_and_chart() -> None:
-    ticked = _scorecard()
-    # In the order they were ticked: the URL's first, then any new one at the end.
-    was = _in_url()
-    order = [sid for sid in was if sid in ticked] + [sid for sid in ticked if sid not in was]
-    if order:
-        st.query_params[CHART_URL] = ",".join(order)
-    elif CHART_URL in st.query_params:
-        del st.query_params[CHART_URL]
-    _chart_section(order)
+    _chart_section(charts.keep_ticked(CHART_URL, _scorecard()))
 
 
 readings_by_id = {r.id: r for r in readings}

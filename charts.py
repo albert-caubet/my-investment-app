@@ -268,6 +268,86 @@ def lines_figure(view: SeriesWindow, names: Mapping[str, str], units: Mapping[st
     return fig
 
 
+#: A legend above a chart of many lines: smaller than FONT, so up to 19 names sit above a
+#: chart in half a row, and the hover's list of every line does not overflow the plot.
+LEGEND_FONT = 14
+LEGEND_ROW = 21.2  # pixels a legend row takes at that size (measured)
+#: The plot's width, by charts per row, in a window 1440 pixels wide with the sidebar
+#: open (measured): what the legend's rows are estimated for. In a wider window the
+#: names take fewer rows, and the plot gets the height they leave.
+PLOT_WIDTH = {1: 880, 2: 350, 3: 185}
+
+
+def legend_height(names: Sequence[str], per_row: int = 1) -> int:
+    """Pixels a legend of ``names`` above the plot takes, at :data:`LEGEND_FONT`: what a chart
+    adds to its height, so the plot keeps about the height chosen however many lines it has."""
+    return round(legend_rows(names, PLOT_WIDTH[per_row], LEGEND_FONT) * LEGEND_ROW)
+
+
+@dataclass(frozen=True)
+class TickedLayout:
+    """The choices above the charts of the rows ticked in a table."""
+
+    together: bool  # one chart for every row, or a chart each
+    preset: str  # one of RANGES
+    per_row: int
+    height: int  # pixels, as drawn
+    in_pct: bool  # % change from the first common day, or values
+
+
+def ticked_layout(container, prefix: str, *, noun: str, default_range: str = DEFAULT_RANGE,
+                  value: str | None = None, change_help: str = "") -> TickedLayout:
+    """Layout, time range, charts per row, chart height and, with ``value``, the y axis.
+
+    Kept in the URL under ``prefix`` (?macro_layout=Together&macro_range=5Y), so a reload
+    or a bookmark keeps the choice, and one page's choice is not another's. ``noun`` names
+    what is charted, in the plural, for the help. Charts per row means nothing for one
+    chart, so it is greyed out while the rows are drawn together.
+    """
+    together = container.segmented_control(
+        "Layout", ("Separate", "Together"), default="Separate", required=True, key=f"{prefix}_layout",
+        bind="query-params",
+        help=f"Separate: a chart for each of the {noun}. Together: one chart, with a panel for each unit on a "
+             f"shared time axis, so {noun} in the same unit are drawn on the same scale.",
+    ) == "Together"
+    preset = container.segmented_control(
+        "Time range", RANGES, default=default_range, required=True, key=f"{prefix}_range", bind="query-params"
+    )
+    per_row = container.segmented_control(
+        "Charts per row", (1, 2, 3), default=2, required=True, key=f"{prefix}_per_row", bind="query-params",
+        disabled=together,
+    )
+    height = container.segmented_control(
+        "Chart height", tuple(HEIGHTS), default="Medium", required=True, key=f"{prefix}_height", bind="query-params"
+    )
+    in_pct = value is not None and container.segmented_control(
+        "Y axis", (value, "Change"), default=value, required=True, key=f"{prefix}_y_axis", bind="query-params",
+        help=change_help,
+    ) == "Change"
+    return TickedLayout(together, preset, per_row, HEIGHTS[height], in_pct)
+
+
+def keep_ticked(url_key: str, ticked: Sequence[str]) -> list[str]:
+    """``ticked`` in the order the rows were ticked, which the URL keeps under ``url_key``.
+
+    Those the URL has already come first, in its order, then any new one, so a line keeps
+    its colour when another is ticked. The URL is set to the result, so a reload or a
+    bookmark ticks the same rows again: see :func:`in_url` for reading it back.
+    """
+    was = in_url(url_key)
+    order = [key for key in was if key in ticked] + [key for key in ticked if key not in was]
+    if order:
+        st.query_params[url_key] = ",".join(order)
+    elif url_key in st.query_params:
+        del st.query_params[url_key]
+    return order
+
+
+def in_url(url_key: str) -> list[str]:
+    """The keys a URL parameter holds, separated by commas."""
+    return [key.strip() for key in st.query_params.get(url_key, "").split(",") if key.strip()]
+
+
 def grid_controls(container, *, value: str, change_help: str) -> tuple[int, int, bool]:
     """Charts per row, chart height and y axis, for a page that lays its charts out in a grid.
 

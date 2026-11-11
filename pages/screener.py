@@ -1,4 +1,4 @@
-"""Screener page: ranked companies from the stored metrics table, and the detail of one.
+"""Screener page: ranked companies from the stored metrics table, charts of those ticked, and the detail of one.
 
 Reads the latest ``screener`` snapshot written by ``python -m invest.jobs.fundamentals``
 and the facts behind each company. Every row shows its inputs; the footer says
@@ -11,6 +11,7 @@ Watchlist page shows.
 from __future__ import annotations
 
 import os
+import zlib
 from datetime import datetime
 
 import pandas as pd
@@ -88,69 +89,18 @@ def _load(db: str, version: float) -> dict | None:
 
 
 @st.cache_data(ttl=600, show_spinner=False)
-def _history(db: str, version: float, cik: int) -> pd.DataFrame:
+def _history(db: str, version: float, cik: int) -> tuple[pd.DataFrame, str | None]:
+    """The fiscal-year history of a company's accounts, a row per year, and the currency they are in."""
     with Store(db, read_only=True) as store:
         facts = store.read_facts(cik)
-    return fundamentals_as_of(facts).history_frame()
+    fund = fundamentals_as_of(facts)
+    return fund.history_frame(), fund.currency
 
 
 @st.cache_data(ttl=600, show_spinner=False)
 def _prices(db: str, version: float, symbol: str) -> tuple[pd.Series, str | None]:
     with Store(db, read_only=True) as store:
         return store.read_prices(symbol), store.price_currency(symbol)
-
-
-RANGE_KEY, WINDOW_KEY = "price_range", "price_window"
-
-
-def _window_dragged() -> None:
-    """A dragged window is no preset's: no button stays lit for dates it no longer shows."""
-    st.session_state[RANGE_KEY] = None
-
-
-@st.fragment  # a range button or the slider reruns the chart only, not the screen above it
-def _price_chart(symbol: str, name: str) -> None:
-    prices, currency = _prices(str(DB), _version(), symbol)
-    if prices.empty:
-        st.caption(f"No prices stored for {symbol}. Rebuilding the screener table downloads them.")
-        return
-    first, last = prices.index[0].date(), prices.index[-1].date()
-
-    # Both values are set here, before the widgets, and never passed as their defaults:
-    # Streamlit warns when a widget has a default and Session State sets it too.
-    st.session_state.setdefault(RANGE_KEY, charts.DEFAULT_RANGE)
-    preset = st.session_state[RANGE_KEY]
-    if preset:
-        st.session_state[WINDOW_KEY] = (charts.range_start(preset, first, last), last)
-    else:  # dragged, maybe on another company's chart: kept as far as this history allows
-        st.session_state[WINDOW_KEY] = charts.clamp_window(st.session_state.get(WINDOW_KEY, (first, last)), first, last)
-
-    left, right = st.columns(2, vertical_alignment="bottom")
-    left.segmented_control("Range", charts.RANGES, key=RANGE_KEY)
-    start, end = right.slider("Dates shown", min_value=first, max_value=last, key=WINDOW_KEY,
-                              on_change=_window_dragged)
-
-    shown = prices[pd.Timestamp(start):pd.Timestamp(end)]
-    if shown.empty:
-        st.caption("No trading day in the dates shown.")
-        return
-    # Short enough not to be cut on a narrow screen: Plotly does not wrap a title.
-    title = f"{name} ({symbol})"
-    if len(shown) > 1:
-        title += f": {shown.iloc[-1] / shown.iloc[0] - 1:+.1%}"
-    fig = go.Figure(go.Scatter(
-        x=shown.index, y=shown.to_numpy(), name=symbol, mode="lines" if len(shown) > 1 else "markers",
-        line=dict(color="#1f77b4", width=2),
-        hovertemplate=f"%{{y:,.2f}} {currency or ''}<extra></extra>",
-    ))
-    fig.update_layout(
-        title=title, template="plotly_white", hovermode="x unified", showlegend=False,
-        xaxis_hoverformat="%Y-%m-%d", yaxis_title=f"Daily close ({currency or 'currency not recorded'})",
-        height=380,  # charts.readable makes it taller
-    )
-    st.plotly_chart(charts.readable(fig), width="stretch")
-    st.caption(f"The change in the title runs from the first close shown to the last. Closes as stored by the "
-               f"screener build, {first} to {last}, in the listing currency: adjusted for splits, not for dividends.")
 
 
 try:
@@ -202,10 +152,16 @@ if screen != "magic_formula" and min_cap_bn > 0 and "market_cap" in ranked.colum
     ranked = ranked[pd.to_numeric(ranked["market_cap"], errors="coerce") >= min_cap_bn * 1e9]
 
 # ==========================================================================================
-# Ranked table
+# Ranked list and charts
 # ==========================================================================================
 
-st.subheader(f"{screen_label}: {len(ranked)} companies")
+company_names = dict(zip(ranked["ticker"], ranked["name"]))
+
+
+def _company_label(ticker: str) -> str:
+    name = company_names.get(ticker)
+    return f"{name} ({ticker})" if pd.notna(name) and name else ticker
+
 
 SHOW = [
     ("rank", "Rank", "{:.0f}"),
@@ -230,35 +186,112 @@ SHOW = [
     ("period_end", "Data to", None),
     ("basis", "Basis", None),
 ]
-view = ranked.copy()
-if "market_cap" in view.columns:
-    view["market_cap"] = pd.to_numeric(view["market_cap"], errors="coerce") / 1e9
-columns = [c for c, _, _ in SHOW if c in view.columns]
-formats = {c: f for c, _, f in SHOW if c in view.columns and f}
-labels = {c: label for c, label, _ in SHOW}
-styled = view[columns].rename(columns=labels).style.format(
-    {labels[c]: f for c, f in formats.items()} | {"Mkt cap (bn)": "{:,.1f}"}, na_rep="–")
-st.dataframe(styled, width="stretch", hide_index=True, height=min(600, 40 + 35 * len(view)))
-st.caption(
-    "EBIT/EV and ROIC are Greenblatt's earnings yield and return on capital; accruals is (net income minus "
-    "operating cash flow) over average assets; F is the Piotroski score out of 9; the margin of safety is against "
-    "the lower of the earnings power value and a conservative DCF. TTM figures combine the last fiscal year with "
-    "the year-to-date filings; the Basis column says which."
-)
+#: The companies charted, kept in the URL (?screener_chart=MMM,SAP) in the order they were
+#: ticked, so a reload or a bookmark ticks them again and each keeps its colour.
+CHART_URL = "screener_chart"
 
-if data["previous_rows"]:
-    prev_table = pd.DataFrame(data["previous_rows"])
-    try:
-        prev_ranked, _ = screens.run_screen(screen, prev_table, filter_traps=filter_traps, **options)
-        entrants, dropouts = screens.entrants_and_dropouts(ranked["ticker"].tolist(), prev_ranked["ticker"].tolist(), top_n=20)
-        if entrants or dropouts:
-            st.caption(f"Top 20 since the previous table: entered {', '.join(entrants) or 'none'}; left {', '.join(dropouts) or 'none'}.")
-    except Exception:
-        pass
 
-if not excluded.empty:
-    with st.expander(f"Excluded as possible value traps ({len(excluded)})"):
-        st.dataframe(excluded[["ticker", "name", "reason"]], width="stretch", hide_index=True)
+def _ranked_table() -> list[str]:
+    """The ranked list, a checkbox on each row. Returns the tickers ticked in it, in rank order."""
+    st.subheader(f"{screen_label}: {len(ranked)} companies")
+    view = ranked.copy()
+    if "market_cap" in view.columns:
+        view["market_cap"] = pd.to_numeric(view["market_cap"], errors="coerce") / 1e9
+    columns = [c for c, _, _ in SHOW if c in view.columns]
+    formats = {c: f for c, _, f in SHOW if c in view.columns and f}
+    labels = {c: label for c, label, _ in SHOW}
+    styled = view[columns].rename(columns=labels).style.format(
+        {labels[c]: f for c, f in formats.items()} | {"Mkt cap (bn)": "{:,.1f}"}, na_rep="–")
+    tickers = ranked["ticker"].tolist()
+    in_url = set(charts.in_url(CHART_URL))
+    event = st.dataframe(
+        styled, width="stretch", hide_index=True, height=min(600, 40 + 35 * len(view)),
+        # A key per list: a tick is a row's place in it, which another screen or filter
+        # gives to another company. A new list starts from the URL's tickers instead.
+        key=f"screener_list_{zlib.crc32(','.join(tickers).encode())}",
+        on_select="rerun", selection_mode="multi-row",
+        selection_default={"selection": {"rows": [n for n, t in enumerate(tickers) if t in in_url]}},
+    )
+    st.caption(
+        "EBIT/EV and ROIC are Greenblatt's earnings yield and return on capital; accruals is (net income minus "
+        "operating cash flow) over average assets; F is the Piotroski score out of 9; the margin of safety is against "
+        "the lower of the earnings power value and a conservative DCF. TTM figures combine the last fiscal year with "
+        "the year-to-date filings; the Basis column says which. Tick companies to chart their prices below."
+    )
+
+    if data["previous_rows"]:
+        prev_table = pd.DataFrame(data["previous_rows"])
+        try:
+            prev_ranked, _ = screens.run_screen(screen, prev_table, filter_traps=filter_traps, **options)
+            entrants, dropouts = screens.entrants_and_dropouts(tickers, prev_ranked["ticker"].tolist(), top_n=20)
+            if entrants or dropouts:
+                st.caption(f"Top 20 since the previous table: entered {', '.join(entrants) or 'none'}; "
+                           f"left {', '.join(dropouts) or 'none'}.")
+        except Exception:
+            pass
+
+    if not excluded.empty:
+        with st.expander(f"Excluded as possible value traps ({len(excluded)})"):
+            st.dataframe(excluded[["ticker", "name", "reason"]], width="stretch", hide_index=True)
+    return [tickers[n] for n in event.selection.rows if n < len(tickers)]
+
+
+def _price_chart(tickers: list[str], slots: dict[str, int], layout: charts.TickedLayout) -> None:
+    """The companies' closes on one figure: a panel per currency, or one axis in % change."""
+    loaded, currencies = {}, {}
+    for ticker in tickers:
+        loaded[ticker], currency = _prices(str(DB), _version(), ticker)
+        currencies[ticker] = currency or ""
+    view = charts.window_series(loaded, layout.preset, rebase=layout.in_pct)
+    names = {ticker: _company_label(ticker) for ticker in tickers}
+    if view.series:
+        fig = charts.lines_figure(view, names, currencies, slots, layout.in_pct)
+        legend = charts.legend_height(list(names.values())) if len(view.series) > 1 else 0
+        charts.readable(fig, height=layout.height + legend)
+        fig.update_layout(legend_font_size=charts.LEGEND_FONT, hoverlabel_font_size=charts.LEGEND_FONT)
+        st.plotly_chart(fig, width="stretch", key=f"screener_figure_{'_'.join(tickers)}")
+    if len(tickers) == 1 and view.series:
+        (shown,) = view.series.values()
+        if len(shown) > 1:
+            st.caption(f"{shown.iloc[-1] / shown.iloc[0] - 1:+.1%} from {shown.index[0]:%d %b %Y} to "
+                       f"{shown.index[-1]:%d %b %Y}.")
+    missing = {ticker: "no prices stored; rebuilding the screener table downloads them" if why == "no data" else why
+               for ticker, why in view.missing.items()}
+    if missing:
+        st.caption("Not drawn: " + "; ".join(f"{names[t]}, {why}" for t, why in missing.items()) + ".")
+    if view.common_start and len(view.series) > 1:
+        st.caption(f"Every line starts on {view.start:%d %b %Y}, the first day in the range that all of them have data.")
+
+
+def _charts(ticked: list[str]) -> None:
+    st.subheader("Charts")
+    layout = charts.ticked_layout(
+        st.container(horizontal=True, vertical_alignment="bottom", gap="medium"), "screener", noun="companies",
+        value="Price", change_help="Change: each close in % from the first day of the time range on which the "
+                                   "companies of a chart all have a close.",
+    )
+    if not ticked:
+        st.info("Tick one or more companies in the list above to chart their prices.", icon=":material/check_box:")
+        return
+    st.caption("Daily closes as stored by the screener build, in the listing currency: adjusted for splits, not "
+               "for dividends.")
+    slots = {ticker: n for n, ticker in enumerate(ticked)}
+    if layout.together:
+        _price_chart(ticked, slots, layout)
+        return
+    for n, ticker in enumerate(ticked):
+        if n % layout.per_row == 0:
+            cells = st.columns(layout.per_row)  # a row per group, so neighbours line up at the top
+        with cells[n % layout.per_row].expander(f"📈 {_company_label(ticker)}", expanded=True):
+            _price_chart([ticker], slots, layout)
+
+
+@st.fragment  # ticking a company reruns the list and the charts only, not the screen or the detail
+def _list_and_charts() -> None:
+    _charts(charts.keep_ticked(CHART_URL, _ranked_table()))
+
+
+_list_and_charts()
 
 # ==========================================================================================
 # Company detail
@@ -269,12 +302,6 @@ if ranked.empty:
     st.write("No company passes this screen with these settings.")
     st.stop()
 tickers = ranked["ticker"].tolist()
-company_names = dict(zip(ranked["ticker"], ranked["name"]))
-
-
-def _company_label(ticker: str) -> str:
-    name = company_names.get(ticker)
-    return f"{name} ({ticker})" if pd.notna(name) and name else ticker
 
 
 def _watch(ticker: str, cik: int, label: str, screen_name: str) -> None:
@@ -318,7 +345,141 @@ d2.metric("Conservative value / share", f"{row.get('value_conservative'):,.2f}" 
 d3.metric("Margin of safety", f"{row.get('mos_conservative'):+.0%}" if pd.notna(row.get("mos_conservative")) else "–")
 d4.metric("Data to", str(row.get("period_end") or "–"), help=f"basis: {row.get('basis')}; fiscal year end {row.get('fy_end')}")
 
-_price_chart(pick, row.get("name") if pd.notna(row.get("name")) else pick)
+#: The fiscal-year history, drawn as charts of fields that read together: (title, unit, fields).
+#: Money is in millions of the accounts' currency, shares in millions, EPS as filed, per share,
+#: and margins, which the facts hold as fractions of revenue, in %. Every field the facts
+#: define has a place, so none is drawn in "Other", as filed.
+HISTORY_CHARTS = (
+    ("Revenue and profit", "money", ("revenue", "gross_profit", "operating_income", "pretax_income", "net_income")),
+    ("Margins", "ratio", ("gross_margin", "operating_margin")),
+    ("Costs, interest and tax", "money", ("cost_of_revenue", "depreciation", "interest_expense", "interest_income",
+                                          "income_tax")),
+    ("Cash flow", "money", ("cfo", "capex", "fcf", "dividends", "buybacks")),
+    ("Assets and liabilities", "money", ("total_assets", "total_liabilities", "equity", "current_assets",
+                                         "current_liabilities", "retained_earnings")),
+    ("Long-lived assets", "money", ("ppe_net", "goodwill", "intangibles")),
+    ("Cash and debt", "money", ("cash", "short_term_investments", "debt_current", "debt_noncurrent")),
+    ("Deposits", "money", ("deposits",)),  # a bank's: they would dwarf its cash and debt
+    ("Public float", "money", ("public_float",)),
+    ("Shares outstanding", "shares", ("shares_outstanding",)),
+    ("Diluted EPS", "per_share", ("eps_diluted",)),
+)
+FIELD_LABELS = {
+    "revenue": "Revenue", "gross_profit": "Gross profit", "operating_income": "Operating income",
+    "pretax_income": "Pretax income", "net_income": "Net income", "cost_of_revenue": "Cost of revenue",
+    "depreciation": "Depreciation and amortisation", "interest_expense": "Interest expense",
+    "interest_income": "Interest income", "income_tax": "Income tax",
+    "cfo": "Operating cash flow", "capex": "Capex", "dividends": "Dividends", "buybacks": "Buybacks",
+    "total_assets": "Total assets", "total_liabilities": "Total liabilities", "equity": "Equity",
+    "current_assets": "Current assets", "current_liabilities": "Current liabilities",
+    "retained_earnings": "Retained earnings", "cash": "Cash", "short_term_investments": "Short-term investments",
+    "debt_current": "Debt due within a year", "debt_noncurrent": "Debt due later", "deposits": "Deposits",
+    "shares_outstanding": "Shares outstanding", "eps_diluted": "Diluted EPS",
+    "gross_margin": "Gross margin", "operating_margin": "Operating margin", "fcf": "Free cash flow",
+    "ppe_net": "Property, plant and equipment", "goodwill": "Goodwill", "intangibles": "Intangibles",
+    "public_float": "Public float",
+}
+HISTORY_YEARS = 10
+DETAIL_PER_ROW = 2
+DETAIL_HEIGHT = charts.HEIGHTS["Small"]
+
+
+def _detail_figure(fig: go.Figure, names: list[str], key: str) -> None:
+    """A chart of the detail's grid: its legend above the plot, the plot at the grid's height."""
+    fig.update_layout(
+        template="plotly_white", hovermode="x unified", showlegend=len(names) > 1,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+    )
+    legend = charts.legend_height(names, DETAIL_PER_ROW) if len(names) > 1 else 0
+    charts.readable(fig, height=DETAIL_HEIGHT + legend)
+    fig.update_layout(legend_font_size=charts.LEGEND_FONT, hoverlabel_font_size=charts.LEGEND_FONT)
+    st.plotly_chart(fig, width="stretch", key=key)
+
+
+def _share_price_chart(ticker: str, since: pd.Timestamp | None) -> None:
+    """The daily closes since the first fiscal year the history shows, ten years back without one."""
+    prices, currency = _prices(str(DB), _version(), ticker)
+    if prices.empty:
+        st.caption(f"No prices stored for {ticker}. Rebuilding the screener table downloads them.")
+        return
+    start = since if since is not None else prices.index[-1] - pd.DateOffset(years=HISTORY_YEARS)
+    shown = prices[prices.index >= start]
+    currency = currency or "currency not recorded"
+    fig = go.Figure(go.Scatter(
+        x=shown.index, y=shown.to_numpy(), name=ticker, mode="lines", line=charts.series_line(0),
+        hovertemplate=f"%{{y:,.2f}} {currency}<extra></extra>",
+    ))
+    fig.update_xaxes(hoverformat="%d %b %Y")
+    fig.update_yaxes(title_text=currency, tickformat=",~f")
+    _detail_figure(fig, [ticker], f"screener_detail_price_{ticker}")
+    st.caption(f"Daily closes, adjusted for splits, not for dividends: {shown.iloc[-1] / shown.iloc[0] - 1:+.0%} "
+               f"from {shown.index[0]:%d %b %Y} to {shown.index[-1]:%d %b %Y}.")
+
+
+def _history_chart(title: str, unit: str, fields: list[str], history: pd.DataFrame, currency: str) -> None:
+    """A line per field over the fiscal years, a marker on each year that has a value."""
+    scale, axis, hover = {
+        "money": (1e6, f"{currency} m", f"%{{y:,.0f}}m {currency}"),
+        "shares": (1e6, "Shares, m", "%{y:,.1f}m"),
+        "per_share": (1, f"{currency} per share", f"%{{y:,.2f}} {currency}"),
+        "ratio": (0.01, "% of revenue", "%{y:.1f}%"),
+        "as_filed": (1, "As filed", "%{y:,.4~g}"),
+    }[unit]
+    history = history[fields].dropna(how="all")  # no year on the axis that this chart has nothing for
+    fig = go.Figure()
+    negative = False
+    for n, field in enumerate(fields):
+        values = pd.to_numeric(history[field], errors="coerce") / scale
+        negative |= bool((values < 0).any())
+        name = FIELD_LABELS.get(field, field)
+        fig.add_scatter(x=history.index, y=values, name=name, mode="lines+markers", line=charts.series_line(n),
+                        marker=dict(size=7), connectgaps=False, hovertemplate=f"{name}: {hover}<extra></extra>")
+    # Every year while they fit across half a row, every other one past six; written 2024, not 2,024.
+    fig.update_xaxes(dtick=1 if len(history) <= 6 else 2, tickformat="d")
+    # 12,500 rather than Plotly's 12.5k, which in millions would read as thousands
+    fig.update_yaxes(title_text=axis, tickformat=",~f")
+    if negative:  # a loss, or a negative balance: the zero line shows which side of it a year is on
+        fig.add_hline(y=0, line_width=1, line_color="rgba(128, 128, 128, 0.6)")
+    _detail_figure(fig, [FIELD_LABELS.get(f, f) for f in fields], f"screener_history_{title}")
+
+
+def _detail_charts(ticker: str) -> None:
+    """The share price, then the fiscal-year history of the accounts, two charts to a row."""
+    try:
+        history, currency = _history(str(DB), _version(), int(row["cik"]))
+    except Exception as exc:
+        history, currency = pd.DataFrame(), None
+        st.caption(f"History unavailable: {exc}")
+    shown = history.tail(HISTORY_YEARS).dropna(axis=1, how="all")
+    currency = currency or "currency not recorded"
+    drawn = [(title, unit, [f for f in fields if f in shown.columns]) for title, unit, fields in HISTORY_CHARTS]
+    grouped = {f for _, _, fields in HISTORY_CHARTS for f in fields}
+    # A field added to the facts and not yet placed here: drawn as filed, since its unit is unknown.
+    other = [f for f in shown.columns if f not in grouped]
+    if other:
+        drawn.append(("Other", "as_filed", other))
+    drawn = [(title, unit, fields) for title, unit, fields in drawn if fields]
+    since = pd.Timestamp(year=int(shown.index[0]), month=1, day=1) if not shown.empty else None
+
+    cells = []
+    for n in range(len(drawn) + 1):  # the share price first
+        if n % DETAIL_PER_ROW == 0:
+            cells = st.columns(DETAIL_PER_ROW)  # a row per pair, so neighbours line up at the top
+        with cells[n % DETAIL_PER_ROW].container(border=True):
+            if n == 0:
+                st.markdown("**Share price**")
+                _share_price_chart(ticker, since)
+                continue
+            title, unit, fields = drawn[n - 1]
+            st.markdown(f"**{title}**")
+            _history_chart(title, unit, fields, shown, currency)
+    if drawn:
+        st.caption(f"Fiscal-year history as filed, latest restatement. Money in millions of {currency}, the currency "
+                   f"of the accounts; shares in millions; EPS per share, as filed. A gap is a year without the "
+                   f"figure. Click a legend entry to hide its line.")
+
+
+_detail_charts(pick)
 
 with st.expander("Intrinsic value inputs", expanded=True):
     inputs = row.get("valuation_inputs") or {}
@@ -344,16 +505,6 @@ with st.expander("Piotroski checks, tags used and notes"):
     notes = row.get("notes") or []
     if notes:
         st.write("; ".join(str(n) for n in notes))
-
-try:
-    history = _history(str(DB), _version(), int(row["cik"]))
-    if not history.empty:
-        st.markdown("**Fiscal-year history (as filed, latest restatement)**")
-        shown = history.tail(10).T
-        shown.columns = [str(c) for c in shown.columns]
-        st.dataframe(shown.style.format("{:,.3g}", na_rep="–"), width="stretch")
-except Exception as exc:
-    st.caption(f"History unavailable: {exc}")
 
 # ==========================================================================================
 # Footer

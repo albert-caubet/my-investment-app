@@ -1,7 +1,7 @@
 """Headless smoke test for the Screener page on a seeded temporary database."""
 
 import json
-from datetime import date
+import zlib
 from pathlib import Path
 
 import numpy as np
@@ -9,6 +9,7 @@ import pandas as pd
 import pytest
 from streamlit.testing.v1 import AppTest
 
+import charts
 from invest.data.cache import Store
 from invest.data.edgar import facts_frame
 from invest.fundamentals.universe import Universe
@@ -82,54 +83,125 @@ def test_screener_page_without_a_table_explains_what_to_run(tmp_path, monkeypatc
     assert any("invest.jobs.fundamentals" in i.value for i in at.info)
 
 
-def _chart_layout(at: AppTest) -> dict:
-    charts_shown = at.get("plotly_chart")
-    assert len(charts_shown) == 1
-    return json.loads(charts_shown[0].proto.spec)["layout"]
+def _app() -> AppTest:
+    return AppTest.from_file(str(ROOT / "app.py"), default_timeout=120)
 
 
 def _company(at: AppTest):
     return next(s for s in at.selectbox if s.label == "Company")
 
 
-def test_screener_page_charts_the_picked_companys_price_over_the_last_year(seeded_db):
-    at = _screener(AppTest.from_file(str(ROOT / "app.py"), default_timeout=120).run())
+def _ticked(*tickers: str) -> AppTest:
+    """The Screener opened from a URL that ticks ``tickers`` in the ranked list."""
+    at = _app().run().switch_page("pages/screener.py")
+    at.query_params["screener_chart"] = ",".join(tickers)
+    at.run()
     assert not at.exception
-    company = _company(at)
-    pick = company.value
-    name = {"MMM": "3M CO", "SAP": "SAP SE"}[pick]  # as seeded; the bank is not ranked
-    assert sorted(company.options) == ["3M CO (MMM)", "SAP SE (SAP)"]
-    layout = _chart_layout(at)
-    assert layout["title"]["text"].startswith(f"{name} ({pick}): ")
-    assert layout["yaxis"]["title"]["text"] == "Daily close (USD)"
-    assert at.button_group(key="price_range").value == "1Y"
-    assert at.slider(key="price_window").value == (date(2025, 9, 9), date(2026, 9, 9))
+    return at
 
 
-def test_a_range_button_sets_the_slider_and_dragging_the_slider_clears_the_button(seeded_db):
-    at = _screener(AppTest.from_file(str(ROOT / "app.py"), default_timeout=120).run())
-    at.button_group(key="price_range").set_value("Max").run()
+def _chart_cells(at: AppTest) -> list:
+    """The expanders holding a company's chart, in page order."""
+    return [e for e in at.expander if e.label.startswith("📈")]
+
+
+def _figure(element) -> dict:
+    (chart,) = element.get("plotly_chart")
+    return json.loads(chart.proto.spec)
+
+
+def _list_key(at: AppTest) -> str:
+    """The ranked list's key, which names the tickers it lists."""
+    tickers = at.dataframe[0].value["Ticker"].tolist()
+    return f"screener_list_{zlib.crc32(','.join(tickers).encode())}"
+
+
+def test_the_charts_ask_for_companies_to_be_ticked(seeded_db):
+    at = _screener(_app().run())
     assert not at.exception
-    assert at.slider(key="price_window").value == (date(2016, 1, 1), date(2026, 9, 9))
+    assert "Charts" in [h.value for h in at.subheader]
+    assert any("Tick one or more companies" in i.value for i in at.info)
+    # no price chart: the detail's charts are of its accounts
+    assert not [c for c in at.get("plotly_chart") if "Daily" in c.proto.spec or "(MMM)" in c.proto.spec]
+    assert at.button_group(key="screener_range").value == "1Y"
+    assert at.button_group(key="screener_layout").value == "Separate"
+    assert at.button_group(key="screener_y_axis").value == "Price"
 
-    at.slider(key="price_window").set_value((date(2020, 1, 1), date(2021, 6, 30))).run()
+
+def test_companies_ticked_in_the_url_are_charted_apart_over_the_last_year(seeded_db):
+    at = _ticked("SAP", "MMM")
+    assert at.session_state[_list_key(at)]["selection"]["rows"]
+    # in the URL's order, which is the order they were ticked in, not the rank
+    assert [e.label for e in _chart_cells(at)] == ["📈 SAP SE (SAP)", "📈 3M CO (MMM)"]
+    sap, mmm = (_figure(e) for e in _chart_cells(at))
+    assert [t["name"] for t in sap["data"]] == ["SAP SE (SAP)"]
+    assert sap["data"][0]["line"]["color"] == charts.SERIES_COLORS["light"][0]
+    assert mmm["data"][0]["line"]["color"] == charts.SERIES_COLORS["light"][1]
+    assert sap["layout"]["yaxis"]["title"]["text"] == "USD"
+    assert sap["data"][0]["x"][0].startswith("2025-09-09")  # a year back from the last close
+    assert sap["layout"]["height"] == charts.HEIGHTS["Medium"]
+    assert " from 09 Sep 2025 to 09 Sep 2026." in " ".join(c.value for c in _chart_cells(at)[0].caption)
+
+
+def test_ticking_a_company_charts_it_and_puts_it_in_the_url(seeded_db):
+    at = _screener(_app().run())
+    key = _list_key(at)
+    rank = at.dataframe[0].value["Ticker"].tolist()
+    at.session_state[key] = {"selection": {"rows": [rank.index("MMM")], "columns": [], "cells": []}}
+    at.run()
     assert not at.exception
-    assert at.button_group(key="price_range").value is None
-    assert at.slider(key="price_window").value == (date(2020, 1, 1), date(2021, 6, 30))
+    assert at.query_params["screener_chart"] == ["MMM"]
+    assert [e.label for e in _chart_cells(at)] == ["📈 3M CO (MMM)"]
 
 
-def test_the_range_carries_over_to_the_next_company(seeded_db):
-    at = _screener(AppTest.from_file(str(ROOT / "app.py"), default_timeout=120).run())
-    at.slider(key="price_window").set_value((date(2020, 1, 1), date(2021, 6, 30))).run()
-    company = _company(at)
-    other = next(t for t in ("MMM", "SAP") if t != company.value)  # the options show names; the value is the ticker
-    company.select(other).run()
+def test_together_in_change_draws_one_chart_from_a_common_start(seeded_db):
+    at = _ticked("MMM", "SAP")
+    at.button_group(key="screener_layout").set_value("Together").run()
+    at.button_group(key="screener_y_axis").set_value("Change").run()
     assert not at.exception
-    assert f"({other})" in _chart_layout(at)["title"]["text"]
-    assert at.slider(key="price_window").value == (date(2020, 1, 1), date(2021, 6, 30))
+    assert not _chart_cells(at)
+    assert at.button_group(key="screener_per_row").proto.disabled
+    (fig,) = [json.loads(c.proto.spec) for c in at.get("plotly_chart") if "3M CO (MMM)" in c.proto.spec]
+    assert [t["name"] for t in fig["data"]] == ["3M CO (MMM)", "SAP SE (SAP)"]
+    assert fig["layout"]["yaxis"]["tickformat"] == "+.1~%"
+    assert fig["layout"]["showlegend"]
+    assert fig["layout"]["height"] > charts.HEIGHTS["Medium"]  # the legend's row on top
+    assert all(t["x"][0].startswith("2025-09-09") for t in fig["data"])
 
-    at.button_group(key="price_range").set_value("YTD").run()
-    assert at.slider(key="price_window").value == (date(2026, 1, 1), date(2026, 9, 9))
+
+@pytest.mark.parametrize("per_row", [1, 3])
+def test_charts_per_row_height_and_range_set_every_chart(seeded_db, per_row):
+    at = _ticked("MMM", "SAP")
+    at.button_group(key="screener_per_row").set_value(per_row).run()
+    at.button_group(key="screener_height").set_value("Large").run()
+    at.button_group(key="screener_range").set_value("Max").run()
+    assert not at.exception
+    cells = [c for c in at.columns if any(e.label.startswith("📈") for e in c.expander)]
+    assert len(cells) == 2 and {round(c.weight, 6) for c in cells} == {round(1 / per_row, 6)}
+    figures = [_figure(e) for e in _chart_cells(at)]
+    assert {f["layout"]["height"] for f in figures} == {charts.HEIGHTS["Large"]}
+    assert {f["data"][0]["x"][0][:10] for f in figures} == {"2016-01-01"}
+
+
+def test_a_company_the_screen_leaves_out_is_not_charted(seeded_db):
+    at = _ticked("JPM", "MMM")  # the bank: excluded from the magic formula by default
+    assert [e.label for e in _chart_cells(at)] == ["📈 3M CO (MMM)"]
+    assert at.query_params["screener_chart"] == ["MMM"]
+
+
+def test_the_chart_choices_are_read_from_the_url(seeded_db):
+    at = _app().run().switch_page("pages/screener.py")
+    at.query_params["screener_chart"] = "MMM"
+    at.query_params["screener_range"] = "5Y"
+    at.query_params["screener_per_row"] = "1"
+    at.query_params["screener_y_axis"] = "Change"
+    at.run()
+    assert not at.exception
+    assert at.button_group(key="screener_range").value == "5Y"
+    assert at.button_group(key="screener_per_row").value == 1
+    assert at.button_group(key="screener_y_axis").value == "Change"
+    (cell,) = _chart_cells(at)
+    assert _figure(cell)["layout"]["yaxis"]["tickformat"] == "+.1~%"
 
 
 def _watched(path: Path) -> pd.DataFrame:
@@ -160,3 +232,58 @@ def test_a_company_already_on_the_watchlist_offers_to_take_it_off(seeded_db):
     _company(at).select("MMM").run()  # seeded on the watchlist
     assert not at.exception
     assert at.button(key="watch_remove").label == "Remove from watchlist"
+
+
+# --- fiscal-year history ---------------------------------------------------------------
+
+
+def _history_figures(at: AppTest) -> dict[str, dict]:
+    """The detail's history charts, by the bold title above each."""
+    out = {}
+    for cell in at.columns:
+        titles = [m.value.strip("*") for m in cell.markdown if m.value.startswith("**")]
+        figures = cell.get("plotly_chart")
+        if len(titles) == 1 and len(figures) == 1:
+            out[titles[0]] = json.loads(figures[0].proto.spec)
+    return out
+
+
+def _values(trace: dict) -> np.ndarray:
+    values = trace["y"]
+    if isinstance(values, dict):  # Plotly's base64 typed array
+        import base64
+        return np.frombuffer(base64.b64decode(values["bdata"]), dtype=values["dtype"]).astype(float)
+    return np.asarray([np.nan if v is None else v for v in values], dtype=float)
+
+
+def test_the_detail_charts_the_history_in_millions_of_the_accounts_currency(seeded_db):
+    at = _screener(_app().run())
+    _company(at).select("MMM").run()
+    assert not at.exception
+    figures = _history_figures(at)
+    assert list(figures)[:4] == ["Share price", "Revenue and profit", "Margins", "Costs, interest and tax"]
+    price = figures["Share price"]
+    assert price["layout"]["yaxis"]["title"]["text"] == "USD"  # a price, not in millions
+    first_year = int(np.nanmin(_values({"y": figures["Revenue and profit"]["data"][0]["x"]})))
+    assert price["data"][0]["x"][0][:4] == str(first_year)  # over the years of the history
+    assert "Shares outstanding" in figures and "Diluted EPS" in figures
+    revenue = figures["Revenue and profit"]
+    assert revenue["layout"]["yaxis"]["title"]["text"] == "USD m"
+    assert revenue["layout"]["yaxis"]["tickformat"] == ",~f"
+    assert [t["name"] for t in revenue["data"]][0] == "Revenue"
+    np.testing.assert_allclose(np.nanmax(_values(revenue["data"][0])), 35_355, rtol=0.2)  # 3M's revenue, about $35bn
+    margins = _values(figures["Margins"]["data"][0])
+    assert np.nanmin(margins) > 1 and np.nanmax(margins) < 100  # in %, not fractions
+    assert figures["Shares outstanding"]["layout"]["yaxis"]["title"]["text"] == "Shares, m"
+    assert figures["Diluted EPS"]["layout"]["yaxis"]["title"]["text"] == "USD per share"
+    assert np.nanmax(_values(figures["Diluted EPS"]["data"][0])) < 100  # per share, not scaled
+    # no table of the history any more: the only tables are the list and the tags
+    assert not any("revenue" in map(str, d.value.index) for d in at.dataframe)
+
+
+def test_the_history_of_accounts_in_euros_says_so(seeded_db):
+    at = _screener(_app().run())
+    _company(at).select("SAP").run()
+    assert not at.exception
+    assert _history_figures(at)["Revenue and profit"]["layout"]["yaxis"]["title"]["text"] == "EUR m"
+    assert any("millions of EUR" in c.value for c in at.caption)
