@@ -387,6 +387,7 @@ def _scorecard() -> list[str]:
             column_config={c: st.column_config.Column(c, help=h) for c, h in HELP.items() if c in table.columns},
             width="stretch",
             hide_index=True,
+            placeholder="–",  # a column given help shows a blank as "None", whatever the styler says
             key=f"macro_scorecard_{group}",
             on_select="rerun",
             selection_mode="multi-row",

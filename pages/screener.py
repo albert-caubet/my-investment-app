@@ -20,6 +20,7 @@ import streamlit as st
 
 import charts
 import job_panel
+import screener_help
 import watchlist
 from invest import secrets
 from invest.data.cache import Store
@@ -132,12 +133,13 @@ job_panel.last_result("fundamentals")
 
 c1, c2, c3, c4 = st.columns([2, 1, 1, 1])
 screen_labels = {label: name for name, (label, _) in screens.SCREENS.items()}
-screen_label = c1.selectbox("Screen", list(screen_labels))
+screen_label = c1.selectbox("Screen", list(screen_labels), help=screener_help.SCREEN_HELP)
 screen = screen_labels[screen_label]
-min_cap_bn = c2.number_input("Min market cap (bn)", min_value=0.0, value=0.0, step=1.0)
-exclude_fin = c3.checkbox("Exclude financials", value=True)
-filter_traps = c4.checkbox("Filter value traps", value=True)
-sector_neutral = st.checkbox("Sector-neutral z-scores (quality-value only)", value=False) if screen == "quality_value" else False
+min_cap_bn = c2.number_input("Min market cap (bn)", min_value=0.0, value=0.0, step=1.0, help=screener_help.MIN_CAP_HELP)
+exclude_fin = c3.checkbox("Exclude financials", value=True, help=screener_help.EXCLUDE_FINANCIALS_HELP)
+filter_traps = c4.checkbox("Filter value traps", value=True, help=screener_help.VALUE_TRAP_HELP)
+sector_neutral = st.checkbox("Sector-neutral z-scores (quality-value only)", value=False,
+                             help=screener_help.SECTOR_NEUTRAL_HELP) if screen == "quality_value" else False
 
 options = {}
 if screen in ("magic_formula", "quality_value"):
@@ -204,8 +206,14 @@ def _ranked_table() -> list[str]:
         {labels[c]: f for c, f in formats.items()} | {"Mkt cap (bn)": "{:,.1f}"}, na_rep="–")
     tickers = ranked["ticker"].tolist()
     in_url = set(charts.in_url(CHART_URL))
+    shown_labels = [labels[c] for c in columns]
     event = st.dataframe(
         styled, width="stretch", hide_index=True, height=min(600, 40 + 35 * len(view)),
+        # Hovering a measure's header, from EBIT/EV on, says what it is, how to read it and
+        # where it misleads.
+        column_config={label: st.column_config.Column(label, help=text)
+                       for label, text in screener_help.COLUMN_HELP.items() if label in shown_labels},
+        placeholder="–",  # a column given help shows a blank as "None", whatever the styler says
         # A key per list: a tick is a row's place in it, which another screen or filter
         # gives to another company. A new list starts from the URL's tickers instead.
         key=f"screener_list_{zlib.crc32(','.join(tickers).encode())}",
@@ -338,12 +346,22 @@ else:
         picker.button("Add to watchlist", icon=":material/star_border:", key="watch_add", on_click=_watch,
                       args=(pick, int(row["cik"]), _company_label(pick), screen),
                       help="The Watchlist page charts every stock on the watchlist.")
-d1, d2, d3, d4 = st.columns(4)
-d1.metric("Price", f"{row.get('price'):,.2f}" if pd.notna(row.get("price")) else "–", help=f"as of {row.get('price_date')}")
-d2.metric("Conservative value / share", f"{row.get('value_conservative'):,.2f}" if pd.notna(row.get("value_conservative")) else "–",
-          help="The lower of EPV and DCF per share, in the currency of the accounts.")
-d3.metric("Margin of safety", f"{row.get('mos_conservative'):+.0%}" if pd.notna(row.get("mos_conservative")) else "–")
-d4.metric("Data to", str(row.get("period_end") or "–"), help=f"basis: {row.get('basis')}; fiscal year end {row.get('fy_end')}")
+def _money(value, currency: str | None) -> str:
+    """A per-share amount with its currency: the price and the values can be in different ones."""
+    return f"{value:,.2f} {currency or ''}".strip() if pd.notna(value) else "–"
+
+
+price_currency = _prices(str(DB), _version(), pick)[1]
+accounts_currency = row.get("currency") if pd.notna(row.get("currency")) else None
+d1, d2, d3, d4, d5 = st.columns(5)
+d1.metric("Price", _money(row.get("price"), price_currency),
+          help=screener_help.PRICE_HELP.format(date=row.get("price_date") or "an unknown date"))
+d2.metric("EPV / share", _money(row.get("epv_per_share"), accounts_currency), help=screener_help.EPV_HELP)
+d3.metric("DCF / share", _money(row.get("dcf_per_share"), accounts_currency), help=screener_help.DCF_HELP)
+d4.metric("Margin of safety", f"{row.get('mos_conservative'):+.0%}" if pd.notna(row.get("mos_conservative")) else "–",
+          help=screener_help.MARGIN_OF_SAFETY_HELP)
+d5.metric("Data to", str(row.get("period_end") or "–"),
+          help=f"{screener_help.COLUMN_HELP['Data to']}\n\nBasis: {row.get('basis')}; fiscal year end {row.get('fy_end')}.")
 
 #: The fiscal-year history, drawn as charts of fields that read together: (title, unit, fields).
 #: Money is in millions of the accounts' currency, shares in millions, EPS as filed, per share,

@@ -287,3 +287,68 @@ def test_the_history_of_accounts_in_euros_says_so(seeded_db):
     assert not at.exception
     assert _history_figures(at)["Revenue and profit"]["layout"]["yaxis"]["title"]["text"] == "EUR m"
     assert any("millions of EUR" in c.value for c in at.caption)
+
+
+# --- help bubbles ----------------------------------------------------------------------
+
+#: The ranked list's measures, from EBIT/EV on, as each screen shows them.
+MEASURES = ["EBIT/EV", "ROIC", "FCF yield", "F", "Accruals", "GM slope/yr", "P/B", "P/E", "EV/EBITDA",
+            "ND/EBITDA", "Sh. yield", "Margin of safety", "Data to", "Basis"]
+
+
+def _column_help(at: AppTest) -> dict[str, str]:
+    """The ranked list's help per column, as the page configures it."""
+    config = json.loads(at.dataframe[0].proto.columns or "{}")
+    return {label: column.get("help") for label, column in config.items() if column.get("help")}
+
+
+@pytest.mark.parametrize("screen, extra", [("Magic formula (earnings yield + ROIC)", "Rank sum"),
+                                           ("Quality-value composite", "Composite z")])
+def test_every_measure_in_the_list_has_a_help_bubble(seeded_db, screen, extra):
+    at = _screener(_app().run())
+    at.selectbox[0].select(screen).run()
+    assert not at.exception
+    shown = at.dataframe[0].value.columns.tolist()
+    helped = _column_help(at)
+    measures = [c for c in shown[shown.index("EBIT/EV"):]]
+    assert extra in measures
+    assert set(measures) <= set(helped), set(measures) - set(helped)
+    assert not {"Rank", "Ticker", "Name", "Sector"} & set(helped)  # the columns before EBIT/EV need none
+    assert "Greenblatt" in helped["EBIT/EV"] and "Piotroski" in helped["F"]
+    config = json.loads(at.dataframe[0].proto.columns)
+    assert all(config[label]["label"] == label for label in measures)  # no mark: hovering shows the help
+    assert at.dataframe[0].proto.placeholder == "–"  # not "None" in a column given help
+
+
+def test_every_measure_has_a_text(seeded_db):
+    import screener_help
+
+    assert set(MEASURES) | {"Rank sum", "Composite z"} == set(screener_help.COLUMN_HELP)
+    assert all(len(text) > 300 for text in screener_help.COLUMN_HELP.values())  # an explanation, not a label
+
+
+def test_the_screen_dropdown_and_the_filters_explain_themselves(seeded_db):
+    at = _screener(_app().run())
+    screen = at.selectbox[0]
+    for name in ("Magic formula", "Quality-value composite", "Deep value", "Shareholder yield"):
+        assert f"**{name}" in screen.help
+    helps = {c.label: c.help for c in at.checkbox}
+    assert "banks" in helps["Exclude financials"]
+    assert "net debt above 4 times EBITDA" in helps["Filter value traps"]
+    assert "billions" in at.number_input[0].help
+
+
+def test_the_detail_shows_epv_and_dcf_with_their_currencies(seeded_db):
+    at = _screener(_app().run())
+    _company(at).select("SAP").run()
+    assert not at.exception
+    metrics = {m.label: m for m in at.metric}
+    assert "Conservative value / share" not in metrics
+    assert list(metrics)[:5] == ["Price", "EPV / share", "DCF / share", "Margin of safety", "Data to"]
+    assert metrics["Price"].value.endswith(" USD")  # the US listing
+    for label in ("EPV / share", "DCF / share"):
+        value = metrics[label].value
+        assert value == "–" or value.endswith(" EUR")  # SAP's accounts
+    assert "Greenwald" in metrics["EPV / share"].proto.help
+    assert "terminal value" in metrics["DCF / share"].proto.help
+    assert "lower" in metrics["Margin of safety"].proto.help
