@@ -321,16 +321,8 @@ with st.expander(f"{label} ({len(data['changes'])})", expanded=bool(data["change
         )
 
 # ==========================================================================================
-# Scorecard
+# Scorecard and chart
 # ==========================================================================================
-
-st.subheader("Scorecard")
-st.caption(
-    "z-scores against the last ten years of each series (the catalog can set another window); "
-    "percentiles over the whole history; the concern column is the z-score signed in the direction "
-    "of concern, so red means the indicator sits where it has historically been worrying."
-)
-
 
 def _concern_colours(series: pd.Series) -> list[str]:
     styles = []
@@ -372,58 +364,160 @@ HELP = {
     "As of": "Observation date of the latest value. An asterisk on the name marks a series older than its schedule allows.",
 }
 
-for group in catalog.groups():
-    rows = [r for r in readings if r.group == group]
-    if not rows:
-        continue
-    st.markdown(f"**{GROUPS.get(group, group)}**")
-    table = _group_table(rows)
-    if not table["Note"].astype(bool).any():
-        table = table.drop(columns=["Note"])
-    st.dataframe(
-        table.style.format({"z": "{:+.2f}", "Pct": "{:.0f}", "3m chg": "{:+.2f}", "Concern": "{:+.2f}"}, na_rep="–")
-        .apply(_concern_colours, subset=["Concern"]),
-        column_config={c: st.column_config.Column(c, help=h) for c, h in HELP.items() if c in table.columns},
-        width="stretch",
-        hide_index=True,
+#: The indicators charted, kept in the URL (?macro_chart=US_UNRATE,US_CPI) in the order they
+#: were ticked, so a reload or a bookmark ticks them again and each keeps its colour.
+CHART_URL = "macro_chart"
+CHART_RANGE = "10Y"  # most indicators are monthly: a year is a dozen points
+THRESHOLD_COLOR = "rgba(214, 39, 40, 0.8)"
+
+
+def _in_url() -> list[str]:
+    return [sid.strip() for sid in st.query_params.get(CHART_URL, "").split(",") if sid.strip()]
+
+
+def _scorecard() -> list[str]:
+    """The scorecard's tables, one per group. Returns the ids of the rows ticked in them, in table order."""
+    st.subheader("Scorecard")
+    st.caption(
+        "z-scores against the last ten years of each series (the catalog can set another window); "
+        "percentiles over the whole history; the concern column is the z-score signed in the direction "
+        "of concern, so red means the indicator sits where it has historically been worrying. "
+        "Tick rows, in any of the tables, to chart them below."
     )
-
-# ==========================================================================================
-# Chart
-# ==========================================================================================
-
-st.subheader("Chart")
-options = {f"{r.label} ({r.id})": r.id for r in readings if r.value is not None}
-if options:
-    choice = st.selectbox("Indicator", list(options), index=0)
-    sid = options[choice]
-    spec = catalog[sid]
-    reading = next(r for r in readings if r.id == sid)
-    series_id = sid if not reading.note.startswith("via fallback") else reading.note.split()[-1]
-    series = _series(str(DB), _db_version(), series_id, spec.transform)
-    years = st.slider("Years shown", 1, 60, 15)
-    if not series.empty:
-        shown = series[series.index >= series.index[-1] - pd.DateOffset(years=years)]
-        fig = go.Figure()
-        fig.add_scatter(x=shown.index, y=shown.values, mode="lines", name=spec.label, line=dict(color="#1f77b4"))
-        for start, end in data["recessions"]:
-            end_ts = pd.Timestamp(end) + pd.offsets.MonthEnd(0)
-            if end_ts < shown.index[0] or pd.Timestamp(start) > shown.index[-1]:
-                continue
-            fig.add_vrect(x0=start, x1=end_ts, fillcolor="grey", opacity=0.18, line_width=0)
-        for rule_name, level in thresholds_for(sid).items():
-            fig.add_hline(y=level, line_dash="dash", line_color="rgba(214, 39, 40, 0.8)",
-                          annotation_text=rule_name, annotation_position="top left")
-        fig.update_layout(
-            title=f"{spec.label} — {spec.transform}, {spec.units or 'level'}; shaded: NBER recessions",
-            template="plotly_white", hovermode="x unified", showlegend=False,
-            height=420,  # charts.readable makes it taller
+    in_url = set(_in_url())
+    ticked = []
+    for group in catalog.groups():
+        rows = [r for r in readings if r.group == group]
+        if not rows:
+            continue
+        st.markdown(f"**{GROUPS.get(group, group)}**")
+        table = _group_table(rows)
+        if not table["Note"].astype(bool).any():
+            table = table.drop(columns=["Note"])
+        event = st.dataframe(
+            table.style.format({"z": "{:+.2f}", "Pct": "{:.0f}", "3m chg": "{:+.2f}", "Concern": "{:+.2f}"}, na_rep="–")
+            .apply(_concern_colours, subset=["Concern"]),
+            column_config={c: st.column_config.Column(c, help=h) for c, h in HELP.items() if c in table.columns},
+            width="stretch",
+            hide_index=True,
+            key=f"macro_scorecard_{group}",
+            on_select="rerun",
+            selection_mode="multi-row",
+            # The URL's ticks, on the first run only: after that the table keeps the viewer's.
+            selection_default={"selection": {"rows": [n for n, r in enumerate(rows) if r.id in in_url]}},
         )
-        st.plotly_chart(charts.readable(fig), width="stretch")
-    st.write(reading.reading)
-    if spec.notes:
-        st.caption(spec.notes)
-    st.caption(f"Source: {spec.source} {spec.key or spec.formula or ''}; publication lag about {spec.lag_days} days.")
+        ticked += [rows[n].id for n in event.selection.rows if n < len(rows)]
+    return ticked
+
+
+def _indicator(sid: str) -> pd.Series:
+    """An indicator's history as the scorecard reads it: its fallback's when the scorecard used that."""
+    reading = readings_by_id[sid]
+    stored = reading.note.split()[-1] if reading.note.startswith("via fallback") else sid
+    return _series(str(DB), _db_version(), stored, catalog[sid].transform)
+
+
+def _indicator_chart(ids: list[str], slots: dict[str, int], preset: str, height: int) -> None:
+    """The indicators on one figure, a panel per unit, with NBER recessions shaded and rule thresholds drawn."""
+    view = charts.window_series({sid: _indicator(sid) for sid in ids}, preset)
+    names = {sid: catalog[sid].label for sid in ids}
+    if view.series:
+        units = {sid: catalog[sid].units for sid in view.series}
+        fig = charts.lines_figure(view, names, units, slots, in_pct=False, change_in_hover=False)
+        first = min(s.index[0] for s in view.series.values())
+        last = max(s.index[-1] for s in view.series.values())
+        for start, end in data["recessions"]:
+            end = pd.Timestamp(end) + pd.offsets.MonthEnd(0)
+            if end >= first and pd.Timestamp(start) <= last:
+                # Across every panel, which add_vrect would not do: it shades the first one only.
+                fig.add_shape(type="rect", xref="x", yref="paper", x0=start, x1=end, y0=0, y1=1,
+                              fillcolor="grey", opacity=0.18, line_width=0, layer="below")
+        axis = {trace.name: trace.yaxis or "y" for trace in fig.data}  # the panel each line is on
+        for n, sid in enumerate(view.series):
+            # Every other indicator's names on the right, so two on one panel do not overprint
+            # where their levels are close, as the Sahm rule's 0.5 and the curve's 0.
+            side = dict(x=1, xanchor="right") if n % 2 else dict(x=0, xanchor="left")
+            levels: dict[float, list[str]] = {}  # rules on one level share a line, or their names overprint
+            for rule_name, level in thresholds_for(sid).items():
+                levels.setdefault(level, []).append(rule_name)
+            for level, rule_names in levels.items():
+                fig.add_shape(type="line", xref="paper", x0=0, x1=1, yref=axis[names[sid]], y0=level, y1=level,
+                              line=dict(dash="dash", color=THRESHOLD_COLOR, width=1.5))
+                fig.add_annotation(xref="paper", yref=axis[names[sid]], y=level, text=", ".join(rule_names),
+                                   showarrow=False, yanchor="bottom", **side)
+        legend = 0
+        if len(view.series) > 1:
+            legend = round(charts.legend_rows(list(names.values()), PLOT_WIDTH[1], LEGEND_FONT) * LEGEND_ROW)
+        charts.readable(fig, height=height + legend)
+        fig.update_layout(legend_font_size=LEGEND_FONT, hoverlabel_font_size=LEGEND_FONT)
+        st.plotly_chart(fig, width="stretch", key=f"macro_figure_{'_'.join(ids)}")
+    if view.missing:
+        st.caption("Not drawn: " + "; ".join(f"{names[sid]}, {why}" for sid, why in view.missing.items()) + ".")
+
+
+def _indicator_notes(sid: str, *, named: bool) -> None:
+    """What the scorecard reads in an indicator, and where it comes from."""
+    spec, reading = catalog[sid], readings_by_id[sid]
+    st.markdown(f"**{spec.label}.** {reading.reading}" if named else reading.reading)
+    shown = "; shown as the change over a year" if spec.transform == "yoy" else ""
+    st.caption((f"{spec.notes} " if spec.notes else "")
+               + f"Source: {spec.source} {spec.key or spec.formula or ''}{shown}; publication lag about "
+               f"{spec.lag_days} days.")
+
+
+def _chart_section(ticked: list[str]) -> None:
+    st.subheader("Chart")
+    controls = st.container(horizontal=True, vertical_alignment="bottom", gap="medium")
+    together = controls.segmented_control(
+        "Layout", ("Separate", "Together"), default="Separate", required=True, key="macro_layout",
+        bind="query-params",
+        help="Separate: a chart for each indicator. Together: one chart, with a panel for each unit on a shared "
+             "time axis, so indicators in the same unit are drawn on the same scale.",
+    ) == "Together"
+    preset = controls.segmented_control(
+        "Time range", charts.RANGES, default=CHART_RANGE, required=True, key="macro_range", bind="query-params"
+    )
+    per_row = controls.segmented_control(
+        "Charts per row", (1, 2, 3), default=2, required=True, key="macro_per_row", bind="query-params",
+        disabled=together,
+    )
+    height = charts.HEIGHTS[controls.segmented_control(
+        "Chart height", tuple(charts.HEIGHTS), default="Medium", required=True, key="macro_height",
+        bind="query-params",
+    )]
+    if not ticked:
+        st.info("Tick one or more rows of the scorecard above to chart them.", icon=":material/check_box:")
+        return
+    st.caption("Shaded: NBER recessions. Dashed red lines: the levels at which a regime rule fires.")
+    slots = {sid: n for n, sid in enumerate(ticked)}
+    if together:
+        _indicator_chart(ticked, slots, preset, height)
+        for sid in ticked:
+            _indicator_notes(sid, named=True)
+        return
+    for n, sid in enumerate(ticked):
+        if n % per_row == 0:
+            cells = st.columns(per_row)  # a row per group, so neighbours line up at the top
+        with cells[n % per_row].expander(f"📊 {catalog[sid].label}", expanded=True):
+            _indicator_chart([sid], slots, preset, height)
+            _indicator_notes(sid, named=False)
+
+
+@st.fragment  # ticking a row reruns the scorecard and the chart only
+def _scorecard_and_chart() -> None:
+    ticked = _scorecard()
+    # In the order they were ticked: the URL's first, then any new one at the end.
+    was = _in_url()
+    order = [sid for sid in was if sid in ticked] + [sid for sid in ticked if sid not in was]
+    if order:
+        st.query_params[CHART_URL] = ",".join(order)
+    elif CHART_URL in st.query_params:
+        del st.query_params[CHART_URL]
+    _chart_section(order)
+
+
+readings_by_id = {r.id: r for r in readings}
+_scorecard_and_chart()
 
 # ==========================================================================================
 # Record a release

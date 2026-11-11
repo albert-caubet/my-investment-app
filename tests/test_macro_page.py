@@ -246,3 +246,115 @@ def test_market_chart_choices_are_read_from_the_url(seeded_db):
     assert at.button_group(key="market_range").value == "5Y"
     assert at.button_group(key="market_per_row").value == 3
     assert at.button_group(key="market_height").value == "Small"
+
+
+# --- indicator charts ------------------------------------------------------------------
+
+
+def _indicator_cells(at: AppTest) -> list:
+    """The expanders holding an indicator's chart, in page order."""
+    return [e for e in at.expander if e.label.startswith("📊")]
+
+
+def _ticked(*ids: str) -> AppTest:
+    """The Macro page opened from a URL that ticks ``ids`` in the scorecard."""
+    at = _app().run().switch_page("pages/macro.py")
+    at.query_params["macro_chart"] = ",".join(ids)
+    at.run()
+    assert not at.exception
+    return at
+
+
+def test_the_chart_asks_for_rows_to_be_ticked(seeded_db):
+    at = _macro(_app().run())
+    assert "Chart" in [h.value for h in at.subheader]
+    assert any("Tick one or more rows of the scorecard" in i.value for i in at.info)
+    assert not _indicator_cells(at)
+    assert at.button_group(key="macro_range").value == "10Y"
+    assert at.button_group(key="macro_layout").value == "Separate"
+
+
+def test_rows_ticked_in_the_url_are_ticked_in_the_scorecard_and_charted_apart(seeded_db):
+    at = _ticked("US_SAHM", "US_UNRATE")
+    assert at.session_state["macro_scorecard_labor"]["selection"]["rows"]
+    # in the URL's order, which is the order they were ticked in, not the table's
+    assert [e.label for e in _indicator_cells(at)] == ["📊 Sahm rule (real-time)", "📊 US unemployment rate"]
+    sahm, unrate = (_figure(e) for e in _indicator_cells(at))
+    assert [t["name"] for t in sahm["data"]] == ["Sahm rule (real-time)"]
+    assert sahm["data"][0]["line"]["color"] == charts.SERIES_COLORS["light"][0]
+    assert unrate["data"][0]["line"]["color"] == charts.SERIES_COLORS["light"][1]
+    assert sahm["layout"]["yaxis"]["title"]["text"] == "pp"
+    # ten years back from the last observation, Aug 2026
+    assert sahm["data"][0]["x"][0].startswith("2016-08-01")
+    # the Sahm rule's threshold, and the 2020 recession shaded
+    lines = [s for s in sahm["layout"]["shapes"] if s["type"] == "line"]
+    assert [(s["y0"], s["yref"]) for s in lines] == [(0.5, "y")]
+    assert [a["text"] for a in sahm["layout"]["annotations"]] == ["sahm"]
+    rects = [s for s in sahm["layout"]["shapes"] if s["type"] == "rect"]
+    assert [r["x0"][:7] for r in rects] == ["2020-03"]
+    assert "% change" not in sahm["data"][0]["hovertemplate"] and "customdata[1]" not in sahm["data"][0]["hovertemplate"]
+    assert "Source:" in _caption(_indicator_cells(at)[0])
+
+
+def test_ticking_a_row_charts_it_and_puts_it_in_the_url(seeded_db):
+    at = _macro(_app().run())
+    with Store(seeded_db, read_only=True) as store:
+        readings = sc.build_readings(store, load_catalog(), today=date.today())
+    labor = [r.id for r in readings if r.group == "labor"]  # the labour table's rows, in its order
+    at.session_state["macro_scorecard_labor"] = {"selection": {"rows": [labor.index("US_UNRATE")], "columns": [],
+                                                                "cells": []}}
+    at.run()
+    assert not at.exception
+    assert at.query_params["macro_chart"] == ["US_UNRATE"]
+    assert [e.label for e in _indicator_cells(at)] == ["📊 US unemployment rate"]
+
+
+def test_together_draws_one_chart_with_a_panel_per_unit(seeded_db):
+    at = _ticked("US_UNRATE", "US_SAHM", "US_10Y")
+    at.button_group(key="macro_layout").set_value("Together").run()
+    assert not at.exception
+    assert not _indicator_cells(at)
+    assert at.button_group(key="macro_per_row").proto.disabled
+    (fig,) = [json.loads(c.proto.spec) for c in at.get("plotly_chart")
+              if any(t.get("name") == "US unemployment rate" for t in json.loads(c.proto.spec)["data"])]
+    assert [(t["name"], t.get("yaxis", "y")) for t in fig["data"]] == [
+        ("US unemployment rate", "y"), ("Sahm rule (real-time)", "y2"), ("US 10-year Treasury yield", "y")]
+    assert fig["layout"]["showlegend"]
+    assert fig["layout"]["yaxis"]["title"]["text"] == "%" and fig["layout"]["yaxis2"]["title"]["text"] == "pp"
+    # the Sahm threshold sits in the Sahm rule's panel; the recessions shade every panel
+    assert [(s["y0"], s["yref"]) for s in fig["layout"]["shapes"] if s["type"] == "line"] == [(0.5, "y2")]
+    assert {s["yref"] for s in fig["layout"]["shapes"] if s["type"] == "rect"} == {"paper"}
+    assert fig["layout"]["height"] > charts.HEIGHTS["Medium"]  # the legend's row on top
+    notes = " ".join(m.value for m in at.markdown)
+    assert "**US unemployment rate.**" in notes and "**Sahm rule (real-time).**" in notes
+
+
+def test_rules_on_one_level_share_a_line(seeded_db):
+    (cell,) = _indicator_cells(_ticked("US_CURVE_10Y3M"))
+    fig = _figure(cell)
+    assert [s["y0"] for s in fig["layout"]["shapes"] if s["type"] == "line"] == [0.0]
+    assert [a["text"] for a in fig["layout"]["annotations"]] == ["curve_inverted, curve_uninversion"]
+
+
+@pytest.mark.parametrize("per_row", [1, 3])
+def test_charts_per_row_and_height_set_the_indicator_charts(seeded_db, per_row):
+    at = _ticked("US_UNRATE", "US_SAHM", "US_10Y")
+    at.button_group(key="macro_per_row").set_value(per_row).run()
+    at.button_group(key="macro_height").set_value("Large").run()
+    assert not at.exception
+    cells = [c for c in at.columns if any(e.label.startswith("📊") for e in c.expander)]
+    assert len(cells) == 3 and {round(c.weight, 6) for c in cells} == {round(1 / per_row, 6)}
+    assert {_figure(e)["layout"]["height"] for e in _indicator_cells(at)} == {charts.HEIGHTS["Large"]}
+
+
+def test_max_shows_the_whole_history(seeded_db):
+    at = _ticked("US_UNRATE")
+    at.button_group(key="macro_range").set_value("Max").run()
+    (cell,) = _indicator_cells(at)
+    assert _figure(cell)["data"][0]["x"][0].startswith("2000-01-01")
+
+
+def test_an_unknown_id_in_the_url_is_dropped(seeded_db):
+    at = _ticked("NOT_A_SERIES", "US_UNRATE")
+    assert [e.label for e in _indicator_cells(at)] == ["📊 US unemployment rate"]
+    assert at.query_params["macro_chart"] == ["US_UNRATE"]

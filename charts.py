@@ -217,12 +217,14 @@ LEGEND_ROOM = {1: 70, 2: 32, 3: 22}
 
 
 def lines_figure(view: SeriesWindow, names: Mapping[str, str], units: Mapping[str, str],
-                 slots: Mapping[str, int], in_pct: bool) -> go.Figure:
+                 slots: Mapping[str, int], in_pct: bool, *, change_in_hover: bool = True) -> go.Figure:
     """One line per series of ``view``. In % change they share one axis; in value, each unit gets a panel.
 
     ``names`` are what the legend and the hover call each series, ``units`` what its values
     are in, and ``slots`` its place in :func:`series_line`: a series keeps its look when
-    another is taken off the chart, and on every chart it is on.
+    another is taken off the chart, and on every chart it is on. ``change_in_hover`` adds
+    the % change since the first date shown to the hover, which a price has and a rate,
+    a spread or a survey balance does not.
 
     Panels stack on one time axis, so their dates line up, rather than a second scale on
     the right: two scales on one plot line up wherever their ranges happen to put them,
@@ -243,7 +245,7 @@ def lines_figure(view: SeriesWindow, names: Mapping[str, str], units: Mapping[st
         change = values / base - 1 if base > 0 else pd.Series(np.nan, index=values.index)
         panel = 0 if in_pct else panels.index(unit)
         hover = f"%{{customdata[0]:{',.2f' if values.abs().max() >= 1 else ',.4f'}}}" + (f" {unit}" if unit else "")
-        if base > 0:
+        if base > 0 and (change_in_hover or in_pct):
             hover += " · %{customdata[1]:+.1%}"
         line = series_line(slots[key])
         fig.add_scatter(
