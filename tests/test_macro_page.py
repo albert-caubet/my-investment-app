@@ -358,3 +358,52 @@ def test_an_unknown_id_in_the_url_is_dropped(seeded_db):
     at = _ticked("NOT_A_SERIES", "US_UNRATE")
     assert [e.label for e in _indicator_cells(at)] == ["📊 US unemployment rate"]
     assert at.query_params["macro_chart"] == ["US_UNRATE"]
+
+
+# --- EUR/USD ---------------------------------------------------------------------------
+
+
+def _with_eurusd(path: Path) -> pd.Series:
+    """A daily EUR/USD rate, as the refresh stores it, from 2016 to 9 Sep 2026."""
+    days = pd.bdate_range("2016-01-01", "2026-09-09")
+    rate = pd.Series(np.linspace(1.05, 1.17, len(days)), index=days)
+    with Store(path) as store:
+        store.upsert_series("EURUSD", rate, source="yahoo")
+    return rate
+
+
+def _eurusd_cell(at: AppTest):
+    return next(e for e in at.expander if e.label == "💱 EUR/USD")
+
+
+def test_eurusd_opens_the_market_charts_as_a_rate(seeded_db):
+    _with_eurusd(seeded_db)
+    at = _macro(_app().run())
+    assert not at.exception
+    first_row = next(c for c in at.columns if c.expander)
+    assert first_row.expander[0].label == "💱 EUR/USD"  # ahead of the world indices
+    assert [e.label for e in at.expander if e.label[0] in "💱📈"][:2] == ["💱 EUR/USD", "📈 World main indices"]
+    fig = _figure(_eurusd_cell(at))
+    assert fig["layout"]["yaxis"]["title"]["text"] == "USD per EUR"
+    values = _numbers(fig["data"][0]["y"])
+    assert 1.0 < values.min() and values.max() < 1.2  # the rate itself, not a % change
+    assert fig["data"][0]["x"][0].startswith("2025-09-09")  # a year back, the default range
+    assert fig["layout"]["height"] == charts.HEIGHTS["Medium"]
+    assert "dollars per euro on 09 Sep 2026" in _caption(_eurusd_cell(at))
+
+
+def test_eurusd_follows_the_market_controls(seeded_db):
+    _with_eurusd(seeded_db)
+    at = _macro(_app().run())
+    at.button_group(key="market_range").set_value("5Y").run()
+    at.button_group(key="market_height").set_value("Large").run()
+    assert not at.exception
+    fig = _figure(_eurusd_cell(at))
+    assert fig["layout"]["height"] == charts.HEIGHTS["Large"]
+    assert 255 <= len(fig["data"][0]["x"]) <= 265  # five years of weekly closes, as the indices
+
+
+def test_eurusd_without_a_stored_rate_says_so(seeded_db):
+    at = _macro(_app().run())
+    assert not at.exception
+    assert any("No EUR/USD rate stored yet" in i.value for i in _eurusd_cell(at).info)

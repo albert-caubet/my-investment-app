@@ -221,6 +221,38 @@ def _market_notes(chart: markets.MarketChart) -> None:
         st.caption(f"Not charted: {'; '.join(left_out)}.")
 
 
+EURUSD = "EURUSD"  # the catalog's series: Yahoo's EURUSD=X, stored by the refresh with the other macro series
+
+
+def _eurusd_chart(preset: str, height: int) -> None:
+    """The exchange rate itself, in dollars per euro, rather than a % change like the indices beside it:
+    one line has nothing to be compared with, and the level (1.08, 1.20) is what a reader knows."""
+    rate = _series(str(DB), _db_version(), EURUSD, "level")
+    rate = markets.weekdays(rate.dropna()) if not rate.empty else rate
+    if rate.empty:
+        st.info("No EUR/USD rate stored yet. The next refresh downloads it.")
+        return
+    first, last = rate.index[0].date(), rate.index[-1].date()
+    start = charts.range_start(preset, first, last)
+    shown = rate[rate.index >= pd.Timestamp(start)]
+    if (last - start).days > markets.WEEKLY_AFTER_DAYS:  # as the indices: weekly closes past two years
+        shown = markets.weekly(shown)
+    fig = go.Figure(go.Scatter(
+        x=shown.index, y=shown.to_numpy(), name="EUR/USD", mode="lines", line=charts.series_line(0),
+        hovertemplate="%{y:.4f} USD per EUR<extra></extra>",
+    ))
+    fig.update_yaxes(title_text="USD per EUR", tickformat=".2f")
+    fig.update_layout(template="plotly_white", hovermode="x unified", showlegend=False, xaxis_hoverformat="%d %b %Y")
+    charts.readable(fig, height=height)
+    fig.update_layout(hoverlabel_font_size=charts.LEGEND_FONT)
+    st.plotly_chart(fig, width="stretch", key="macro_eurusd")
+    change = shown.iloc[-1] / shown.iloc[0] - 1
+    st.caption(
+        f"{shown.iloc[-1]:.4f} dollars per euro on {shown.index[-1]:%d %b %Y}, {change:+.1%} since "
+        f"{shown.index[0]:%d %b %Y}. A rise is a stronger euro. Yahoo's EURUSD=X rate."
+    )
+
+
 @st.fragment  # a control reruns the market charts only, not the scorecard below
 def _market_section(market_charts: tuple[markets.MarketChart, ...]) -> None:
     st.subheader("Markets")
@@ -243,12 +275,18 @@ def _market_section(market_charts: tuple[markets.MarketChart, ...]) -> None:
         "Each line is the % change from its first close in the time range, in its own currency; the hover "
         "shows the close too. Most are price indices, without dividends; the DAX family and the total-return "
         "proxies include them. Futures are Yahoo's front-month contracts, so a roll can show as a jump. Ranges "
-        "over two years plot weekly closes. Click a legend entry to hide its line, double-click to show it alone."
+        "over two years plot weekly closes. Click a legend entry to hide its line, double-click to show it alone. "
+        "EUR/USD, first, is the exchange rate itself, in dollars per euro."
     )
     closes = _market_closes(str(DB), _db_version(), markets.all_symbols(market_charts))
-    for i, chart in enumerate(market_charts):
+    for i in range(len(market_charts) + 1):  # EUR/USD first
         if i % per_row == 0:
             cells = st.columns(per_row)  # a row per group, so neighbours line up at the top
+        if i == 0:
+            with cells[0].expander("💱 EUR/USD", expanded=True):
+                _eurusd_chart(preset, charts.HEIGHTS[chart_height])
+            continue
+        chart = market_charts[i - 1]
         # The chart has no title, which half a row could not fit: this label names it.
         with cells[i % per_row].expander(f"📈 {chart.title}", expanded=True):
             _market_chart(chart, closes, preset, charts.HEIGHTS[chart_height], per_row)
