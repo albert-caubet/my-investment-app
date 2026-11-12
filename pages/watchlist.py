@@ -2,8 +2,9 @@
 
 The list comes first, then the dashboard's chart controls, a chart of every stock together
 and a chart of each. The list is the market database's ``watchlist`` table, the one the
-weekly report reads; a company in the latest screener table shows that table's value and
-margin of safety too. The prices are Yahoo Finance's daily closes, fetched and cached by
+weekly report reads; a company in the latest screener table of either market, US or
+European, shows that table's value and margin of safety too. The prices are Yahoo
+Finance's daily closes, fetched and cached by
 ``market_data.py`` as on the Stock explorer, so a stock from any market Yahoo quotes can be
 on it. The close button on a stock's chart takes it off the watchlist.
 """
@@ -21,6 +22,7 @@ import market_data as md
 import watchlist
 from invest.data import search
 from invest.data.cache import Store
+from invest.fundamentals.universe import REGIONS, screener_kind
 from invest.paths import db_path
 
 st.title("Watchlist")
@@ -83,14 +85,21 @@ SCREENER_COLUMNS = ["ticker", "name", "value_conservative", "mos_conservative", 
 
 @st.cache_data(ttl=600, show_spinner=False)
 def _screener(db: str, version: float) -> tuple[str, pd.DataFrame] | None:
-    """The day the latest screener table was built, and its rows by ticker; None before the first build."""
+    """The day the latest screener table of each market was built, and their rows by ticker together;
+    None before the first build. A European symbol (``SAP.DE``) never names a US company (``SAP``)."""
+    tables, built = [], []
     with Store(db, read_only=True) as store:
-        snap = store.load_snapshot("screener")
-    rows = pd.DataFrame(snap[2].get("rows", [])) if snap else pd.DataFrame()
-    if "ticker" not in rows:
+        for region in REGIONS:
+            snap = store.load_snapshot(screener_kind(region))
+            rows = pd.DataFrame(snap[2].get("rows", [])) if snap else pd.DataFrame()
+            if "ticker" in rows:
+                tables.append(rows.reindex(columns=SCREENER_COLUMNS))
+                built.append((region, f"{pd.Timestamp(snap[1]):%Y-%m-%d}"))
+    if not tables:
         return None
-    rows = rows.reindex(columns=SCREENER_COLUMNS).drop_duplicates("ticker").set_index("ticker")
-    return f"{pd.Timestamp(snap[1]):%Y-%m-%d}", rows
+    rows = pd.concat(tables, ignore_index=True).drop_duplicates("ticker").set_index("ticker")
+    when = built[0][1] if len(built) == 1 else " and ".join(f"{day} ({region})" for region, day in built)
+    return when, rows
 
 
 symbols = entries["symbol"].tolist()

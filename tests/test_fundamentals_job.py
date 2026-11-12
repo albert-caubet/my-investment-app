@@ -1,16 +1,19 @@
-"""The fundamentals job on a fake EDGAR client and canned prices; point-in-time assertion."""
+"""The fundamentals job on a fake EDGAR client and canned prices; point-in-time assertion.
+
+The European universe runs on saved Yahoo responses and canned prices and exchange rates.
+"""
 
 import json
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import pytest
 
-from invest.data.cache import Store
+from invest.data.cache import Store, utcnow
 from invest.fundamentals import screens
-from invest.fundamentals.universe import Universe
+from invest.fundamentals.universe import Universe, yahoo_id
 from invest.jobs import fundamentals as job
 
 FIX = Path(__file__).parent / "fixtures"
@@ -183,3 +186,149 @@ def test_without_the_sec_setting_the_command_explains_and_leaves_the_database_al
     assert "SEC_USER_AGENT" in out and ".streamlit/secrets.toml" in out
     assert "Traceback" not in out
     assert not db.exists()
+
+
+# --- a European universe from Yahoo -----------------------------------------------------------
+
+PROFILES = {
+    "SHEL.L": {"name": "Shell plc", "sector": "Energy", "currency": "GBp", "financial_currency": "USD",
+               "exchange": "LSE"},
+    "ULVR.L": {"name": "Unilever PLC", "sector": "Consumer Defensive", "currency": "GBp",
+               "financial_currency": "EUR", "exchange": "LSE"},
+    "HSBA.L": {"name": "HSBC Holdings plc", "sector": "Financial Services", "currency": "GBp",
+               "financial_currency": "USD", "exchange": "LSE"},
+}
+EU = Universe("eu_examples", "European examples", ("SHEL.L", "ULVR.L", "HSBA.L", "GONE.L"), point_in_time=False,
+              region="EU", source="yahoo")
+PENCE = {"SHEL.L": 3000.0, "ULVR.L": 5000.0, "HSBA.L": 1000.0}
+FX = {"GBP=X": 0.75, "EUR=X": 0.90}  # pounds and euros per dollar
+
+
+class FakeYahoo:
+    """Saved responses for three London listings; Yahoo knows nothing of GONE.L."""
+
+    def __init__(self, revise: float = 0.0):
+        self.n_requests = 0
+        self.revise = revise
+
+    def profile(self, symbol):
+        self.n_requests += 1
+        return PROFILES.get(symbol, {})
+
+    def fundamentals(self, symbol, kinds):
+        self.n_requests += 1
+        name = symbol.lower().replace(".", "_")
+        payload = json.loads((FIX / f"yahoo_timeseries_{name}.json").read_text(encoding="utf-8"))
+        if self.revise:  # a restatement of the latest fiscal year's revenue
+            item = next(s for s in payload["timeseries"]["result"] if s["meta"]["type"][0] == "annualTotalRevenue")
+            item["annualTotalRevenue"][-1]["reportedValue"]["raw"] += self.revise
+        return payload
+
+
+def _eu_prices(symbols, period="12y"):
+    days = pd.bdate_range("2014-01-01", "2026-11-11")
+    closes = {**PENCE, **FX}
+    return {s: pd.DataFrame({"close": closes[s], "adj_close": closes[s]}, index=days) for s in symbols if s in closes}
+
+
+@pytest.fixture
+def european(tmp_path, monkeypatch):
+    monkeypatch.setattr(job.yahoo, "fetch_history", _eu_prices)
+    with Store(tmp_path / "eu.duckdb") as store:
+        problems = job.refresh_yahoo_universe(store, FakeYahoo(), EU, log=None)
+        yield store, problems
+
+
+def test_a_yahoo_universe_stores_accounts_names_sectors_prices_and_rates(european):
+    store, problems = european
+    assert problems == ["GONE.L: Yahoo has no quote for this symbol"]
+    companies = store.companies().set_index("ticker")
+    assert set(companies.index) == {"SHEL.L", "ULVR.L", "HSBA.L"}
+    assert companies.loc["SHEL.L", "cik"] == yahoo_id("SHEL.L") < 0  # no CIK: an id from the symbol
+    assert companies.loc["HSBA.L", "sector"] == "financial services"
+    assert store.cik_of("SHEL.L") is None
+    assert store.price_currency("SHEL.L") == "GBp"
+    assert {"GBP=X", "EUR=X"} <= set(store.price_symbols())
+    assert set(store.read_facts(yahoo_id("SHEL.L"))["taxonomy"]) == {"yahoo"}
+
+
+def test_market_caps_are_converted_from_pence_into_the_accounts_and_stated_in_euros(european):
+    store, _ = european
+    rows = job.build_metrics_table(store, EU).set_index("ticker")
+    shel = rows.loc["SHEL.L"]
+    assert (shel["price"], shel["currency"]) == (3000.0, "USD")  # 3,000 pence; accounts in dollars
+    assert shel["market_cap"] == pytest.approx(30.0 / 0.75 * shel["shares_outstanding"])  # £30 at 0.75 a dollar
+    assert shel["market_cap_eur"] == pytest.approx(shel["market_cap"] * 0.90)
+    ulvr = rows.loc["ULVR.L"]
+    assert ulvr["currency"] == "EUR"
+    assert ulvr["market_cap"] == pytest.approx(50.0 / 0.75 * 0.90 * ulvr["shares_outstanding"])
+    assert ulvr["market_cap_eur"] == pytest.approx(ulvr["market_cap"])
+    assert rows.loc["HSBA.L", "is_financial"] and not shel["is_financial"]
+    assert (shel["basis"], shel["sector"]) == ("ttm", "energy")
+    assert shel["tags"]["revenue"] == "yahoo:TotalRevenue"
+    assert pd.notna(shel["earnings_yield"]) and pd.notna(shel["epv_per_share"])
+
+
+def test_a_fetch_again_keeps_the_day_each_value_was_first_seen(european, monkeypatch):
+    store, _ = european
+    first = store.read_facts(yahoo_id("SHEL.L"))
+    first_day = pd.to_datetime(first["filed_at"]).dt.date.max()
+    week_later = utcnow() + timedelta(days=7)
+    monkeypatch.setattr(job, "utcnow", lambda: week_later)
+    job.refresh_yahoo_universe(store, FakeYahoo(), EU, log=None, skip_prices=True)
+    assert len(store.read_facts(yahoo_id("SHEL.L"))) == len(first)  # the same values: nothing new
+    job.refresh_yahoo_universe(store, FakeYahoo(revise=1e9), EU, log=None, skip_prices=True)
+    after = store.read_facts(yahoo_id("SHEL.L"))
+    assert len(after) == len(first) + 1  # the restated revenue, dated the day it was seen
+    assert pd.to_datetime(after["filed_at"]).dt.date.max() == week_later.date()
+    assert len(store.read_facts(yahoo_id("SHEL.L"), as_of=first_day)) == len(first)
+
+
+def test_a_table_as_of_a_day_before_the_first_fetch_has_no_accounts(european):
+    store, _ = european
+    rows = job.build_metrics_table(store, EU, as_of=date(2026, 1, 2)).set_index("ticker")
+    assert rows["market_cap"].isna().all()
+    assert all("no facts filed by this date" in notes for notes in rows["notes"])
+
+
+def test_the_european_table_is_a_snapshot_of_its_own(european):
+    store, _ = european
+    store.save_snapshot(store.start_run("fundamentals"), "screener", {"universe": "sp500_core", "rows": []})
+    job.save_screener_snapshot(store, store.start_run("fundamentals"), EU, job.build_metrics_table(store, EU),
+                               as_of=None)
+    payload = store.load_snapshot("screener_eu")[2]
+    assert (payload["region"], payload["source"], payload["point_in_time"]) == ("EU", "yahoo", False)
+    assert payload["n_companies"] == 3
+    assert store.load_snapshot("screener")[2]["universe"] == "sp500_core"  # still the latest US table
+
+
+def test_the_command_builds_a_yahoo_universe_without_the_sec_setting_or_breadth(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr("invest.data.edgar.sec_user_agent", lambda: None)
+    monkeypatch.setattr(job, "load_universe", lambda: {"eu_examples": EU})
+    monkeypatch.setattr(job.yahoo, "YahooClient", FakeYahoo)
+    monkeypatch.setattr(job.yahoo, "fetch_history", _eu_prices)
+    breadth = []
+    monkeypatch.setattr(job, "store_breadth", lambda *args, **kwargs: breadth.append(args))
+    db = tmp_path / "cli.duckdb"
+    assert job.main(["--db", str(db), "--universe", "eu_examples"]) == 1  # GONE.L is a problem
+    out = capsys.readouterr().out
+    assert "7 Yahoo Finance requests" in out and "GONE.L: Yahoo has no quote" in out
+    assert not breadth  # the macro scorecard's breadth series are of the US market
+    with Store(db, read_only=True) as store:
+        assert store.load_snapshot("screener_eu")[2]["n_companies"] == 3
+        assert store.load_snapshot("screener") is None
+
+
+def test_rates_come_from_whichever_of_eurusd_and_eur_x_closed_later(tmp_path):
+    with Store(tmp_path / "fx.duckdb") as store:
+        store.upsert_series("EURUSD", pd.Series(1.10, index=pd.bdate_range("2026-01-01", "2026-11-06")),
+                            source="yahoo")
+        assert job.usd_per_unit("EUR", store, None) == pytest.approx(1.10)
+        store.upsert_prices("EUR=X", pd.DataFrame({"close": 0.80}, index=pd.bdate_range("2026-01-01", "2026-11-11")),
+                            currency="EUR")
+        assert job.usd_per_unit("EUR", store, None) == pytest.approx(1 / 0.80)  # the later close
+        assert job.usd_per_unit("GBp", store, None) is None  # no pound rate stored
+        assert job.usd_per_unit("USD", store, None) == 1.0
+        assert job.convert(100.0, "EUR", "EUR", store, None) == 100.0
+        assert job.convert(100.0, "USD", "EUR", store, None) == pytest.approx(80.0)
+        assert job.convert(100.0, "GBp", "EUR", store, None) is None

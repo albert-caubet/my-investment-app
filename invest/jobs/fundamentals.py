@@ -1,12 +1,14 @@
-"""Ingest a screener universe from EDGAR and Yahoo, build the metrics table, store breadth.
+"""Ingest a screener universe from EDGAR or Yahoo, build the metrics table, store breadth.
 
     python -m invest.jobs.fundamentals [--db PATH] [--universe NAME] [--limit N] [--as-of DATE] [--skip-prices]
 
-Steps: resolve tickers to CIKs, store company facts and SIC-based sectors, store
-constituent prices, compute every metric and the two intrinsic values per
-company as of a date, save the table as a ``screener`` snapshot, and write two
-breadth series into the macro store. A company that fails is reported and the
-rest continue.
+Steps for a US universe (source ``edgar``): resolve tickers to CIKs, store company
+facts and SIC-based sectors, store constituent prices. For a European one (source
+``yahoo``): store each company's Yahoo accounts, name and sector, its prices in the
+currency it is quoted in, and the exchange rates between those currencies. Then for
+either: compute every metric and the two intrinsic values per company as of a date,
+save the table as the region's screener snapshot, and, for the US, write two breadth
+series into the macro store. A company that fails is reported and the rest continue.
 """
 
 from __future__ import annotations
@@ -25,12 +27,25 @@ from invest.data.cache import Store, utcnow
 from invest.data.edgar import SEC_USER_AGENT_HELP, EdgarClient, EdgarConfigError, facts_frame
 from invest.fundamentals import metrics as M
 from invest.fundamentals import screens
-from invest.fundamentals.facts import canonical_tags, fundamentals_as_of
-from invest.fundamentals.universe import Universe, load_universe, resolve_ciks, sector_from_sic
+from invest.fundamentals.facts import canonical_tags, fundamentals_as_of, is_money, tag_kinds
+from invest.fundamentals.universe import (
+    Universe,
+    is_financial_sector,
+    load_universe,
+    resolve_ciks,
+    resolve_yahoo_ids,
+    screener_kind,
+    sector_from_sic,
+)
 from invest.fundamentals.valuation import value_summary
 
-DEFAULT_UNIVERSE = "sp500_core"
+#: The universe the Screener page builds for each region, and the command line by default.
+DEFAULT_UNIVERSES = {"US": "sp500_core", "EU": "stoxx600"}
+DEFAULT_UNIVERSE = DEFAULT_UNIVERSES["US"]
+#: The currency a region's table also states market caps in, where the accounts are in many.
+COMPARE_CURRENCY = {"EU": "EUR"}
 PRICE_YEARS = 12
+PRICE_BATCH = 100  # symbols per price download
 BREADTH_WINDOW = 200
 NEW_HIGH_WINDOW = 252
 MIN_BREADTH_NAMES = 20
@@ -71,20 +86,76 @@ def refresh_universe(
             if log:
                 log(f"  {ticker}: FAILED {exc}")
     if not skip_prices and items:
-        symbols = [t for t, _ in items]
+        problems += store_prices(store, {t: "USD" for t, _ in items}, fetched_at, log=log)
+    return problems
+
+
+def refresh_yahoo_universe(
+    store: Store, client, universe: Universe, *, limit: int | None = None, skip_prices: bool = False, log=print
+) -> list[str]:
+    """Accounts, names, sectors and prices from Yahoo Finance for every symbol of the universe,
+    and the exchange rates the table needs. A symbol Yahoo does not know is reported, never dropped
+    silently. Each value keeps the day it was first fetched (``Store.insert_new_facts``)."""
+    problems: list[str] = []
+    ids, clashes = resolve_yahoo_ids(universe.tickers)
+    if clashes:
+        problems.append(f"{len(clashes)} symbol(s) share an id with an earlier one: {', '.join(clashes[:12])}")
+    items = list(ids.items())[:limit] if limit else list(ids.items())
+    kinds = tag_kinds("yahoo")
+    fetched_at = utcnow()
+    quoted: dict[str, str] = {}  # symbol -> the currency Yahoo quotes it in, GBp for most of London
+    currencies = set(COMPARE_CURRENCY.values())
+    for symbol, entity in items:
         try:
-            frames = yahoo.fetch_history(symbols, period=f"{PRICE_YEARS}y")
+            profile = client.profile(symbol)
+            if not profile.get("currency"):
+                raise ValueError("Yahoo has no quote for this symbol")
+            facts = yahoo.fundamentals_facts(client.fundamentals(symbol, kinds), entity, kinds,
+                                             seen_on=fetched_at.date(), currency=profile.get("financial_currency"))
+            if facts.empty:
+                raise ValueError("Yahoo has no accounts for this symbol")
+            n = store.insert_new_facts(facts, fetched_at=fetched_at)
+            sector = (profile.get("sector") or "").strip().lower() or "unknown"
+            store.upsert_companies([{"cik": entity, "ticker": symbol, "name": profile.get("name"), "sic": None,
+                                     "sector": sector, "exchange": profile.get("exchange")}])
+            quoted[symbol] = profile["currency"]
+            currencies.add(yahoo.main_unit(profile["currency"])[0])
+            currencies.update(unit for unit in facts["unit"].unique() if is_money(unit))
+            if log:
+                log(f"  {symbol}: {len(facts)} facts, {n} new, {sector}")
         except Exception as exc:
-            frames = {}
-            problems.append(f"price download failed: {exc}")
-        for symbol in symbols:
+            problems.append(f"{symbol}: {exc}")
+            if log:
+                log(f"  {symbol}: FAILED {exc}")
+    if not skip_prices and quoted:
+        problems += store_prices(store, quoted, fetched_at, log=log)
+        rates = {yahoo.fx_symbol(code): code for code in sorted(currencies - {"USD"})}
+        problems += store_prices(store, rates, fetched_at, log=log, what="exchange rates")
+    return problems
+
+
+def store_prices(store: Store, currencies: dict[str, str], fetched_at, *, log=print, what: str = "prices") -> list[str]:
+    """Daily closes over the last ``PRICE_YEARS`` for each symbol of ``{symbol: currency}``, stored
+    with that currency, downloaded in batches. Returns the problems."""
+    problems: list[str] = []
+    symbols = list(currencies)
+    stored = 0
+    for start in range(0, len(symbols), PRICE_BATCH):
+        batch = symbols[start:start + PRICE_BATCH]
+        try:
+            frames = yahoo.fetch_history(batch, period=f"{PRICE_YEARS}y")
+        except Exception as exc:
+            problems.append(f"{what} download failed for {len(batch)} symbol(s): {exc}")
+            continue
+        for symbol in batch:
             frame = frames.get(symbol)
             if frame is None or frame.empty:
                 problems.append(f"{symbol}: no price history")
                 continue
-            store.upsert_prices(symbol, frame, currency="USD", fetched_at=fetched_at)
-        if log:
-            log(f"  prices: {len(frames)} of {len(symbols)} symbols")
+            store.upsert_prices(symbol, frame, currency=currencies[symbol], fetched_at=fetched_at)
+            stored += 1
+    if log:
+        log(f"  {what}: {stored} of {len(symbols)} symbols")
     return problems
 
 
@@ -98,15 +169,40 @@ def _price_as_of(prices: pd.Series, as_of: date | None) -> tuple[float | None, d
     return float(prices.iloc[-1]), prices.index[-1].date()
 
 
-def _fx_to_usd_per(currency: str, store: Store, as_of: date | None) -> float | None:
-    """USD per one unit of ``currency`` as of a date; only EUR is stored today."""
-    if currency == "USD":
-        return 1.0
-    if currency == "EUR":
-        eurusd = store.read_series("EURUSD")
-        value, _ = _price_as_of(eurusd, as_of)
-        return value
-    return None
+def usd_per_unit(currency: str | None, store: Store, as_of: date | None) -> float | None:
+    """US dollars for one unit of ``currency`` at the last close on or before ``as_of``; None without a rate.
+
+    Rates are Yahoo's ``<CCY>=X`` closes (units per dollar), which the European build stores;
+    for EUR also the EURUSD series the macro refresh stores, whichever has the later close.
+    A quote in pence (``GBp``) is a hundredth of a pound.
+    """
+    if not currency:
+        return None
+    code, minor = yahoo.main_unit(currency)
+    if code == "USD":
+        return 1.0 / minor
+    rates = []  # (day, dollars per unit)
+    if code == "EUR":
+        rate, day = _price_as_of(store.read_series("EURUSD"), as_of)
+        if rate:
+            rates.append((day, rate))
+    per_dollar, day = _price_as_of(store.read_prices(yahoo.fx_symbol(code)), as_of)
+    if per_dollar:
+        rates.append((day, 1.0 / per_dollar))
+    if not rates:
+        return None
+    return max(rates, key=lambda r: r[0])[1] / minor
+
+
+def convert(amount: float | None, source: str | None, target: str | None, store: Store,
+            as_of: date | None) -> float | None:
+    """``amount`` in ``source`` currency, in ``target`` currency, through the dollar; None without a rate."""
+    if amount is None or not source or not target:
+        return None
+    if source == target:
+        return float(amount)
+    from_usd, to_usd = usd_per_unit(source, store, as_of), usd_per_unit(target, store, as_of)
+    return float(amount) * from_usd / to_usd if (from_usd and to_usd) else None
 
 
 def _clean(value):
@@ -127,24 +223,31 @@ def _clean(value):
     return value
 
 
-def company_row(store: Store, cik: int, ticker: str, name: str | None, sic: str | None, *, as_of: date | None) -> dict:
-    """Every metric and both intrinsic values for one company, as of a date."""
+def company_row(store: Store, cik: int, ticker: str, name: str | None, sic: str | None, *, as_of: date | None,
+                sector: str | None = None, financial: bool = False) -> dict:
+    """Every metric and both intrinsic values for one company, as of a date.
+
+    ``sector`` and ``financial`` are the source's, for a company without a SIC code (Yahoo's).
+    """
     facts = store.read_facts(cik, as_of=as_of)
-    fund = fundamentals_as_of(facts, as_of, sic=sic)
+    fund = fundamentals_as_of(facts, as_of, sic=sic, financial=financial)
     price, price_date = _price_as_of(store.read_prices(ticker), as_of)
     shares = fund.latest.get("shares_outstanding")
     shares_date = fund.instant_dates.get("shares_outstanding")
     market_cap = None
     notes = list(fund.notes)
-    # Yahoo quotes the US listing in dollars; the accounts may be in another currency.
-    fx = _fx_to_usd_per(fund.currency or "USD", store, as_of)
-    price_in_accounts = price / fx if (price is not None and fx) else None
+    # The price is in the currency of the quote (dollars for a US listing, pence for most of
+    # London's); the accounts may be in another.
+    quoted_in = store.price_currency(ticker) or "USD"
+    accounts_in = fund.currency or "USD"
+    price_in_accounts = convert(price, quoted_in, accounts_in, store, as_of) if price is not None else None
     if shares and shares_date and price_date and (price_date - shares_date).days > MAX_SHARE_COUNT_AGE_DAYS:
         notes.append(f"share count as of {shares_date} is too old for a {price_date} price; no market cap")
         shares = None
     if price is not None and shares:
-        if fx is None:
-            notes.append(f"market cap not converted: no {fund.currency} rate stored")
+        if price_in_accounts is None:
+            missing = quoted_in if usd_per_unit(quoted_in, store, as_of) is None else accounts_in
+            notes.append(f"market cap not converted: no {yahoo.main_unit(missing)[0]} rate stored")
         else:
             market_cap = price_in_accounts * shares  # in the currency of the accounts
             public_float = fund.latest.get("public_float")
@@ -171,7 +274,7 @@ def company_row(store: Store, cik: int, ticker: str, name: str | None, sic: str 
         net_debt=v.get("net_debt"), shares=shares, fcf=v.get("fcf"), revenue_cagr=v.get("revenue_cagr_3y"),
     )
     row = {
-        "cik": cik, "ticker": ticker, "name": name, "sic": sic, "sector": sector_from_sic(sic),
+        "cik": cik, "ticker": ticker, "name": name, "sic": sic, "sector": sector or sector_from_sic(sic),
         "is_financial": fund.is_financial, "currency": fund.currency, "price": price,
         "price_date": price_date, "period_end": fund.period_end, "fy_end": fund.fy_end,
         "basis": fund.flow_basis["revenue"].basis if "revenue" in fund.flow_basis else None,
@@ -191,14 +294,25 @@ def company_row(store: Store, cik: int, ticker: str, name: str | None, sic: str 
 
 
 def build_metrics_table(store: Store, universe: Universe, *, as_of: date | None = None, log=None) -> pd.DataFrame:
+    """A row per stored company of the universe. In a region whose accounts are in many
+    currencies, ``market_cap_<currency>`` states every market cap in one, to compare them."""
     companies = store.companies()
     wanted = set(universe.tickers)
+    from_yahoo = universe.source == "yahoo"
+    compare = COMPARE_CURRENCY.get(universe.region)
     rows = []
     for _, company in companies.iterrows():
-        if company["ticker"] not in wanted:
+        # a company from Yahoo is stored under a negative id, a filer under its CIK
+        if company["ticker"] not in wanted or (int(company["cik"]) < 0) != from_yahoo:
             continue
+        sector = company["sector"] if from_yahoo else None
         try:
-            rows.append(company_row(store, int(company["cik"]), company["ticker"], company["name"], company["sic"], as_of=as_of))
+            row = company_row(store, int(company["cik"]), company["ticker"], company["name"], company["sic"],
+                              as_of=as_of, sector=sector, financial=from_yahoo and is_financial_sector(sector))
+            if compare:
+                row[f"market_cap_{compare.lower()}"] = convert(row.get("market_cap"), row.get("currency"), compare,
+                                                              store, as_of)
+            rows.append(row)
         except Exception as exc:
             rows.append(_clean({"cik": int(company["cik"]), "ticker": company["ticker"], "name": company["name"],
                                 "notes": [f"metrics failed: {exc}"]}))
@@ -241,15 +355,18 @@ def store_breadth(store: Store, symbols: list[str], *, log=None) -> int:
 
 
 def save_screener_snapshot(store: Store, run_id: str, universe: Universe, table: pd.DataFrame, *, as_of: date | None) -> None:
+    """The table, under its region's snapshot kind (``screener`` for the US, ``screener_eu``)."""
     payload = {
         "universe": universe.name,
         "universe_label": universe.label,
+        "region": universe.region,
+        "source": universe.source,
         "as_of": as_of.isoformat() if as_of else None,
         "point_in_time": universe.point_in_time,
         "n_companies": int(len(table)),
         "rows": json.loads(table.to_json(orient="records", date_format="iso")) if not table.empty else [],
     }
-    store.save_snapshot(run_id, "screener", payload)
+    store.save_snapshot(run_id, screener_kind(universe.region), payload)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -270,20 +387,26 @@ def main(argv: list[str] | None = None) -> int:
     as_of = date.fromisoformat(args.as_of) if args.as_of else None
     problems: list[str] = []
     client = None
+    from_edgar = universe.source == "edgar"
     if not args.skip_fetch:
-        try:
-            client = EdgarClient()  # before the database is touched: no half-started run
-        except EdgarConfigError as exc:
-            print(f"{exc}.\n\n{SEC_USER_AGENT_HELP}")
-            return 2
+        if from_edgar:
+            try:
+                client = EdgarClient()  # before the database is touched: no half-started run
+            except EdgarConfigError as exc:
+                print(f"{exc}.\n\n{SEC_USER_AGENT_HELP}")
+                return 2
+        else:
+            client = yahoo.YahooClient()
     with Store(args.db) as store:
         run_id = store.start_run("fundamentals")
         if client is not None:
-            problems += refresh_universe(store, client, universe, limit=args.limit, skip_prices=args.skip_prices)
-            print(f"  {client.n_requests} EDGAR requests")
+            refresh = refresh_universe if from_edgar else refresh_yahoo_universe
+            problems += refresh(store, client, universe, limit=args.limit, skip_prices=args.skip_prices)
+            print(f"  {client.n_requests} {'EDGAR' if from_edgar else 'Yahoo Finance'} requests")
         table = build_metrics_table(store, universe, as_of=as_of, log=print)
         save_screener_snapshot(store, run_id, universe, table, as_of=as_of)
-        store_breadth(store, list(universe.tickers), log=print)
+        if universe.region == "US":  # the macro scorecard's breadth series are of the US market
+            store_breadth(store, list(universe.tickers), log=print)
         store.finish_run(run_id, ok=len(table), failed=len(problems), notes="; ".join(problems)[:4000])
         if not table.empty:
             ranked, excluded = screens.run_screen("magic_formula", table)

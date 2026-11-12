@@ -162,6 +162,11 @@ CREATE TABLE IF NOT EXISTS files (
 );
 """
 
+FACT_COLUMNS = [
+    "fact_id", "cik", "taxonomy", "tag", "unit", "start_date", "end_date", "value",
+    "fy", "fp", "form", "filed_at", "accession", "frame", "fetched_at",
+]
+
 
 def utcnow() -> datetime:
     """Naive UTC timestamp, the convention for every ``fetched_at`` column.
@@ -544,17 +549,35 @@ class Store:
             return 0
         rows = frame.copy()
         rows["fetched_at"] = fetched_at or utcnow()
-        cols = [
-            "fact_id", "cik", "taxonomy", "tag", "unit", "start_date", "end_date", "value",
-            "fy", "fp", "form", "filed_at", "accession", "frame", "fetched_at",
-        ]
-        rows = rows[cols]
+        rows = rows[FACT_COLUMNS]
         self.con.register("new_facts", rows)
         try:
             self.con.execute("INSERT OR REPLACE INTO facts SELECT * FROM new_facts")
         finally:
             self.con.unregister("new_facts")
         return int(len(rows))
+
+    def insert_new_facts(self, frame: pd.DataFrame, *, fetched_at: datetime | None = None) -> int:
+        """Add the facts whose id is not stored yet, leaving stored ones as they are. Returns rows added.
+
+        For a source without filing dates (Yahoo), whose fact ids include the value: a value
+        fetched again keeps the day it was first seen as its ``filed_at``, and a revised value
+        is a new row from the day it appeared, so "as of" reads see what this store knew then.
+        """
+        if frame is None or frame.empty:
+            return 0
+        rows = frame.copy()
+        rows["fetched_at"] = fetched_at or utcnow()
+        rows = rows[FACT_COLUMNS].drop_duplicates("fact_id")
+        self.con.register("new_facts", rows)
+        try:
+            added = self.con.execute(
+                "INSERT INTO facts SELECT n.* FROM new_facts n "
+                "WHERE NOT EXISTS (SELECT 1 FROM facts f WHERE f.fact_id = n.fact_id)"
+            ).fetchone()[0]
+        finally:
+            self.con.unregister("new_facts")
+        return int(added)
 
     def read_facts(self, cik: int, *, as_of: date | None = None) -> pd.DataFrame:
         params: list = [int(cik)]
@@ -596,8 +619,14 @@ class Store:
         return self.con.execute("SELECT * FROM companies ORDER BY ticker").df()
 
     def cik_of(self, ticker: str) -> int | None:
-        """The CIK stored for ``ticker``; None for a company the fundamentals job has not stored."""
-        row = self.con.execute("SELECT cik FROM companies WHERE ticker = ? LIMIT 1", [ticker.upper()]).fetchone()
+        """The SEC CIK stored for ``ticker``; None for a company the fundamentals job has not stored.
+
+        Companies whose accounts come from Yahoo have no CIK: they are stored under a negative
+        id (``universe.yahoo_id``), which this does not return.
+        """
+        row = self.con.execute(
+            "SELECT cik FROM companies WHERE ticker = ? AND cik > 0 LIMIT 1", [ticker.upper()]
+        ).fetchone()
         return int(row[0]) if row else None
 
     # ------------------------------------------------------------------

@@ -20,20 +20,22 @@ import streamlit as st
 from invest.jobs import launcher
 
 
-def _catalog_size() -> int:
+def _catalog_size(args: tuple[str, ...] = ()) -> int:
     from invest.macro.catalog import load_catalog
 
     return len(load_catalog().fetched())
 
 
-def _universe_size() -> int:
+def _universe_size(args: tuple[str, ...] = ()) -> int:
+    """The companies of the universe the build was given (``--universe NAME``), else of the default one."""
     from invest.fundamentals.universe import load_universe
     from invest.jobs.fundamentals import DEFAULT_UNIVERSE
 
-    return len(load_universe()[DEFAULT_UNIVERSE].tickers)
+    name = args[args.index("--universe") + 1] if "--universe" in args[:-1] else DEFAULT_UNIVERSE
+    return len(load_universe()[name].tickers)
 
 
-def _weekly_steps() -> int:
+def _weekly_steps(args: tuple[str, ...] = ()) -> int:
     from invest.jobs.weekly import STEPS
 
     return len(STEPS)
@@ -44,7 +46,7 @@ class Job:
     noun: str  # "Last <noun> from the app"
     doing: str  # shown while it runs
     unit: str  # what the progress bar counts
-    total: Callable[[], int]
+    total: Callable[[tuple[str, ...]], int]  # given the job's command-line options
     ok: str  # outcome on exit status 0
     problems: str  # outcome on any other status, when it did not crash
     problems_note: str
@@ -62,7 +64,8 @@ JOBS = {
     ),
     "fundamentals": Job(
         noun="screener build",
-        doing="Building the screener table: company filings from SEC EDGAR, then prices",
+        doing="Building the screener table: company accounts (SEC EDGAR for the US, Yahoo Finance for Europe), "
+              "then prices",
         unit="companies fetched",
         total=_universe_size,
         ok="finished",
@@ -122,7 +125,7 @@ def follow_if_running() -> None:
         _finish(run)
         return
     job = JOBS[run.name]
-    total = job.total()
+    total = job.total(run.args)
     st.info(
         f"{job.doing}, started {run.started:%H:%M:%S}. The page reloads when it finishes. "
         f"You can leave and come back; the job keeps running."

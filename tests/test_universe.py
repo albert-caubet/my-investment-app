@@ -58,3 +58,53 @@ def test_sector_from_sic(sic, sector):
 def test_is_financial_sic():
     assert U.is_financial_sic("6021") and U.is_financial_sic(6331)
     assert not U.is_financial_sic("3571") and not U.is_financial_sic(None)
+
+
+# --- regions and sources ---------------------------------------------------------------------
+
+YAHOO_SUFFIXES = {"L", "PA", "DE", "SW", "AS", "ST", "CO", "HE", "OL", "MI", "MC", "BR", "IR", "VI", "LS", "WA", "AT"}
+
+
+def test_the_shipped_european_universe_is_yahoo_symbols_and_not_point_in_time():
+    universes = U.load_universe()
+    eu = universes["stoxx600"]
+    assert (eu.region, eu.source, eu.point_in_time) == ("EU", "yahoo", False)
+    assert 550 <= len(eu.tickers) <= 650
+    assert len(set(eu.tickers)) == len(eu.tickers)
+    assert all("." in t and t.rsplit(".", 1)[1] in YAHOO_SUFFIXES for t in eu.tickers)
+    ids, clashes = U.resolve_yahoo_ids(eu.tickers)
+    assert not clashes and len(set(ids.values())) == len(eu.tickers) and max(ids.values()) < 0
+    core = universes["sp500_core"]
+    assert (core.region, core.source, core.point_in_time) == ("US", "edgar", True)
+
+
+def test_parse_universe_reads_region_and_source():
+    base = {"label": "x", "tickers": ["SAP.DE"]}
+    eu = U.parse_universe({"universe": {"eu": {**base, "region": "eu", "source": "yahoo", "point_in_time": False}}})["eu"]
+    assert (eu.region, eu.source, eu.point_in_time) == ("EU", "yahoo", False)
+    assert U.parse_universe({"universe": {"y": {**base, "source": "yahoo"}}})["y"].point_in_time is False
+    assert U.parse_universe({"universe": {"u": base}})["u"].region == "US"
+    with pytest.raises(ValueError, match="not point-in-time"):
+        U.parse_universe({"universe": {"y": {**base, "source": "yahoo", "point_in_time": True}}})
+    with pytest.raises(ValueError, match="source"):
+        U.parse_universe({"universe": {"z": {**base, "source": "bloomberg"}}})
+    with pytest.raises(ValueError, match="region"):
+        U.parse_universe({"universe": {"z": {**base, "region": "ASIA"}}})
+
+
+def test_a_yahoo_companys_id_is_negative_and_the_same_everywhere():
+    assert U.yahoo_id("SAP.DE") == U.yahoo_id("sap.de") < 0
+    assert U.yahoo_id("SAP.DE") != U.yahoo_id("SAP")
+    assert -2**31 <= U.yahoo_id("ZZZZ.L") <= -1  # within DuckDB's INTEGER, like the CIKs it sits beside
+    ids, clashes = U.resolve_yahoo_ids(["SAP.DE", "SAP.DE", "ASML.AS"])
+    assert set(ids) == {"SAP.DE", "ASML.AS"} and clashes == []
+
+
+def test_each_region_keeps_its_own_screener_table():
+    assert U.screener_kind("US") == "screener"  # as before there were regions
+    assert U.screener_kind("EU") == "screener_eu"
+
+
+def test_yahoos_finance_and_real_estate_sectors_are_financial():
+    assert U.is_financial_sector("Financial Services") and U.is_financial_sector("real estate")
+    assert not U.is_financial_sector("technology") and not U.is_financial_sector(None)

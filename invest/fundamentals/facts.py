@@ -11,6 +11,11 @@ Flows come in three shapes: fiscal-year totals, year-to-date totals from 10-Qs,
 and single quarters. Trailing twelve months is the previous fiscal year plus the
 current year-to-date minus the same year-to-date a year earlier; when the pieces
 are not all there, the latest fiscal year is used and the note says so.
+
+Yahoo Finance's items (taxonomy ``yahoo``, stored by ``invest.data.yahoo``) sit in
+the same fallback lists. Yahoo has no filing dates, so its facts are dated the day
+they were first fetched, and it reports its own trailing twelve months (``fp``
+"TTM"), which stand in for the year-to-date arithmetic.
 """
 
 from __future__ import annotations
@@ -20,72 +25,89 @@ from datetime import date, timedelta
 
 import pandas as pd
 
-#: Ordered fallbacks per canonical field. Bare tags are us-gaap.
+#: Ordered fallbacks per canonical field. Bare tags are us-gaap; ``yahoo:`` items are Yahoo
+#: Finance's (its fundamentals time-series names). A company's facts come from one source, so
+#: the order matters only within each.
 FIELDS: dict[str, list[str]] = {
     "revenue": [
         "Revenues", "RevenueFromContractWithCustomerExcludingAssessedTax",
         "RevenueFromContractWithCustomerIncludingAssessedTax", "SalesRevenueNet", "SalesRevenueGoodsNet",
-        "RevenuesNetOfInterestExpense", "ifrs-full:Revenue",
+        "RevenuesNetOfInterestExpense", "ifrs-full:Revenue", "yahoo:TotalRevenue", "yahoo:OperatingRevenue",
     ],
-    "cost_of_revenue": ["CostOfRevenue", "CostOfGoodsAndServicesSold", "CostOfGoodsSold", "ifrs-full:CostOfSales"],
-    "gross_profit": ["GrossProfit", "ifrs-full:GrossProfit"],
-    "operating_income": ["OperatingIncomeLoss", "ifrs-full:ProfitLossFromOperatingActivities"],
+    "cost_of_revenue": ["CostOfRevenue", "CostOfGoodsAndServicesSold", "CostOfGoodsSold", "ifrs-full:CostOfSales",
+                        "yahoo:CostOfRevenue"],
+    "gross_profit": ["GrossProfit", "ifrs-full:GrossProfit", "yahoo:GrossProfit"],
+    "operating_income": ["OperatingIncomeLoss", "ifrs-full:ProfitLossFromOperatingActivities", "yahoo:OperatingIncome",
+                         "yahoo:TotalOperatingIncomeAsReported"],
     "pretax_income": [
         "IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest",
         "IncomeLossFromContinuingOperationsBeforeIncomeTaxesMinorityInterestAndIncomeLossFromEquityMethodInvestments",
-        "ifrs-full:ProfitLossBeforeTax",
+        "ifrs-full:ProfitLossBeforeTax", "yahoo:PretaxIncome",
     ],
     "net_income": [
         "NetIncomeLoss", "ProfitLoss", "NetIncomeLossAvailableToCommonStockholdersBasic",
         "ifrs-full:ProfitLossAttributableToOwnersOfParent", "ifrs-full:ProfitLoss",
+        "yahoo:NetIncome", "yahoo:NetIncomeCommonStockholders",
     ],
     "cfo": [
         "NetCashProvidedByUsedInOperatingActivities", "NetCashProvidedByUsedInOperatingActivitiesContinuingOperations",
-        "ifrs-full:CashFlowsFromUsedInOperatingActivities",
+        "ifrs-full:CashFlowsFromUsedInOperatingActivities", "yahoo:OperatingCashFlow",
+        "yahoo:CashFlowFromContinuingOperatingActivities",
     ],
     "capex": [
         "PaymentsToAcquirePropertyPlantAndEquipment", "PaymentsToAcquireProductiveAssets",
         "PaymentsToAcquirePropertyPlantAndEquipmentAndIntangibleAssets",
         "ifrs-full:PurchaseOfPropertyPlantAndEquipmentClassifiedAsInvestingActivities",
+        "yahoo:CapitalExpenditure", "yahoo:PurchaseOfPPE",
     ],
     "depreciation": [
         "DepreciationDepletionAndAmortization", "DepreciationAndAmortization", "DepreciationAmortizationAndAccretionNet",
-        "Depreciation", "ifrs-full:DepreciationAndAmortisationExpense",
+        "Depreciation", "ifrs-full:DepreciationAndAmortisationExpense", "yahoo:DepreciationAndAmortization",
+        "yahoo:DepreciationAmortizationDepletion", "yahoo:ReconciledDepreciation",
     ],
-    "total_assets": ["Assets", "ifrs-full:Assets"],
-    "current_assets": ["AssetsCurrent", "ifrs-full:CurrentAssets"],
-    "current_liabilities": ["LiabilitiesCurrent", "ifrs-full:CurrentLiabilities"],
-    "total_liabilities": ["Liabilities", "ifrs-full:Liabilities"],
+    "total_assets": ["Assets", "ifrs-full:Assets", "yahoo:TotalAssets"],
+    "current_assets": ["AssetsCurrent", "ifrs-full:CurrentAssets", "yahoo:CurrentAssets"],
+    "current_liabilities": ["LiabilitiesCurrent", "ifrs-full:CurrentLiabilities", "yahoo:CurrentLiabilities"],
+    "total_liabilities": ["Liabilities", "ifrs-full:Liabilities", "yahoo:TotalLiabilitiesNetMinorityInterest"],
     "cash": [
         "CashAndCashEquivalentsAtCarryingValue", "CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents",
-        "CashAndDueFromBanks", "ifrs-full:CashAndCashEquivalents",
+        "CashAndDueFromBanks", "ifrs-full:CashAndCashEquivalents", "yahoo:CashAndCashEquivalents",
+        "yahoo:CashFinancial",
     ],
-    "short_term_investments": ["ShortTermInvestments", "MarketableSecuritiesCurrent", "AvailableForSaleSecuritiesDebtSecuritiesCurrent"],
-    "debt_current": ["LongTermDebtCurrent", "DebtCurrent", "ShortTermBorrowings", "CommercialPaper", "ifrs-full:CurrentBorrowings"],
+    "short_term_investments": ["ShortTermInvestments", "MarketableSecuritiesCurrent", "AvailableForSaleSecuritiesDebtSecuritiesCurrent",
+                               "yahoo:OtherShortTermInvestments"],
+    "debt_current": ["LongTermDebtCurrent", "DebtCurrent", "ShortTermBorrowings", "CommercialPaper", "ifrs-full:CurrentBorrowings",
+                     "yahoo:CurrentDebt", "yahoo:CurrentDebtAndCapitalLeaseObligation"],
     "debt_noncurrent": [
         "LongTermDebtNoncurrent", "LongTermDebtAndCapitalLeaseObligations", "LongTermDebtAndFinanceLeaseObligations",
-        "LongTermDebt", "ifrs-full:NoncurrentBorrowings", "ifrs-full:Borrowings",
+        "LongTermDebt", "ifrs-full:NoncurrentBorrowings", "ifrs-full:Borrowings", "yahoo:LongTermDebt",
+        "yahoo:LongTermDebtAndCapitalLeaseObligation",
     ],
-    "ppe_net": ["PropertyPlantAndEquipmentNet", "ifrs-full:PropertyPlantAndEquipment"],
-    "goodwill": ["Goodwill", "ifrs-full:Goodwill"],
-    "intangibles": ["IntangibleAssetsNetExcludingGoodwill", "ifrs-full:IntangibleAssetsOtherThanGoodwill"],
+    "ppe_net": ["PropertyPlantAndEquipmentNet", "ifrs-full:PropertyPlantAndEquipment", "yahoo:NetPPE"],
+    "goodwill": ["Goodwill", "ifrs-full:Goodwill", "yahoo:Goodwill"],
+    "intangibles": ["IntangibleAssetsNetExcludingGoodwill", "ifrs-full:IntangibleAssetsOtherThanGoodwill",
+                    "yahoo:OtherIntangibleAssets"],
     "equity": [
         "StockholdersEquity", "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest",
-        "ifrs-full:EquityAttributableToOwnersOfParent", "ifrs-full:Equity",
+        "ifrs-full:EquityAttributableToOwnersOfParent", "ifrs-full:Equity", "yahoo:StockholdersEquity",
+        "yahoo:CommonStockEquity",
     ],
-    "retained_earnings": ["RetainedEarningsAccumulatedDeficit"],
+    "retained_earnings": ["RetainedEarningsAccumulatedDeficit", "yahoo:RetainedEarnings"],
     "shares_outstanding": [
         "dei:EntityCommonStockSharesOutstanding", "CommonStockSharesOutstanding",
         "WeightedAverageNumberOfDilutedSharesOutstanding", "ifrs-full:NumberOfSharesOutstanding",
+        "yahoo:OrdinarySharesNumber", "yahoo:ShareIssued",
     ],
-    "dividends": ["PaymentsOfDividendsCommonStock", "PaymentsOfDividends", "ifrs-full:DividendsPaidClassifiedAsFinancingActivities"],
-    "buybacks": ["PaymentsForRepurchaseOfCommonStock", "ifrs-full:PaymentsForPurchaseOfTreasuryShares"],
+    "dividends": ["PaymentsOfDividendsCommonStock", "PaymentsOfDividends", "ifrs-full:DividendsPaidClassifiedAsFinancingActivities",
+                  "yahoo:CashDividendsPaid", "yahoo:CommonStockDividendPaid"],
+    "buybacks": ["PaymentsForRepurchaseOfCommonStock", "ifrs-full:PaymentsForPurchaseOfTreasuryShares",
+                 "yahoo:RepurchaseOfCapitalStock", "yahoo:CommonStockPayments"],
     "interest_expense": [
         "InterestExpense", "InterestExpenseNonoperating", "InterestExpenseDebt", "InterestPaidNet",
-        "ifrs-full:InterestExpense", "ifrs-full:FinanceCosts",
+        "ifrs-full:InterestExpense", "ifrs-full:FinanceCosts", "yahoo:InterestExpense", "yahoo:InterestExpenseNonOperating",
     ],
-    "income_tax": ["IncomeTaxExpenseBenefit", "ifrs-full:IncomeTaxExpenseContinuingOperations"],
-    "eps_diluted": ["EarningsPerShareDiluted", "ifrs-full:DilutedEarningsLossPerShare"],
+    "income_tax": ["IncomeTaxExpenseBenefit", "ifrs-full:IncomeTaxExpenseContinuingOperations", "yahoo:TaxProvision"],
+    "eps_diluted": ["EarningsPerShareDiluted", "ifrs-full:DilutedEarningsLossPerShare", "yahoo:DilutedEPS"],
     "interest_income": ["InterestAndDividendIncomeOperating", "InterestIncomeExpenseNet"],
     "deposits": ["Deposits"],
     "public_float": ["dei:EntityPublicFloat"],
@@ -98,7 +120,8 @@ INSTANT_FIELDS = frozenset({
 })
 SHARE_FIELDS = frozenset({"shares_outstanding"})
 PER_SHARE_FIELDS = frozenset({"eps_diluted"})
-MONETARY_UNITS = ("USD", "EUR", "GBP", "CHF", "JPY", "CAD", "AUD", "SEK", "DKK", "NOK", "HKD", "CNY", "KRW", "INR", "BRL", "MXN")
+#: ``fp`` of a trailing-twelve-month figure the source reports itself (Yahoo does; EDGAR does not).
+TTM = "TTM"
 HISTORY_FIELDS = ("revenue", "net_income", "operating_income", "cfo", "capex", "gross_profit", "cost_of_revenue",
                   "shares_outstanding", "total_assets", "equity", "dividends", "buybacks", "depreciation",
                   "income_tax", "pretax_income", "interest_expense", "debt_noncurrent", "debt_current", "cash",
@@ -125,6 +148,28 @@ def canonical_tags() -> dict[str, set[str]]:
     return out
 
 
+def tag_kinds(taxonomy: str) -> dict[str, str]:
+    """``{tag: kind}`` for every tag of ``taxonomy`` a canonical field reads, in field order.
+
+    The kind says how a source's value is stored: ``flow`` (an amount over a period),
+    ``instant`` (a balance at a date), ``shares`` (a share count at a date) or
+    ``per_share`` (an amount per share over a period).
+    """
+    out: dict[str, str] = {}
+    for name, specs in FIELDS.items():
+        if name in SHARE_FIELDS:
+            kind = "shares"
+        elif name in PER_SHARE_FIELDS:
+            kind = "per_share"
+        else:
+            kind = "instant" if name in INSTANT_FIELDS else "flow"
+        for spec in specs:
+            source, tag = split_tag(spec)
+            if source == taxonomy:
+                out.setdefault(tag, kind)
+    return out
+
+
 def facts_as_of(facts: pd.DataFrame, as_of: date | None) -> pd.DataFrame:
     """Only what had been filed on or before ``as_of``."""
     if as_of is None or facts.empty:
@@ -140,12 +185,18 @@ def _normalise(facts: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+def is_money(unit) -> bool:
+    """Whether a unit is a currency: an ISO 4217 code, three capital letters (USD, EUR, GEL), so
+    accounts in any currency are read and a missing exchange rate is reported, not the figures dropped."""
+    return isinstance(unit, str) and len(unit) == 3 and unit.isascii() and unit.isalpha() and unit.isupper()
+
+
 def _unit_ok(unit: str, field_name: str) -> bool:
     if field_name in SHARE_FIELDS:
         return unit == "shares"
     if field_name in PER_SHARE_FIELDS:
         return "/shares" in unit
-    return unit in MONETARY_UNITS
+    return is_money(unit)
 
 
 def field_rows(facts: pd.DataFrame, field_name: str) -> pd.DataFrame:
@@ -175,8 +226,9 @@ def _best_per_end(rows: pd.DataFrame) -> pd.DataFrame:
 
 
 def _is_fy(rows: pd.DataFrame) -> pd.Series:
+    """Rows spanning a fiscal year; a trailing twelve months spans one too, but is not a fiscal year."""
     days = (rows["end_date"] - rows["start_date"]).dt.days
-    return days.between(*FY_DAYS)
+    return days.between(*FY_DAYS) & (rows["fp"] != TTM)
 
 
 def annual_series(facts: pd.DataFrame, field_name: str) -> tuple[pd.Series, dict[pd.Timestamp, str]]:
@@ -240,11 +292,22 @@ class FlowValue:
 
 def _ttm_one_tag(rows: pd.DataFrame, spec: str) -> FlowValue | None:
     """TTM from the rows of a single tag, so a fiscal year and a year-to-date figure
-    are never mixed across tags that define the concept differently."""
+    are never mixed across tags that define the concept differently.
+
+    A trailing twelve months the source reports itself wins when it ends after the
+    latest fiscal year; an older one is ignored, the fiscal year being newer.
+    """
     rows = rows.assign(days=(rows["end_date"] - rows["start_date"]).dt.days)
+    reported = rows[rows["fp"] == TTM]
+    rows = rows[rows["fp"] != TTM]
     fy_rows = _best_per_end(rows[rows["days"].between(*FY_DAYS)]).sort_values("end_date")
-    latest_end = rows["end_date"].max()
     latest_fy = fy_rows.iloc[-1] if not fy_rows.empty else None
+    if not reported.empty:
+        newest = _best_per_end(reported).sort_values("end_date").iloc[-1]
+        if latest_fy is None or newest["end_date"] > latest_fy["end_date"]:
+            end = newest["end_date"].date()
+            return FlowValue(float(newest["value"]), end, "ttm", spec, f"trailing twelve months to {end}, as reported")
+    latest_end = rows["end_date"].max()
 
     if latest_fy is None:
         return FlowValue(None, latest_end.date(), "none", spec, "no full fiscal year filed yet")
@@ -323,8 +386,14 @@ def _fiscal_year(stamp: pd.Timestamp) -> int:
     return int(stamp.year)
 
 
-def fundamentals_as_of(facts: pd.DataFrame, as_of: date | None = None, *, sic: str | None = None) -> Fundamentals:
-    """Everything the metrics need, using only facts filed on or before ``as_of``."""
+def fundamentals_as_of(facts: pd.DataFrame, as_of: date | None = None, *, sic: str | None = None,
+                       financial: bool = False) -> Fundamentals:
+    """Everything the metrics need, using only facts filed on or before ``as_of``.
+
+    A company is financial by its SIC code (6000 to 6799), by the shape of a bank's
+    accounts, or because the source says so (``financial``: Yahoo's sector, as Yahoo
+    has no SIC codes).
+    """
     cik = int(facts["cik"].iloc[0]) if len(facts) else 0
     known = _normalise(facts_as_of(facts, as_of))
     fund = Fundamentals(cik=cik, as_of=as_of, currency=None)
@@ -401,7 +470,7 @@ def fundamentals_as_of(facts: pd.DataFrame, as_of: date | None = None, *, sic: s
     sic_code = int(sic) if sic and str(sic).isdigit() else None
     has_bank_shape = fund.latest.get("operating_income") is None and (
         fund.latest.get("deposits") is not None or fund.latest.get("interest_income") is not None)
-    fund.is_financial = bool(has_bank_shape or (sic_code is not None and 6000 <= sic_code <= 6799))
+    fund.is_financial = bool(financial or has_bank_shape or (sic_code is not None and 6000 <= sic_code <= 6799))
     if fund.is_financial:
         fund.notes.append("financial company: EBIT-based metrics do not apply; ranked on book value and payout only")
     missing = [f for f in ("revenue", "net_income", "total_assets", "shares_outstanding") if fund.latest.get(f) is None]

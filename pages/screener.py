@@ -1,7 +1,9 @@
 """Screener page: ranked companies from the stored metrics table, charts of those ticked, and the detail of one.
 
-Reads the latest ``screener`` snapshot written by ``python -m invest.jobs.fundamentals``
-and the facts behind each company. Every row shows its inputs; the footer says
+A selector at the top picks the market: the US table, built from SEC EDGAR filings
+(point-in-time), or the European one, built from Yahoo Finance (not point-in-time).
+Each is the latest snapshot of its region written by ``python -m invest.jobs.fundamentals``,
+read with the facts behind each company. Every row shows its inputs; the footer says
 which universe, as of when, and whether the data is point-in-time. The build
 button runs that same command in a separate process, so fetching happens only
 when asked for. The company in the detail can be put on the watchlist, which the
@@ -27,7 +29,8 @@ from invest.data.cache import Store
 from invest.data.edgar import SEC_USER_AGENT_HELP, user_agent_ok
 from invest.fundamentals import screens
 from invest.fundamentals.facts import fundamentals_as_of
-from invest.fundamentals.universe import SURVIVORSHIP_NOTE
+from invest.fundamentals.universe import SURVIVORSHIP_NOTE, load_universe, screener_kind
+from invest.jobs.fundamentals import COMPARE_CURRENCY, DEFAULT_UNIVERSE, DEFAULT_UNIVERSES
 from invest.paths import db_path
 
 st.title("Value screener")
@@ -35,14 +38,26 @@ st.title("Value screener")
 job_panel.follow_if_running()  # a job holds the database; nothing below may read it
 
 DB = db_path()
-BUILD_HELP = (
-    "Runs `python -m invest.jobs.fundamentals` in the background: the filings of every company in the "
-    "universe from SEC EDGAR, then their prices. It takes several minutes."
-)
+# Kept in the URL (?screener_market=EU), so a reload or a bookmark opens the same market.
+region = st.segmented_control("Market", list(DEFAULT_UNIVERSES), default="US", required=True, key="screener_market",
+                              bind="query-params", help=screener_help.MARKET_HELP)
+UNIVERSE = load_universe()[DEFAULT_UNIVERSES[region]]
+FROM_EDGAR = UNIVERSE.source == "edgar"
+#: The build of this market's universe; the command line builds the US one without being told.
+JOB_ARGS = () if UNIVERSE.name == DEFAULT_UNIVERSE else ("--universe", UNIVERSE.name)
+COMMAND = " ".join(("python -m invest.jobs.fundamentals",) + JOB_ARGS)
+FETCHES = ("the filings of every company in the universe from SEC EDGAR" if FROM_EDGAR
+           else "the accounts of every company in the universe from Yahoo Finance")
+TAKES = "several minutes" if FROM_EDGAR else "about a quarter of an hour"
+BUILD_HELP = f"Runs `{COMMAND}` in the background: {FETCHES}, then their prices. It takes {TAKES}."
 WHAT_BUILDING_DOES = (
-    "Building it fetches the filings of every company in the universe from SEC EDGAR, then their prices, "
-    "and takes several minutes. Outside the app, `python -m invest.jobs.fundamentals` does the same thing."
+    f"Building it fetches {FETCHES}, then their prices, and takes {TAKES}. Outside the app, "
+    f"`{COMMAND}` does the same thing."
 )
+#: The market cap column: one currency for a market whose accounts are in many (euros for Europe).
+CAP_CURRENCY = COMPARE_CURRENCY.get(region)
+CAP_COLUMN = f"market_cap_{CAP_CURRENCY.lower()}" if CAP_CURRENCY else "market_cap"
+CAP_LABEL = f"Mkt cap (bn {CAP_CURRENCY})" if CAP_CURRENCY else "Mkt cap (bn)"
 
 
 def _edgar_ready() -> bool:
@@ -50,14 +65,19 @@ def _edgar_ready() -> bool:
     return user_agent_ok(secrets.sec_user_agent())
 
 
+def _ready() -> bool:
+    """Whether the build can run: EDGAR answers only a request naming a contact; Yahoo needs nothing."""
+    return _edgar_ready() if FROM_EDGAR else True
+
+
 def _offer_build(message: str) -> None:
     """Nothing to show yet: say why, offer the build, and stop the page."""
-    ready = _edgar_ready()
+    ready = _ready()
     st.info(message)
     if not ready:
         st.warning(f"The build needs one setting first.\n\n{SEC_USER_AGENT_HELP}\n\nThen reload this page.")
-    job_panel.start_button("fundamentals", "Build the screener table", type="primary", disabled=not ready,
-                           help=BUILD_HELP)
+    job_panel.start_button("fundamentals", "Build the screener table", job_args=JOB_ARGS, type="primary",
+                           disabled=not ready, help=BUILD_HELP)
     job_panel.last_result("fundamentals")
     st.stop()
 
@@ -74,13 +94,14 @@ def _version() -> float:
 
 
 @st.cache_data(ttl=600, show_spinner="Reading the screener table…")
-def _load(db: str, version: float) -> dict | None:
+def _load(db: str, version: float, kind: str) -> dict | None:
+    """The latest table of one market (its snapshot ``kind``) and the rows of the one before."""
     with Store(db, read_only=True) as store:
-        snap = store.load_snapshot("screener")
+        snap = store.load_snapshot(kind)
         if snap is None:
             return None
         run_id, created_at, payload = snap
-        previous = store.load_snapshot("screener", offset=1)
+        previous = store.load_snapshot(kind, offset=1)
     return {
         "run_id": run_id,
         "created_at": created_at,
@@ -105,7 +126,7 @@ def _prices(db: str, version: float, symbol: str) -> tuple[pd.Series, str | None
 
 
 try:
-    data = _load(str(DB), _version())
+    data = _load(str(DB), _version(), screener_kind(region))
 except Exception as exc:
     st.warning(f"Could not read the market database: {exc}. If a job is running, wait for it and reload.")
     st.stop()
@@ -121,9 +142,11 @@ if table.empty:
 left, right = st.columns([5, 1], vertical_alignment="center")
 left.caption(f"Table built {pd.Timestamp(data['created_at']):%Y-%m-%d} for {payload.get('universe_label')}; "
              f"details at the bottom of the page.")
-ready = _edgar_ready()
+if not payload.get("point_in_time", True):
+    left.caption(screener_help.NOT_POINT_IN_TIME)
+ready = _ready()
 with right:
-    job_panel.start_button("fundamentals", "Rebuild now", disabled=not ready,
+    job_panel.start_button("fundamentals", "Rebuild now", job_args=JOB_ARGS, disabled=not ready,
                            help=BUILD_HELP if ready else f"Needs one setting first.\n\n{SEC_USER_AGENT_HELP}")
 job_panel.last_result("fundamentals")
 
@@ -146,12 +169,13 @@ if screen in ("magic_formula", "quality_value"):
     options["exclude_financials"] = exclude_fin
 if screen == "magic_formula" and min_cap_bn > 0:
     options["min_market_cap"] = min_cap_bn * 1e9
+    options["cap_column"] = CAP_COLUMN
 if screen == "quality_value":
     options["sector_neutral"] = sector_neutral
 
 ranked, excluded = screens.run_screen(screen, table, filter_traps=filter_traps, **options)
-if screen != "magic_formula" and min_cap_bn > 0 and "market_cap" in ranked.columns:
-    ranked = ranked[pd.to_numeric(ranked["market_cap"], errors="coerce") >= min_cap_bn * 1e9]
+if screen != "magic_formula" and min_cap_bn > 0 and CAP_COLUMN in ranked.columns:
+    ranked = ranked[pd.to_numeric(ranked[CAP_COLUMN], errors="coerce") >= min_cap_bn * 1e9]
 
 # ==========================================================================================
 # Ranked list and charts
@@ -170,7 +194,7 @@ SHOW = [
     ("ticker", "Ticker", None),
     ("name", "Name", None),
     ("sector", "Sector", None),
-    ("market_cap", "Mkt cap (bn)", None),
+    (CAP_COLUMN, CAP_LABEL, "{:,.1f}"),
     ("earnings_yield", "EBIT/EV", "{:.1%}"),
     ("ev_ebitda", "EV/EBITDA", "{:.1f}"),
     ("roic", "ROIC", "{:.1%}"),
@@ -197,13 +221,12 @@ def _ranked_table() -> list[str]:
     """The ranked list, a checkbox on each row. Returns the tickers ticked in it, in rank order."""
     st.subheader(f"{screen_label}: {len(ranked)} companies")
     view = ranked.copy()
-    if "market_cap" in view.columns:
-        view["market_cap"] = pd.to_numeric(view["market_cap"], errors="coerce") / 1e9
+    if CAP_COLUMN in view.columns:
+        view[CAP_COLUMN] = pd.to_numeric(view[CAP_COLUMN], errors="coerce") / 1e9
     columns = [c for c, _, _ in SHOW if c in view.columns]
     formats = {c: f for c, _, f in SHOW if c in view.columns and f}
     labels = {c: label for c, label, _ in SHOW}
-    styled = view[columns].rename(columns=labels).style.format(
-        {labels[c]: f for c, f in formats.items()} | {"Mkt cap (bn)": "{:,.1f}"}, na_rep="–")
+    styled = view[columns].rename(columns=labels).style.format({labels[c]: f for c, f in formats.items()}, na_rep="–")
     tickers = ranked["ticker"].tolist()
     in_url = set(charts.in_url(CHART_URL))
     shown_labels = [labels[c] for c in columns]
@@ -312,7 +335,13 @@ if ranked.empty:
 tickers = ranked["ticker"].tolist()
 
 
-def _watch(ticker: str, cik: int, label: str, screen_name: str) -> None:
+def _sec_cik(company) -> int | None:
+    """The company's SEC CIK; None for one from Yahoo, which is stored under a negative id instead."""
+    cik = int(company["cik"])
+    return cik if cik > 0 else None
+
+
+def _watch(ticker: str, cik: int | None, label: str, screen_name: str) -> None:
     try:
         watchlist.add(ticker, cik=cik, note=f"from {screen_name} on {datetime.now():%Y-%m-%d}")
     except Exception as exc:
@@ -344,7 +373,7 @@ else:
                       args=(pick, _company_label(pick)), help="It is on the watchlist, which the Watchlist page charts.")
     else:
         picker.button("Add to watchlist", icon=":material/star_border:", key="watch_add", on_click=_watch,
-                      args=(pick, int(row["cik"]), _company_label(pick), screen),
+                      args=(pick, _sec_cik(row), _company_label(pick), screen),
                       help="The Watchlist page charts every stock on the watchlist.")
 def _money(value, currency: str | None) -> str:
     """A per-share amount with its currency: the price and the values can be in different ones."""
@@ -495,9 +524,10 @@ def _detail_charts(ticker: str) -> None:
             st.markdown(f"**{title}**")
             _history_chart(title, unit, fields, shown, currency)
     if drawn:
-        st.caption(f"Fiscal-year history as filed, latest restatement. Money in millions of {currency}, the currency "
-                   f"of the accounts; shares in millions; EPS per share, as filed. A gap is a year without the "
-                   f"figure. Click a legend entry to hide its line.")
+        as_given = "as filed, latest restatement" if FROM_EDGAR else "as Yahoo Finance gives it, restatements included"
+        st.caption(f"Fiscal-year history {as_given}. Money in millions of {currency}, the currency of the accounts; "
+                   f"shares in millions; EPS per share, as reported. A gap is a year without the figure. Click a "
+                   f"legend entry to hide its line.")
 
 
 _detail_charts(pick)
@@ -522,7 +552,9 @@ with st.expander("Piotroski checks, tags used and notes"):
         st.write(", ".join(f"{k}: {'yes' if v else ('no' if v is False else 'n/a')}" for k, v in checks.items()))
     tags = row.get("tags") or {}
     if isinstance(tags, dict):
-        st.dataframe(pd.DataFrame({"field": list(tags), "XBRL tag": list(tags.values())}), width="stretch", hide_index=True)
+        source = "XBRL tag" if FROM_EDGAR else "Yahoo Finance item"
+        st.dataframe(pd.DataFrame({"field": list(tags), source: [str(t).removeprefix("yahoo:") for t in tags.values()]}),
+                     width="stretch", hide_index=True)
     notes = row.get("notes") or []
     if notes:
         st.write("; ".join(str(n) for n in notes))

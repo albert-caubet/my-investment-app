@@ -72,6 +72,33 @@ def test_the_build_button_runs_the_job_and_reports_the_outcome(clean, monkeypatc
     assert len(list((clean / "logs").glob("fundamentals_*.log"))) == 1
 
 
+# One company line in the shape the European build prints, then the options it was given.
+FAKE_EUROPEAN = [sys.executable, "-c", "import sys; print('  ULVR.L: 219 facts, 219 new, consumer defensive'); "
+                                       "print(sys.argv[1:])"]
+
+
+def test_the_european_build_runs_its_universe_without_the_sec_setting(clean, monkeypatch):
+    monkeypatch.setattr("invest.secrets.sec_user_agent", lambda: None)
+    monkeypatch.setitem(launcher.JOBS, "fundamentals", FAKE_EUROPEAN)
+    at = AppTest.from_file(str(ROOT / "app.py"), default_timeout=120).run().switch_page("pages/screener.py")
+    at.query_params["screener_market"] = "EU"
+    at.run()
+    button = _build_button(at)
+    assert not button.disabled and "--universe stoxx600" in button.help
+    button.click().run()
+    assert not at.exception
+    (log,) = (clean / "logs").glob("fundamentals_*.log")
+    assert "['--universe', 'stoxx600']" in log.read_text(encoding="utf-8")
+
+
+def test_the_progress_counts_the_universe_being_built():
+    from invest.fundamentals.universe import load_universe
+
+    universes = load_universe()
+    assert job_panel._universe_size(("--universe", "stoxx600")) == len(universes["stoxx600"].tickers)
+    assert job_panel._universe_size() == len(universes["sp500_core"].tickers)
+
+
 def _report():
     at = AppTest.from_file(str(ROOT / "app.py"), default_timeout=120).run()
     return at.switch_page("pages/report.py").run()

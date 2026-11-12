@@ -91,3 +91,9 @@ def test_unknown_screen_and_entrants():
     entrants, dropouts = sc.entrants_and_dropouts(["A", "B", "C"], ["B", "C", "D"], top_n=3)
     assert entrants == ["A"] and dropouts == ["D"]
     assert sc.entrants_and_dropouts(["A"], None) == ([], [])
+
+
+def test_the_minimum_market_cap_applies_to_the_column_given():
+    table = _table().assign(market_cap_eur=lambda t: t["market_cap"] / 2)
+    assert set(sc.magic_formula(table, min_market_cap=4e9)["ticker"]) == {"A", "B", "C", "D"}
+    assert set(sc.magic_formula(table, min_market_cap=4e9, cap_column="market_cap_eur")["ticker"]) == {"A", "B", "D"}

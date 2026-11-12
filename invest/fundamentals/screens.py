@@ -49,17 +49,19 @@ def rank_desc(values: pd.Series) -> pd.Series:
     return values.rank(ascending=False, method="min", na_option="bottom")
 
 
-def magic_formula(table: pd.DataFrame, *, min_market_cap: float | None = None, exclude_financials: bool = True) -> pd.DataFrame:
+def magic_formula(table: pd.DataFrame, *, min_market_cap: float | None = None, exclude_financials: bool = True,
+                  cap_column: str = "market_cap") -> pd.DataFrame:
     """Greenblatt: rank on earnings yield and on ROIC, sum the ranks, lowest sum first.
 
     Financials are excluded by default, as in the book: EBIT and invested capital
-    do not describe a bank.
+    do not describe a bank. ``min_market_cap`` applies to ``cap_column``, which is
+    ``market_cap_eur`` in a table whose accounts are in many currencies.
     """
     rows = table.copy()
     if exclude_financials and "is_financial" in rows.columns:
         rows = rows[~rows["is_financial"].fillna(False).astype(bool)]
     if min_market_cap is not None:
-        rows = rows[_numeric(rows, "market_cap") >= min_market_cap]
+        rows = rows[_numeric(rows, cap_column) >= min_market_cap]
     rows = rows[_numeric(rows, "earnings_yield").notna() & _numeric(rows, "roic").notna()].copy()
     rows["ey_rank"] = rank_desc(_numeric(rows, "earnings_yield"))
     rows["roic_rank"] = rank_desc(_numeric(rows, "roic"))

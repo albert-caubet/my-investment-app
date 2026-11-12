@@ -132,6 +132,19 @@ def test_the_change_in_the_list_follows_the_time_range(canned):
     assert table.iloc[0]["Change (Max)"] == pytest.approx(mmm.iloc[-1] / mmm.iloc[0] - 1)
 
 
+def test_a_european_stock_shows_the_european_tables_figures(canned, seeded_db):
+    with Store(seeded_db) as store:
+        store.save_snapshot(store.start_run("fundamentals"), "screener_eu", {"rows": [
+            {"ticker": "SAP.DE", "name": "SAP SE", "value_conservative": 180.0, "mos_conservative": 0.1, "f_score": 8},
+        ]})
+    at = _page()
+    assert not at.exception
+    table = at.dataframe[0].value.set_index("Symbol")
+    assert (table.loc["SAP.DE", "Value / share"], table.loc["SAP.DE", "F-score"]) == (180.0, 8)
+    assert table.loc["MMM", "Value / share"] == 150.0  # the US table's, read as before
+    assert any("(US) and" in c.value and "(EU)" in c.value for c in at.caption)
+
+
 def test_without_a_screener_table_the_list_leaves_its_columns_out(canned, tmp_path, monkeypatch):
     path = tmp_path / "bare.duckdb"
     _add(path, "AAPL")

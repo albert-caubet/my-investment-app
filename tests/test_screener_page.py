@@ -2,6 +2,7 @@
 
 import json
 import zlib
+from datetime import date
 from pathlib import Path
 
 import numpy as np
@@ -10,13 +11,36 @@ import pytest
 from streamlit.testing.v1 import AppTest
 
 import charts
+from invest.data import yahoo
 from invest.data.cache import Store
 from invest.data.edgar import facts_frame
-from invest.fundamentals.universe import Universe
+from invest.fundamentals.facts import tag_kinds
+from invest.fundamentals.universe import Universe, yahoo_id
 from invest.jobs import fundamentals as job
 
 ROOT = Path(__file__).resolve().parents[1]
 FIX = ROOT / "tests" / "fixtures"
+EUROPE = Universe("stoxx600", "STOXX Europe 600 (test)", ("SHEL.L", "ULVR.L", "HSBA.L"), point_in_time=False,
+                  region="EU", source="yahoo")
+#: Shell's revenue fell three years running (a value trap), HSBC is a bank: Unilever alone is ranked.
+EUROPEANS = (("SHEL.L", "Shell plc", "energy"), ("ULVR.L", "Unilever PLC", "consumer defensive"),
+             ("HSBA.L", "HSBC Holdings plc", "financial services"))
+
+
+def _seed_europe(store: Store, days: pd.DatetimeIndex, rng) -> None:
+    """Three London listings from saved Yahoo responses, quoted in pence, and the rates to convert them."""
+    kinds = tag_kinds("yahoo")
+    for symbol, name, sector in EUROPEANS:
+        payload = json.loads((FIX / f"yahoo_timeseries_{symbol.lower().replace('.', '_')}.json").read_text(encoding="utf-8"))
+        store.insert_new_facts(yahoo.fundamentals_facts(payload, yahoo_id(symbol), kinds, seen_on=date(2026, 9, 1)))
+        store.upsert_companies([{"cik": yahoo_id(symbol), "ticker": symbol, "name": name, "sic": None, "sector": sector,
+                                 "exchange": "LSE"}])
+        pence = 3000 * np.cumprod(1 + rng.normal(0.0003, 0.01, len(days)))
+        store.upsert_prices(symbol, pd.DataFrame({"close": pence, "adj_close": pence}, index=days), currency="GBp")
+    for symbol, per_dollar in (("GBP=X", 0.75), ("EUR=X", 0.90)):
+        store.upsert_prices(symbol, pd.DataFrame({"close": per_dollar}, index=days), currency=symbol[:3])
+    table = job.build_metrics_table(store, EUROPE)
+    job.save_screener_snapshot(store, store.start_run("fundamentals"), EUROPE, table, as_of=None)
 
 
 def _seed(path: Path) -> None:
@@ -37,6 +61,7 @@ def _seed(path: Path) -> None:
         run = store.start_run("fundamentals")
         job.save_screener_snapshot(store, run, universe, table, as_of=None)
         store.add_watch("MMM", cik=66740, note="seeded")
+        _seed_europe(store, days, rng)
 
 
 @pytest.fixture
@@ -356,3 +381,78 @@ def test_the_detail_shows_epv_and_dcf_with_their_currencies(seeded_db):
     assert "Greenwald" in metrics["EPV / share"].proto.help
     assert "terminal value" in metrics["DCF / share"].proto.help
     assert "lower" in metrics["Margin of safety"].proto.help
+
+
+# --- the market selector: US or Europe -------------------------------------------------------
+
+
+def _europe() -> AppTest:
+    """The Screener opened from a URL that picks the European market."""
+    at = _app().run().switch_page("pages/screener.py")
+    at.query_params["screener_market"] = "EU"
+    return at.run()
+
+
+def test_the_page_opens_on_the_us_market(seeded_db):
+    at = _screener(_app().run())
+    assert at.button_group(key="screener_market").value == "US"
+    assert "**EU**" in at.button_group(key="screener_market").help
+    table = at.dataframe[0].value
+    assert set(table["Ticker"]) <= {"MMM", "SAP"} and "Mkt cap (bn)" in table.columns
+    assert not any("Not point-in-time" in c.value for c in at.caption)
+
+
+def test_the_european_market_shows_its_own_table_labelled_not_point_in_time(seeded_db):
+    at = _europe()
+    assert not at.exception
+    table = at.dataframe[0].value
+    assert table["Ticker"].tolist() == ["ULVR.L"]
+    assert "Mkt cap (bn EUR)" in table.columns and "Mkt cap (bn)" not in table.columns
+    assert 10 < table["Mkt cap (bn EUR)"].iloc[0] < 10_000  # in billions of euros
+    (traps,) = [d.value for d in at.dataframe if "reason" in d.value.columns]
+    assert traps.set_index("ticker").loc["SHEL.L", "reason"] == "revenue fell in each of the last three years"
+    captions = " ".join(c.value for c in at.caption)
+    assert "STOXX Europe 600 (test)" in captions
+    assert "Not point-in-time" in captions and "Fundamentals for this universe are not point-in-time." in captions
+    assert "Rebuild now" in [b.label for b in at.button]
+
+
+def test_switching_the_market_shows_the_other_table_and_back(seeded_db):
+    at = _screener(_app().run())
+    at.button_group(key="screener_market").set_value("EU").run()
+    assert not at.exception
+    assert at.dataframe[0].value["Ticker"].tolist() == ["ULVR.L"]
+    at.button_group(key="screener_market").set_value("US").run()
+    assert set(at.dataframe[0].value["Ticker"]) <= {"MMM", "SAP"}
+
+
+def test_a_european_companys_detail_names_yahoos_items_and_its_currencies(seeded_db):
+    at = _europe()
+    metrics = {m.label: m for m in at.metric}
+    assert metrics["Price"].value.endswith(" GBp")  # London quotes in pence
+    assert metrics["EPV / share"].value.endswith(" EUR")  # Unilever's accounts
+    (items,) = [d.value for d in at.dataframe if "Yahoo Finance item" in d.value.columns]
+    assert items.set_index("field").loc["revenue", "Yahoo Finance item"] == "TotalRevenue"
+    figures = _history_figures(at)
+    assert figures["Revenue and profit"]["layout"]["yaxis"]["title"]["text"] == "EUR m"
+    assert any("as Yahoo Finance gives it" in c.value for c in at.caption)
+
+
+def test_a_european_company_goes_on_the_watchlist_without_a_cik(seeded_db):
+    at = _europe()
+    at.button(key="watch_add").click().run()
+    assert not at.exception
+    assert pd.isna(_watched(seeded_db).set_index("symbol").loc["ULVR.L", "cik"])
+
+
+def test_without_a_european_table_the_page_offers_its_build_without_the_sec_setting(tmp_path, monkeypatch):
+    path = tmp_path / "us_only.duckdb"
+    with Store(path):
+        pass
+    monkeypatch.setenv("INVEST_DB", str(path))
+    monkeypatch.setattr("invest.secrets.sec_user_agent", lambda: None)
+    at = _europe()
+    assert not at.exception
+    assert any("Yahoo Finance" in i.value and "--universe stoxx600" in i.value for i in at.info)
+    assert not next(b for b in at.button if b.label == "Build the screener table").disabled
+    assert not at.warning

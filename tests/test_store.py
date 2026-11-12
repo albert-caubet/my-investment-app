@@ -166,3 +166,25 @@ def test_read_only_store_cannot_write(tmp_path):
         assert ro.read_series("X").iloc[0] == 1.0
         with pytest.raises(Exception):
             ro.upsert_series("X", {"2026-01-02": 2.0}, source="test")
+
+
+def _yahoo_fact(fact_id: str, value: float, seen: date) -> dict:
+    return {"fact_id": fact_id, "cik": -5, "taxonomy": "yahoo", "tag": "TotalRevenue", "unit": "EUR",
+            "start_date": date(2025, 1, 1), "end_date": date(2025, 12, 31), "value": value, "fy": 2025, "fp": "FY",
+            "form": "Yahoo annual", "filed_at": seen, "accession": f"yahoo-{seen:%Y%m%d}", "frame": None}
+
+
+def test_new_facts_keep_the_day_they_were_first_seen(store):
+    assert store.insert_new_facts(pd.DataFrame([_yahoo_fact("a", 100.0, date(2026, 11, 1))])) == 1
+    # fetched again a week later: the same value, and a restated one
+    again = pd.DataFrame([_yahoo_fact("a", 100.0, date(2026, 11, 8)), _yahoo_fact("b", 101.0, date(2026, 11, 8))])
+    assert store.insert_new_facts(again) == 1
+    stored = store.read_facts(-5).set_index("fact_id")
+    assert pd.Timestamp(stored.loc["a", "filed_at"]).date() == date(2026, 11, 1)
+    assert store.read_facts(-5, as_of=date(2026, 11, 5))["value"].tolist() == [100.0]
+    assert store.insert_new_facts(pd.DataFrame()) == 0
+
+
+def test_a_company_from_yahoo_has_no_cik(store):
+    store.upsert_companies([{"cik": -12345, "ticker": "SAP.DE", "name": "SAP SE"}])
+    assert store.cik_of("SAP.DE") is None

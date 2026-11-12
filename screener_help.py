@@ -8,6 +8,30 @@ there, and the text here with it. Streamlit renders the texts as Markdown.
 
 from __future__ import annotations
 
+#: The help on the market selector at the top of the page.
+MARKET_HELP = """\
+Which table to show, each built on its own from a different source.
+
+**US**: about 150 of the largest S&P 500 companies, from their filings with the SEC \
+(EDGAR). Point-in-time: every figure carries the date it was filed, so a table can be \
+built as of a past date using only what was public then.
+
+**EU**: the STOXX Europe 600, the 600 largest listed companies of developed Europe \
+(Britain, Switzerland and the Nordic countries included), from Yahoo Finance. Not \
+point-in-time: Yahoo gives no filing dates, keeps four or five fiscal years and replaces \
+figures when they are restated. Accounts are in many currencies (euros, pounds, Swiss \
+francs, kronor), so market caps are compared in euros; the ratios do not depend on the \
+currency.
+
+The screens, filters and measures work the same on both.
+"""
+
+#: Under the build date of a table whose accounts are not point-in-time.
+NOT_POINT_IN_TIME = (
+    ":orange-badge[:material/history: Not point-in-time] The accounts are Yahoo Finance's as they stood when "
+    "the table was built: no filing dates, restated figures in place of the originals, four or five fiscal years."
+)
+
 #: The help on the Screen dropdown: every screen it offers.
 SCREEN_HELP = """\
 A **screen** sorts the companies of the universe by a rule, so that the ones worth a closer \
@@ -43,9 +67,10 @@ rather than by borrowing.
 """
 
 MIN_CAP_HELP = """\
-Leaves out companies whose market value is below this, in billions of the currency of \
-their accounts. Smaller companies are often cheaper and less followed, but their data \
-is patchier and their shares harder to trade. 0 keeps every company.
+Leaves out companies whose market value is below this, in billions: of the currency of \
+their accounts for the US table, of euros for the European one (converted at the rate of \
+the day of the price). Smaller companies are often cheaper and less followed, but their \
+data is patchier and their shares harder to trade. 0 keeps every company.
 """
 
 EXCLUDE_FINANCIALS_HELP = """\
@@ -76,8 +101,9 @@ companies keeps the whole-table z-score.
 
 #: The help on the company detail's figures.
 PRICE_HELP = """\
-The latest close stored by the screener build, in the currency the shares are quoted in \
-(for a foreign company listed in the US, dollars). As of {date}.
+The latest close stored by the screener build, in the currency the shares are quoted in: \
+dollars for a US listing (a foreign company's included), pence (GBp) for most London \
+ones. As of {date}.
 """
 
 MARKET_CAP_HELP = """\
@@ -316,14 +342,17 @@ With "Sector-neutral" ticked, each z-score compares the company with its own sec
 
 The price is today's; the accounts are as old as this date. Companies file their annual \
 report up to two to three months after the year ends, and quarterly ones about six \
-weeks after the quarter. A date much older than that means a filing is missing, and \
-the measures compare a fresh price with stale accounts.
+weeks after the quarter; many European companies report only every half-year. A date \
+much older than that means a report is missing, and the measures compare a fresh price \
+with stale accounts.
 """,
     "Basis": """\
 **Basis** of the profit and cash-flow figures:
 
 - **ttm**, trailing twelve months: the last fiscal year, plus this year's quarters so \
-far, less the same quarters a year earlier. The most recent full year of business.
+far, less the same quarters a year earlier. The most recent full year of business. For \
+European companies, Yahoo Finance's own trailing figure, built the same way from \
+quarterly or half-year reports.
 - **annual**: the last fiscal year alone, when the quarters needed for a TTM figure are \
 not in the filings.
 

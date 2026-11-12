@@ -56,6 +56,7 @@ class JobRun:
     log_path: Path
     started: datetime
     process: subprocess.Popen = field(repr=False)
+    args: tuple[str, ...] = ()  # the options given after the job's command, e.g. ("--universe", "stoxx600")
 
     @property
     def running(self) -> bool:
@@ -129,4 +130,4 @@ def start(
             stdin=subprocess.DEVNULL,
             creationflags=flags,
         )
-    return JobRun(name, command, log_path, started, process)
+    return JobRun(name, command, log_path, started, process, tuple(args))

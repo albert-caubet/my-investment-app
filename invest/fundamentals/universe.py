@@ -1,16 +1,22 @@
 """The screener universe: tickers from ``config/universe.toml``, resolved to CIKs.
 
-The shipped list is today's members of an index, so it carries survivorship
-bias: companies that left the index (often by failing) are not in it, and any
-backtest over it is flattered. The report says so wherever the universe is named.
-A maintained constituents CSV with a ``ticker`` column can replace the list.
+The shipped lists are today's members of an index, so they carry survivorship
+bias: companies that left the index (often by failing) are not in them, and any
+backtest over them is flattered. The report says so wherever the universe is named.
+A maintained constituents CSV with a ``ticker`` column can replace a list.
+
+Each universe has a ``region``, the Screener page's US or EU, and a ``source`` for
+its accounts: ``edgar``, SEC filings by CIK, point-in-time; or ``yahoo``, Yahoo
+Finance by symbol, never point-in-time. A company from Yahoo has no CIK and is
+stored under a negative id derived from its symbol (``yahoo_id``).
 """
 
 from __future__ import annotations
 
 import csv
 import tomllib
-from dataclasses import dataclass
+import zlib
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import pandas as pd
@@ -22,6 +28,11 @@ SURVIVORSHIP_NOTE = (
     "Universe is a list of current index members: survivorship bias, since companies that "
     "left the index are absent. Not a point-in-time constituent history."
 )
+SOURCES = ("edgar", "yahoo")
+REGIONS = ("US", "EU")
+#: Yahoo's sectors for companies whose accounts EBIT-based measures do not describe: the
+#: counterpart of SIC 6000 to 6799 (finance, insurance, real estate) on EDGAR.
+FINANCIAL_SECTORS = frozenset({"financial services", "real estate"})
 
 
 @dataclass(frozen=True)
@@ -31,7 +42,9 @@ class Universe:
     tickers: tuple[str, ...]
     note: str = ""
     csv: str | None = None
-    point_in_time: bool = True  # False for yfinance-fundamentals coverage
+    point_in_time: bool = True  # only EDGAR's accounts are
+    region: str = "US"
+    source: str = "edgar"
 
 
 def parse_universe(payload: dict) -> dict[str, Universe]:
@@ -41,13 +54,25 @@ def parse_universe(payload: dict) -> dict[str, Universe]:
         csv_path = body.get("csv")
         if not tickers and not csv_path:
             raise ValueError(f"universe {name!r} has neither tickers nor a csv")
+        source = str(body.get("source", "edgar")).lower()
+        if source not in SOURCES:
+            raise ValueError(f"universe {name!r}: source must be one of {', '.join(SOURCES)}, not {source!r}")
+        region = str(body.get("region", "US")).upper()
+        if region not in REGIONS:
+            raise ValueError(f"universe {name!r}: region must be one of {', '.join(REGIONS)}, not {region!r}")
+        point_in_time = bool(body.get("point_in_time", source == "edgar"))
+        if point_in_time and source != "edgar":
+            raise ValueError(f"universe {name!r}: Yahoo Finance accounts are not point-in-time; "
+                             f"set point_in_time = false")
         out[name] = Universe(
             name=name,
             label=str(body.get("label", name)),
             tickers=tickers,
             note=str(body.get("note", "")),
             csv=str(csv_path) if csv_path else None,
-            point_in_time=bool(body.get("point_in_time", True)),
+            point_in_time=point_in_time,
+            region=region,
+            source=source,
         )
     if not out:
         raise ValueError("no [universe.*] tables")
@@ -77,8 +102,40 @@ def load_universe(path: Path = UNIVERSE_PATH) -> dict[str, Universe]:
                 for t in load_tickers_csv(csv_path):
                     if t not in tickers:
                         tickers.append(t)
-        resolved[name] = Universe(name, uni.label, tuple(tickers), uni.note, uni.csv, uni.point_in_time)
+        resolved[name] = replace(uni, tickers=tuple(tickers))
     return resolved
+
+
+def screener_kind(region: str) -> str:
+    """The snapshot kind a region's screener table is stored under: ``screener`` for the US, as
+    before there were regions, so the weekly report keeps reading the US table."""
+    return "screener" if region == "US" else f"screener_{region.lower()}"
+
+
+def yahoo_id(symbol: str) -> int:
+    """The id a company from Yahoo is stored under in place of a CIK: negative, so it never
+    clashes with a CIK, and derived from the symbol, so it is the same in every database."""
+    return -1 - (zlib.crc32(symbol.upper().encode()) & 0x7FFFFFFF)
+
+
+def resolve_yahoo_ids(symbols) -> tuple[dict[str, int], list[str]]:
+    """``{symbol: id}``, plus the symbols whose id an earlier one already has (reported, never merged)."""
+    found: dict[str, int] = {}
+    taken: dict[int, str] = {}
+    clashes: list[str] = []
+    for symbol in symbols:
+        entity = yahoo_id(symbol)
+        if entity in taken and taken[entity] != symbol:
+            clashes.append(symbol)
+            continue
+        taken[entity] = symbol
+        found[symbol] = entity
+    return found, clashes
+
+
+def is_financial_sector(sector) -> bool:
+    """Whether a Yahoo sector is one of finance or real estate."""
+    return isinstance(sector, str) and sector.strip().lower() in FINANCIAL_SECTORS
 
 
 def _variants(ticker: str) -> list[str]:

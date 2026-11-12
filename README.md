@@ -248,12 +248,16 @@ carrying its observation date and source, nothing filled in silently.
   company (Greenblatt earnings yield and ROIC, FCF yield, margins and their slope, growth,
   leverage, Altman Z, accruals, Piotroski F-score, multiples, EPV and a conservative DCF with
   the margin of safety) and stores it as a snapshot, plus two breadth series for the macro
-  scorecard. `--as-of DATE` builds the table using only facts filed by that date. The
-  Screener page ranks the table (magic formula, quality-value composite, deep value,
-  shareholder yield), shows every input, the fiscal-year history and the intrinsic-value
-  inputs, charts the selected company's stored daily close over a range picked with presets
-  (1M to Max) or a date slider, and puts the selected company on the watchlist (or takes it
-  off), which the Watchlist page shows.
+  scorecard. `--as-of DATE` builds the table using only facts filed by that date.
+  `--universe stoxx600` builds the European table instead: the STOXX Europe 600 from Yahoo
+  Finance (four or five fiscal years, the latest balance sheet, Yahoo's trailing twelve
+  months, prices in the quote currency and the exchange rates to convert them), labelled not
+  point-in-time, with market caps compared in euros; it needs no SEC setting. The Screener
+  page has a US/EU selector for the two tables, ranks the one shown (magic formula,
+  quality-value composite, deep value, shareholder yield), shows every input, the fiscal-year
+  history and the intrinsic-value inputs, charts the selected company's stored daily close
+  over a range picked with presets (1M to Max) or a date slider, and puts the selected
+  company on the watchlist (or takes it off), which the Watchlist page shows.
 - **Filings**: `python -m invest.jobs.filings` stores the last two 13F quarters for each
   manager in `config/managers.toml` and prints what changed (new positions, exits, changes
   above 25%, concentration), always with the filing lag and the long-only caveat stated.

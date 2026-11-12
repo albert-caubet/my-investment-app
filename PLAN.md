@@ -582,9 +582,16 @@ Verified 2026-09-10 on six managers live from EDGAR.
 - [x] `fundamentals/valuation.py`: EPV and conservative DCF with printed inputs; margin of
       safety against the lower of the two.
 - [x] `pages/screener.py` with detail view and a DuckDB watchlist; AppTest.
-- [ ] EU coverage through yfinance with the not-point-in-time label. Not done: the
-      `point_in_time = false` flag exists on a universe, but no yfinance fundamentals source
-      was built; revisit only if EU screening proves valuable (section 3.6).
+- [x] EU coverage through Yahoo Finance with the not-point-in-time label (2026-11-12).
+      `config/universe.toml` ships `stoxx600`, the STOXX Europe 600 by Yahoo symbol
+      (hand-maintained), with `region = "EU"` and `source = "yahoo"`; the Screener page has a
+      US/EU selector, each market showing its own latest table. One fundamentals time-series
+      request per company (four or five fiscal years, the latest quarterly or half-year balance
+      sheet, Yahoo's own trailing twelve months) is stored in `facts` under taxonomy `yahoo` and
+      a negative id in place of a CIK, each value dated the day it was first fetched, so an
+      as-of build sees what this store knew then. Prices keep their quote currency (pence for
+      London) and `<CCY>=X` rates convert them into the currency of the accounts; market caps
+      are compared in euros. Breadth stays US-only.
 - [x] Breadth from constituent prices: share of the universe above its 200-day average, new
       highs minus new lows, stored as `computed` series next to the RSP/SPY proxy.
 
@@ -661,8 +668,8 @@ the first scheduled run is the next Saturday after deployment.
 
 Taken on 2026-09-10 when the build started; each is a config file away from changing.
 
-- **Universe**: US-only screener first (EDGAR, point-in-time). EU via yfinance not built; the
-  `point_in_time = false` flag on a universe is ready for it.
+- **Universe**: US-only screener first (EDGAR, point-in-time). EU via Yahoo Finance added on
+  2026-11-12 as a second market on the Screener page, labelled not point-in-time.
 - **Target allocation**: four buckets, equity 65 / bonds 20 / cash 10 / crypto 5, bands of
   5 points absolute or 25% relative, trade to target, minimum trade 250 EUR, no contribution
   configured. Defaults to edit in `config/targets.toml`, not advice.

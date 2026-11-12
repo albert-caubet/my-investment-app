@@ -181,3 +181,36 @@ def test_empty_facts_report_rather_than_raise():
     fund = F.fundamentals_as_of(pd.DataFrame(columns=["cik", "taxonomy", "tag", "unit", "start_date", "end_date",
                                                       "value", "fy", "fp", "form", "filed_at", "accession", "frame"]))
     assert fund.latest == {} and "no facts" in fund.notes[0]
+
+
+# --- a trailing twelve months the source reports (Yahoo) -----------------------------------
+
+
+def test_a_reported_trailing_twelve_months_wins_when_newer_than_the_fiscal_year():
+    rows = [
+        _row("TotalRevenue", "2024-01-01", "2024-12-31", 100, "2026-11-01", taxonomy="yahoo"),
+        _row("TotalRevenue", "2025-01-01", "2025-12-31", 120, "2026-11-01", taxonomy="yahoo"),
+        _row("TotalRevenue", "2025-10-01", "2026-09-30", 130, "2026-11-01", fp="TTM", taxonomy="yahoo"),
+    ]
+    fund = F.fundamentals_as_of(pd.DataFrame(rows))
+    flow = fund.flow_basis["revenue"]
+    assert (flow.value, flow.basis, flow.period_end, flow.tag) == (130.0, "ttm", date(2026, 9, 30), "yahoo:TotalRevenue")
+    assert fund.history["revenue"] == {2024: 100.0, 2025: 120.0}  # spanning a year does not make it a fiscal year
+    assert fund.fy_end == date(2025, 12, 31)
+
+
+def test_a_reported_trailing_twelve_months_older_than_the_fiscal_year_is_ignored():
+    rows = [
+        _row("TotalRevenue", "2025-01-01", "2025-12-31", 120, "2026-11-01", taxonomy="yahoo"),
+        _row("TotalRevenue", "2024-07-01", "2025-06-30", 110, "2026-11-01", fp="TTM", taxonomy="yahoo"),
+    ]
+    flow = F.fundamentals_as_of(pd.DataFrame(rows)).flow_basis["revenue"]
+    assert (flow.value, flow.basis, flow.period_end) == (120.0, "annual", date(2025, 12, 31))
+
+
+def test_tag_kinds_say_how_a_sources_values_are_stored():
+    kinds = F.tag_kinds("yahoo")
+    assert kinds["TotalRevenue"] == "flow" and kinds["NetPPE"] == "instant"
+    assert kinds["OrdinarySharesNumber"] == "shares" and kinds["DilutedEPS"] == "per_share"
+    assert "Revenues" not in kinds  # us-gaap's
+    assert F.tag_kinds("dei") == {"EntityCommonStockSharesOutstanding": "shares", "EntityPublicFloat": "instant"}

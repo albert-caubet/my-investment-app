@@ -1,0 +1,3139 @@
+{
+ "timeseries": {
+  "result": [
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "annualCapitalExpenditure"
+     ]
+    },
+    "annualCapitalExpenditure": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": -22600000000.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": -22993000000.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": -19601000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": -18947000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "annualCashAndCashEquivalents"
+     ]
+    },
+    "annualCashAndCashEquivalents": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 40090000000.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 38314000000.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 37836000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 29630000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "annualCashDividendsPaid"
+     ]
+    },
+    "annualCashDividendsPaid": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": -7405000000.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": -8393000000.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": -8668000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": -8472000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "annualCashFinancial"
+     ]
+    },
+    "annualCashFinancial": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 6608000000.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 5886000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "annualCommonStockDividendPaid"
+     ]
+    },
+    "annualCommonStockDividendPaid": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": -7405000000.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": -8393000000.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": -8668000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": -8472000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "annualCommonStockEquity"
+     ]
+    },
+    "annualCommonStockEquity": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 190472000000.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 186607000000.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 178307000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 174392000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "annualCommonStockPayments"
+     ]
+    },
+    "annualCommonStockPayments": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": -18437000000.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": -14617000000.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": -13898000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": -13879000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "annualCostOfRevenue"
+     ]
+    },
+    "annualCostOfRevenue": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 302535000000.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 269413000000.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 238371000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 224391000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "annualCurrentAssets"
+     ]
+    },
+    "annualCurrentAssets": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 165938000000.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 134115000000.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 127926000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 107173000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "annualCurrentDebt"
+     ]
+    },
+    "annualCurrentDebt": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 4620000000.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 5288000000.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 6920000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 4517000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "annualCurrentDebtAndCapitalLeaseObligation"
+     ]
+    },
+    "annualCurrentDebtAndCapitalLeaseObligation": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 9001000000.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 9931000000.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 11630000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 9128000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "annualCurrentLiabilities"
+     ]
+    },
+    "annualCurrentLiabilities": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 121311000000.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 95467000000.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 95034000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 82415000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "annualDepreciationAndAmortization"
+     ]
+    },
+    "annualDepreciationAndAmortization": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 22393000000.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 23106000000.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 22703000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 22167000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "annualDilutedEPS"
+     ]
+    },
+    "annualDilutedEPS": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 5.71
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 2.85
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 2.53
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 3.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "annualGoodwill"
+     ]
+    },
+    "annualGoodwill": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 16039000000.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 16660000000.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 16032000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 15662000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "annualGrossProfit"
+     ]
+    },
+    "annualGrossProfit": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 78779000000.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 47207000000.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 45941000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 42495000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "annualInterestExpense"
+     ]
+    },
+    "annualInterestExpense": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 5346000000.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 4628000000.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 4858000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 4741000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "annualInterestExpenseNonOperating"
+     ]
+    },
+    "annualInterestExpenseNonOperating": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 5346000000.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 4628000000.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 4858000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 4741000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "annualLongTermDebt"
+     ]
+    },
+    "annualLongTermDebt": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 51532000000.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 48544000000.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 41456000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 42193000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "annualLongTermDebtAndCapitalLeaseObligation"
+     ]
+    },
+    "annualLongTermDebtAndCapitalLeaseObligation": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 74794000000.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 71610000000.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 65448000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 66515000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "annualNetIncome"
+     ]
+    },
+    "annualNetIncome": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 42309000000.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 19359000000.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 16094000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 17837000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "annualNetIncomeCommonStockholders"
+     ]
+    },
+    "annualNetIncomeCommonStockholders": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 42309000000.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 19359000000.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 16094000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 17837000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "annualNetPPE"
+     ]
+    },
+    "annualNetPPE": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 198642000000.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 194835000000.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 185219000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 185077000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "annualOperatingCashFlow"
+     ]
+    },
+    "annualOperatingCashFlow": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 68414000000.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 54191000000.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 54687000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 42863000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "annualOperatingIncome"
+     ]
+    },
+    "annualOperatingIncome": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 63109000000.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 30737000000.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 29992000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 27582000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "annualOperatingRevenue"
+     ]
+    },
+    "annualOperatingRevenue": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 381314000000.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 316620000000.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 284312000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 266886000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "annualOrdinarySharesNumber"
+     ]
+    },
+    "annualOrdinarySharesNumber": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 7003503393.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 6486309049.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 6084231158.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 5689891670.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "annualOtherIntangibleAssets"
+     ]
+    },
+    "annualOtherIntangibleAssets": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 9662000000.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 10253000000.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 9480000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 11010000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "annualPretaxIncome"
+     ]
+    },
+    "annualPretaxIncome": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 64815000000.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 32627000000.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 29922000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 29756000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "annualReconciledDepreciation"
+     ]
+    },
+    "annualReconciledDepreciation": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 22393000000.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 23106000000.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 22703000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 22167000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "annualRepurchaseOfCapitalStock"
+     ]
+    },
+    "annualRepurchaseOfCapitalStock": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": -18437000000.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": -14617000000.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": -13898000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": -13879000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "annualRetainedEarnings"
+     ]
+    },
+    "annualRetainedEarnings": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 169482000000.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 165915000000.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 158834000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 153528000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "annualShareIssued"
+     ]
+    },
+    "annualShareIssued": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 7003503393.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 6524109049.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 6115031158.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 5718636398.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "annualStockholdersEquity"
+     ]
+    },
+    "annualStockholdersEquity": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 190472000000.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 186607000000.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 178307000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 174392000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "annualTaxProvision"
+     ]
+    },
+    "annualTaxProvision": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 21941000000.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 12991000000.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 13401000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 11637000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "annualTotalAssets"
+     ]
+    },
+    "annualTotalAssets": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 443024000000.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 406270000000.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 387609000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 370350000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "annualTotalLiabilitiesNetMinorityInterest"
+     ]
+    },
+    "annualTotalLiabilitiesNetMinorityInterest": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 250427000000.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 217908000000.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 207441000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 195031000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "annualTotalRevenue"
+     ]
+    },
+    "annualTotalRevenue": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 381314000000.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 316620000000.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 284312000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 266886000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "quarterlyCashAndCashEquivalents"
+     ]
+    },
+    "quarterlyCashAndCashEquivalents": [
+     {
+      "asOfDate": "2025-09-30",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 33053000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 29630000000.0
+      }
+     },
+     {
+      "asOfDate": "2026-03-31",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 23117000000.0
+      }
+     },
+     {
+      "asOfDate": "2026-06-30",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 31374000000.0
+      }
+     },
+     {
+      "asOfDate": "2026-09-30",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 36425000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "quarterlyCommonStockEquity"
+     ]
+    },
+    "quarterlyCommonStockEquity": [
+     {
+      "asOfDate": "2025-09-30",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 175824000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 174392000000.0
+      }
+     },
+     {
+      "asOfDate": "2026-03-31",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 173583000000.0
+      }
+     },
+     {
+      "asOfDate": "2026-06-30",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 180788000000.0
+      }
+     },
+     {
+      "asOfDate": "2026-09-30",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 198436000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "quarterlyCurrentAssets"
+     ]
+    },
+    "quarterlyCurrentAssets": [
+     {
+      "asOfDate": "2025-09-30",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 121176000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 107173000000.0
+      }
+     },
+     {
+      "asOfDate": "2026-03-31",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 119162000000.0
+      }
+     },
+     {
+      "asOfDate": "2026-06-30",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 122833000000.0
+      }
+     },
+     {
+      "asOfDate": "2026-09-30",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 141815000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "quarterlyCurrentDebt"
+     ]
+    },
+    "quarterlyCurrentDebt": [
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 4517000000.0
+      }
+     },
+     {
+      "asOfDate": "2026-03-31",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 4696000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "quarterlyCurrentDebtAndCapitalLeaseObligation"
+     ]
+    },
+    "quarterlyCurrentDebtAndCapitalLeaseObligation": [
+     {
+      "asOfDate": "2025-09-30",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 10022000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 9128000000.0
+      }
+     },
+     {
+      "asOfDate": "2026-03-31",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 10060000000.0
+      }
+     },
+     {
+      "asOfDate": "2026-06-30",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 8542000000.0
+      }
+     },
+     {
+      "asOfDate": "2026-09-30",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 8941000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "quarterlyCurrentLiabilities"
+     ]
+    },
+    "quarterlyCurrentLiabilities": [
+     {
+      "asOfDate": "2025-09-30",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 89621000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 82415000000.0
+      }
+     },
+     {
+      "asOfDate": "2026-03-31",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 93473000000.0
+      }
+     },
+     {
+      "asOfDate": "2026-06-30",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 85614000000.0
+      }
+     },
+     {
+      "asOfDate": "2026-09-30",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 102987000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "quarterlyGoodwill"
+     ]
+    },
+    "quarterlyGoodwill": [
+     {
+      "asOfDate": "2025-09-30",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 16034000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 15662000000.0
+      }
+     },
+     {
+      "asOfDate": "2026-03-31",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 15189000000.0
+      }
+     },
+     {
+      "asOfDate": "2026-06-30",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 14969000000.0
+      }
+     },
+     {
+      "asOfDate": "2026-09-30",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 16071000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "quarterlyLongTermDebt"
+     ]
+    },
+    "quarterlyLongTermDebt": [
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 42193000000.0
+      }
+     },
+     {
+      "asOfDate": "2026-03-31",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 40355000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "quarterlyLongTermDebtAndCapitalLeaseObligation"
+     ]
+    },
+    "quarterlyLongTermDebtAndCapitalLeaseObligation": [
+     {
+      "asOfDate": "2025-09-30",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 63955000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 66515000000.0
+      }
+     },
+     {
+      "asOfDate": "2026-03-31",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 65584000000.0
+      }
+     },
+     {
+      "asOfDate": "2026-06-30",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 64534000000.0
+      }
+     },
+     {
+      "asOfDate": "2026-09-30",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 67134000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "quarterlyNetPPE"
+     ]
+    },
+    "quarterlyNetPPE": [
+     {
+      "asOfDate": "2025-09-30",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 183907000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 185077000000.0
+      }
+     },
+     {
+      "asOfDate": "2026-03-31",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 185708000000.0
+      }
+     },
+     {
+      "asOfDate": "2026-06-30",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 182300000000.0
+      }
+     },
+     {
+      "asOfDate": "2026-09-30",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 203374000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "quarterlyOrdinarySharesNumber"
+     ]
+    },
+    "quarterlyOrdinarySharesNumber": [
+     {
+      "asOfDate": "2025-09-30",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 5778107924.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 5689891670.0
+      }
+     },
+     {
+      "asOfDate": "2026-03-31",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 5608474007.0
+      }
+     },
+     {
+      "asOfDate": "2026-06-30",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 5542183399.0
+      }
+     },
+     {
+      "asOfDate": "2026-09-30",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 5699084708.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "quarterlyOtherIntangibleAssets"
+     ]
+    },
+    "quarterlyOtherIntangibleAssets": [
+     {
+      "asOfDate": "2025-09-30",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 9546000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 11010000000.0
+      }
+     },
+     {
+      "asOfDate": "2026-03-31",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 10873000000.0
+      }
+     },
+     {
+      "asOfDate": "2026-06-30",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 10449000000.0
+      }
+     },
+     {
+      "asOfDate": "2026-09-30",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 10261000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "quarterlyRetainedEarnings"
+     ]
+    },
+    "quarterlyRetainedEarnings": [
+     {
+      "asOfDate": "2025-09-30",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 155157000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 153528000000.0
+      }
+     },
+     {
+      "asOfDate": "2026-03-31",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 153451000000.0
+      }
+     },
+     {
+      "asOfDate": "2026-06-30",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 160702000000.0
+      }
+     },
+     {
+      "asOfDate": "2026-09-30",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 167206000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "quarterlyShareIssued"
+     ]
+    },
+    "quarterlyShareIssued": [
+     {
+      "asOfDate": "2025-09-30",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 5811432447.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 5718636398.0
+      }
+     },
+     {
+      "asOfDate": "2026-03-31",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 5638556417.0
+      }
+     },
+     {
+      "asOfDate": "2026-06-30",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 5570928127.0
+      }
+     },
+     {
+      "asOfDate": "2026-09-30",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 5729497530.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "quarterlyStockholdersEquity"
+     ]
+    },
+    "quarterlyStockholdersEquity": [
+     {
+      "asOfDate": "2025-09-30",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 175824000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 174392000000.0
+      }
+     },
+     {
+      "asOfDate": "2026-03-31",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 173583000000.0
+      }
+     },
+     {
+      "asOfDate": "2026-06-30",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 180788000000.0
+      }
+     },
+     {
+      "asOfDate": "2026-09-30",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 198436000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "quarterlyTotalAssets"
+     ]
+    },
+    "quarterlyTotalAssets": [
+     {
+      "asOfDate": "2025-09-30",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 377738000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 370350000000.0
+      }
+     },
+     {
+      "asOfDate": "2026-03-31",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 380598000000.0
+      }
+     },
+     {
+      "asOfDate": "2026-06-30",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 380513000000.0
+      }
+     },
+     {
+      "asOfDate": "2026-09-30",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 420574000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "quarterlyTotalLiabilitiesNetMinorityInterest"
+     ]
+    },
+    "quarterlyTotalLiabilitiesNetMinorityInterest": [
+     {
+      "asOfDate": "2025-09-30",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 199915000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 195031000000.0
+      }
+     },
+     {
+      "asOfDate": "2026-03-31",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 205997000000.0
+      }
+     },
+     {
+      "asOfDate": "2026-06-30",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 198730000000.0
+      }
+     },
+     {
+      "asOfDate": "2026-09-30",
+      "periodType": "3M",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 221060000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "trailingCapitalExpenditure"
+     ]
+    },
+    "trailingCapitalExpenditure": [
+     {
+      "asOfDate": "2025-06-30",
+      "periodType": "TTM",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": -20318000000.0
+      }
+     },
+     {
+      "asOfDate": "2026-09-30",
+      "periodType": "TTM",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": -20615000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "trailingCashDividendsPaid"
+     ]
+    },
+    "trailingCashDividendsPaid": [
+     {
+      "asOfDate": "2025-06-30",
+      "periodType": "TTM",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": -8581000000.0
+      }
+     },
+     {
+      "asOfDate": "2026-09-30",
+      "periodType": "TTM",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": -8485000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "trailingCommonStockDividendPaid"
+     ]
+    },
+    "trailingCommonStockDividendPaid": [
+     {
+      "asOfDate": "2025-06-30",
+      "periodType": "TTM",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": -8581000000.0
+      }
+     },
+     {
+      "asOfDate": "2026-09-30",
+      "periodType": "TTM",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": -8485000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "trailingCommonStockPayments"
+     ]
+    },
+    "trailingCommonStockPayments": [
+     {
+      "asOfDate": "2025-06-30",
+      "periodType": "TTM",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": -13960000000.0
+      }
+     },
+     {
+      "asOfDate": "2026-09-30",
+      "periodType": "TTM",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": -12791000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "trailingCostOfRevenue"
+     ]
+    },
+    "trailingCostOfRevenue": [
+     {
+      "asOfDate": "2025-06-30",
+      "periodType": "TTM",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 229766000000.0
+      }
+     },
+     {
+      "asOfDate": "2026-09-30",
+      "periodType": "TTM",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 260632000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "trailingDepreciationAndAmortization"
+     ]
+    },
+    "trailingDepreciationAndAmortization": [
+     {
+      "asOfDate": "2025-06-30",
+      "periodType": "TTM",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 22000000000.0
+      }
+     },
+     {
+      "asOfDate": "2026-09-30",
+      "periodType": "TTM",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 22716000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "trailingDilutedEPS"
+     ]
+    },
+    "trailingDilutedEPS": [
+     {
+      "asOfDate": "2023-09-30",
+      "periodType": "TTM",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 4.21
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "TTM",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 2.85
+      }
+     },
+     {
+      "asOfDate": "2024-03-31",
+      "periodType": "TTM",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 2.73
+      }
+     },
+     {
+      "asOfDate": "2024-06-30",
+      "periodType": "TTM",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 2.82
+      }
+     },
+     {
+      "asOfDate": "2024-09-30",
+      "periodType": "TTM",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 2.46
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "TTM",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 2.53
+      }
+     },
+     {
+      "asOfDate": "2025-03-31",
+      "periodType": "TTM",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 2.19
+      }
+     },
+     {
+      "asOfDate": "2025-06-30",
+      "periodType": "TTM",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 2.24
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "TTM",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 3.0
+      }
+     },
+     {
+      "asOfDate": "2026-03-31",
+      "periodType": "TTM",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 3.21
+      }
+     },
+     {
+      "asOfDate": "2026-06-30",
+      "periodType": "TTM",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 4.52
+      }
+     },
+     {
+      "asOfDate": "2026-09-30",
+      "periodType": "TTM",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 5.76
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "trailingGrossProfit"
+     ]
+    },
+    "trailingGrossProfit": [
+     {
+      "asOfDate": "2025-06-30",
+      "periodType": "TTM",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 42244000000.0
+      }
+     },
+     {
+      "asOfDate": "2026-09-30",
+      "periodType": "TTM",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 60664000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "trailingInterestExpense"
+     ]
+    },
+    "trailingInterestExpense": [
+     {
+      "asOfDate": "2025-06-30",
+      "periodType": "TTM",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 4653000000.0
+      }
+     },
+     {
+      "asOfDate": "2026-09-30",
+      "periodType": "TTM",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 5018000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "trailingInterestExpenseNonOperating"
+     ]
+    },
+    "trailingInterestExpenseNonOperating": [
+     {
+      "asOfDate": "2025-06-30",
+      "periodType": "TTM",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 4653000000.0
+      }
+     },
+     {
+      "asOfDate": "2026-09-30",
+      "periodType": "TTM",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 5018000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "trailingNetIncome"
+     ]
+    },
+    "trailingNetIncome": [
+     {
+      "asOfDate": "2025-06-30",
+      "periodType": "TTM",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 13601000000.0
+      }
+     },
+     {
+      "asOfDate": "2026-09-30",
+      "periodType": "TTM",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 32707000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "trailingNetIncomeCommonStockholders"
+     ]
+    },
+    "trailingNetIncomeCommonStockholders": [
+     {
+      "asOfDate": "2025-06-30",
+      "periodType": "TTM",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 13601000000.0
+      }
+     },
+     {
+      "asOfDate": "2026-09-30",
+      "periodType": "TTM",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 32707000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "trailingOperatingCashFlow"
+     ]
+    },
+    "trailingOperatingCashFlow": [
+     {
+      "asOfDate": "2025-06-30",
+      "periodType": "TTM",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 49067000000.0
+      }
+     },
+     {
+      "asOfDate": "2026-09-30",
+      "periodType": "TTM",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 57976000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "trailingOperatingIncome"
+     ]
+    },
+    "trailingOperatingIncome": [
+     {
+      "asOfDate": "2025-06-30",
+      "periodType": "TTM",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 27135000000.0
+      }
+     },
+     {
+      "asOfDate": "2026-09-30",
+      "periodType": "TTM",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 46747000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "trailingOperatingRevenue"
+     ]
+    },
+    "trailingOperatingRevenue": [
+     {
+      "asOfDate": "2025-06-30",
+      "periodType": "TTM",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 272010000000.0
+      }
+     },
+     {
+      "asOfDate": "2026-09-30",
+      "periodType": "TTM",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 321296000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "trailingPretaxIncome"
+     ]
+    },
+    "trailingPretaxIncome": [
+     {
+      "asOfDate": "2025-06-30",
+      "periodType": "TTM",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 26409000000.0
+      }
+     },
+     {
+      "asOfDate": "2026-09-30",
+      "periodType": "TTM",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 49966000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "trailingReconciledDepreciation"
+     ]
+    },
+    "trailingReconciledDepreciation": [
+     {
+      "asOfDate": "2025-06-30",
+      "periodType": "TTM",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 22000000000.0
+      }
+     },
+     {
+      "asOfDate": "2026-09-30",
+      "periodType": "TTM",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 22716000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "trailingRepurchaseOfCapitalStock"
+     ]
+    },
+    "trailingRepurchaseOfCapitalStock": [
+     {
+      "asOfDate": "2025-06-30",
+      "periodType": "TTM",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": -13960000000.0
+      }
+     },
+     {
+      "asOfDate": "2026-09-30",
+      "periodType": "TTM",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": -12791000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "trailingTaxProvision"
+     ]
+    },
+    "trailingTaxProvision": [
+     {
+      "asOfDate": "2025-06-30",
+      "periodType": "TTM",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 12458000000.0
+      }
+     },
+     {
+      "asOfDate": "2026-09-30",
+      "periodType": "TTM",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 17078000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "SHEL.L"
+     ],
+     "type": [
+      "trailingTotalRevenue"
+     ]
+    },
+    "trailingTotalRevenue": [
+     {
+      "asOfDate": "2025-06-30",
+      "periodType": "TTM",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 272010000000.0
+      }
+     },
+     {
+      "asOfDate": "2026-09-30",
+      "periodType": "TTM",
+      "currencyCode": "USD",
+      "reportedValue": {
+       "raw": 321296000000.0
+      }
+     }
+    ]
+   }
+  ],
+  "error": null
+ }
+}

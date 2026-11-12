@@ -1,0 +1,2871 @@
+{
+ "timeseries": {
+  "result": [
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "annualCapitalExpenditure"
+     ]
+    },
+    "annualCapitalExpenditure": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": -1709000000.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": -1435000000.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": -1614000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": -1591000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "annualCashAndCashEquivalents"
+     ]
+    },
+    "annualCashAndCashEquivalents": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 4326000000.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 4159000000.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 6136000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 3941000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "annualCashDividendsPaid"
+     ]
+    },
+    "annualCashDividendsPaid": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": -4329000000.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": -4363000000.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": -4319000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": -4453000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "annualCashFinancial"
+     ]
+    },
+    "annualCashFinancial": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 2553000000.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 2862000000.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 3241000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 2490000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "annualCommonStockDividendPaid"
+     ]
+    },
+    "annualCommonStockDividendPaid": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": -4329000000.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": -4363000000.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": -4319000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": -4453000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "annualCommonStockEquity"
+     ]
+    },
+    "annualCommonStockEquity": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 19021000000.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 18102000000.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 19990000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 15530000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "annualCommonStockPayments"
+     ]
+    },
+    "annualCommonStockPayments": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": -1509000000.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": -1507000000.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": -1508000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": -1510000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "annualCostOfRevenue"
+     ]
+    },
+    "annualCostOfRevenue": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 35906000000.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 29180000000.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 27976000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 26794000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "annualCurrentAssets"
+     ]
+    },
+    "annualCurrentAssets": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 19157000000.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 17902000000.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 19194000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 17066000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "annualCurrentDebt"
+     ]
+    },
+    "annualCurrentDebt": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 5231000000.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 4567000000.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 5880000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 2180000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "annualCurrentDebtAndCapitalLeaseObligation"
+     ]
+    },
+    "annualCurrentDebtAndCapitalLeaseObligation": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 5571000000.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 4901000000.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 6202000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 2457000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "annualCurrentLiabilities"
+     ]
+    },
+    "annualCurrentLiabilities": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 25427000000.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 23507000000.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 25234000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 21662000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "annualDepreciationAndAmortization"
+     ]
+    },
+    "annualDepreciationAndAmortization": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 1946000000.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 1148000000.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 1370000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 1353000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "annualDilutedEPS"
+     ]
+    },
+    "annualDilutedEPS": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 3.36375
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 2.88
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 2.57625
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 4.32
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "annualGoodwill"
+     ]
+    },
+    "annualGoodwill": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 21609000000.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 21109000000.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 22311000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 17709000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "annualGrossProfit"
+     ]
+    },
+    "annualGrossProfit": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 24167000000.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 22500000000.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 24503000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 23709000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "annualInterestExpense"
+     ]
+    },
+    "annualInterestExpense": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 789000000.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 955000000.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 999000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 1098000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "annualInterestExpenseNonOperating"
+     ]
+    },
+    "annualInterestExpenseNonOperating": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 789000000.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 955000000.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 999000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 1098000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "annualLongTermDebt"
+     ]
+    },
+    "annualLongTermDebt": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 21800000000.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 22631000000.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 23289000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 24091000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "annualLongTermDebtAndCapitalLeaseObligation"
+     ]
+    },
+    "annualLongTermDebtAndCapitalLeaseObligation": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 22868000000.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 23692000000.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 24453000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 25140000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "annualNetIncome"
+     ]
+    },
+    "annualNetIncome": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 7642000000.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 6487000000.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 5744000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 9469000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "annualNetIncomeCommonStockholders"
+     ]
+    },
+    "annualNetIncomeCommonStockholders": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 7642000000.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 6487000000.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 5744000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 9469000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "annualNetPPE"
+     ]
+    },
+    "annualNetPPE": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 10770000000.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 10707000000.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 11669000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 8992000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "annualOperatingCashFlow"
+     ]
+    },
+    "annualOperatingCashFlow": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 7282000000.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 9426000000.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 9519000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 8350000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "annualOperatingIncome"
+     ]
+    },
+    "annualOperatingIncome": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 9727000000.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 9275000000.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 10278000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 10127000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "annualOperatingRevenue"
+     ]
+    },
+    "annualOperatingRevenue": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 60073000000.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 51680000000.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 52479000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 50503000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "annualOrdinarySharesNumber"
+     ]
+    },
+    "annualOrdinarySharesNumber": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 2247996108.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 2221349183.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 2200552980.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 2179482192.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "annualOtherIntangibleAssets"
+     ]
+    },
+    "annualOtherIntangibleAssets": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 18880000000.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 18357000000.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 18590000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 17055000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "annualOtherShortTermInvestments"
+     ]
+    },
+    "annualOtherShortTermInvestments": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 1514000000.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 1950000000.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 1493000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 1071000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "annualPretaxIncome"
+     ]
+    },
+    "annualPretaxIncome": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 10337000000.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 8627000000.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 8371000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 8693000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "annualPurchaseOfPPE"
+     ]
+    },
+    "annualPurchaseOfPPE": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": -1456000000.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": -1194000000.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": -1381000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": -1417000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "annualReconciledDepreciation"
+     ]
+    },
+    "annualReconciledDepreciation": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 1946000000.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 1148000000.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 1370000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 1353000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "annualRepurchaseOfCapitalStock"
+     ]
+    },
+    "annualRepurchaseOfCapitalStock": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": -1509000000.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": -1507000000.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": -1508000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": -1510000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "annualRetainedEarnings"
+     ]
+    },
+    "annualRetainedEarnings": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 50253000000.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 47052000000.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 49721000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 44229000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "annualShareIssued"
+     ]
+    },
+    "annualShareIssued": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 2337105574.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 2236975411.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 2241330966.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 2181005247.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "annualStockholdersEquity"
+     ]
+    },
+    "annualStockholdersEquity": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 19021000000.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 18102000000.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 19990000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 15530000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "annualTaxProvision"
+     ]
+    },
+    "annualTaxProvision": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 2068000000.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 1990000000.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 2332000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 2481000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "annualTotalAssets"
+     ]
+    },
+    "annualTotalAssets": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 77821000000.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 75266000000.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 79750000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 70471000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "annualTotalLiabilitiesNetMinorityInterest"
+     ]
+    },
+    "annualTotalLiabilitiesNetMinorityInterest": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 56120000000.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 54502000000.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 57195000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 52884000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "annualTotalOperatingIncomeAsReported"
+     ]
+    },
+    "annualTotalOperatingIncomeAsReported": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 10755000000.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 8998000000.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 8829000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 9037000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "annualTotalRevenue"
+     ]
+    },
+    "annualTotalRevenue": [
+     {
+      "asOfDate": "2022-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 60073000000.0
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 51680000000.0
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 52479000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "12M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 50503000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "quarterlyCashAndCashEquivalents"
+     ]
+    },
+    "quarterlyCashAndCashEquivalents": [
+     {
+      "asOfDate": "2025-06-30",
+      "periodType": "3M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 4344000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "3M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 3941000000.0
+      }
+     },
+     {
+      "asOfDate": "2026-06-30",
+      "periodType": "3M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 4726000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "quarterlyCashFinancial"
+     ]
+    },
+    "quarterlyCashFinancial": [
+     {
+      "asOfDate": "2025-06-30",
+      "periodType": "3M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 3112000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "3M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 2490000000.0
+      }
+     },
+     {
+      "asOfDate": "2026-06-30",
+      "periodType": "3M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 2983000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "quarterlyCommonStockEquity"
+     ]
+    },
+    "quarterlyCommonStockEquity": [
+     {
+      "asOfDate": "2025-06-30",
+      "periodType": "3M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 17795000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "3M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 15530000000.0
+      }
+     },
+     {
+      "asOfDate": "2026-06-30",
+      "periodType": "3M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 16194000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "quarterlyCurrentAssets"
+     ]
+    },
+    "quarterlyCurrentAssets": [
+     {
+      "asOfDate": "2025-06-30",
+      "periodType": "3M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 19190000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "3M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 17066000000.0
+      }
+     },
+     {
+      "asOfDate": "2026-06-30",
+      "periodType": "3M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 21389000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "quarterlyCurrentDebt"
+     ]
+    },
+    "quarterlyCurrentDebt": [
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "3M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 2180000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "quarterlyCurrentDebtAndCapitalLeaseObligation"
+     ]
+    },
+    "quarterlyCurrentDebtAndCapitalLeaseObligation": [
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "3M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 2457000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "quarterlyCurrentLiabilities"
+     ]
+    },
+    "quarterlyCurrentLiabilities": [
+     {
+      "asOfDate": "2025-06-30",
+      "periodType": "3M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 25099000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "3M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 21662000000.0
+      }
+     },
+     {
+      "asOfDate": "2026-06-30",
+      "periodType": "3M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 28891000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "quarterlyGoodwill"
+     ]
+    },
+    "quarterlyGoodwill": [
+     {
+      "asOfDate": "2025-06-30",
+      "periodType": "3M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 20611000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "3M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 17709000000.0
+      }
+     },
+     {
+      "asOfDate": "2026-06-30",
+      "periodType": "3M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 18515000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "quarterlyLongTermDebt"
+     ]
+    },
+    "quarterlyLongTermDebt": [
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "3M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 24091000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "quarterlyLongTermDebtAndCapitalLeaseObligation"
+     ]
+    },
+    "quarterlyLongTermDebtAndCapitalLeaseObligation": [
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "3M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 25140000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "quarterlyNetPPE"
+     ]
+    },
+    "quarterlyNetPPE": [
+     {
+      "asOfDate": "2025-06-30",
+      "periodType": "3M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 10940000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "3M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 8992000000.0
+      }
+     },
+     {
+      "asOfDate": "2026-06-30",
+      "periodType": "3M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 9356000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "quarterlyOrdinarySharesNumber"
+     ]
+    },
+    "quarterlyOrdinarySharesNumber": [
+     {
+      "asOfDate": "2025-06-30",
+      "periodType": "3M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 2179358736.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "3M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 2179482192.0
+      }
+     },
+     {
+      "asOfDate": "2026-06-30",
+      "periodType": "3M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 2153300000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "quarterlyOtherIntangibleAssets"
+     ]
+    },
+    "quarterlyOtherIntangibleAssets": [
+     {
+      "asOfDate": "2025-06-30",
+      "periodType": "3M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 17430000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "3M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 17055000000.0
+      }
+     },
+     {
+      "asOfDate": "2026-06-30",
+      "periodType": "3M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 17560000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "quarterlyOtherShortTermInvestments"
+     ]
+    },
+    "quarterlyOtherShortTermInvestments": [
+     {
+      "asOfDate": "2025-06-30",
+      "periodType": "3M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 966000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "3M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 1071000000.0
+      }
+     },
+     {
+      "asOfDate": "2026-06-30",
+      "periodType": "3M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 1145000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "quarterlyRetainedEarnings"
+     ]
+    },
+    "quarterlyRetainedEarnings": [
+     {
+      "asOfDate": "2025-06-30",
+      "periodType": "3M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 50700000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "3M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 44229000000.0
+      }
+     },
+     {
+      "asOfDate": "2026-06-30",
+      "periodType": "3M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 45931000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "quarterlyShareIssued"
+     ]
+    },
+    "quarterlyShareIssued": [
+     {
+      "asOfDate": "2025-06-30",
+      "periodType": "3M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 2244442078.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "3M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 2181005247.0
+      }
+     },
+     {
+      "asOfDate": "2026-06-30",
+      "periodType": "3M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 2185205247.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "quarterlyStockholdersEquity"
+     ]
+    },
+    "quarterlyStockholdersEquity": [
+     {
+      "asOfDate": "2025-06-30",
+      "periodType": "3M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 17795000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "3M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 15530000000.0
+      }
+     },
+     {
+      "asOfDate": "2026-06-30",
+      "periodType": "3M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 16194000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "quarterlyTotalAssets"
+     ]
+    },
+    "quarterlyTotalAssets": [
+     {
+      "asOfDate": "2025-06-30",
+      "periodType": "3M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 75999000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "3M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 70471000000.0
+      }
+     },
+     {
+      "asOfDate": "2026-06-30",
+      "periodType": "3M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 76933000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "quarterlyTotalLiabilitiesNetMinorityInterest"
+     ]
+    },
+    "quarterlyTotalLiabilitiesNetMinorityInterest": [
+     {
+      "asOfDate": "2025-06-30",
+      "periodType": "3M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 56068000000.0
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "3M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 52884000000.0
+      }
+     },
+     {
+      "asOfDate": "2026-06-30",
+      "periodType": "3M",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 58626000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "trailingCapitalExpenditure"
+     ]
+    },
+    "trailingCapitalExpenditure": [
+     {
+      "asOfDate": "2026-06-30",
+      "periodType": "TTM",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": -1623000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "trailingCashDividendsPaid"
+     ]
+    },
+    "trailingCashDividendsPaid": [
+     {
+      "asOfDate": "2026-06-30",
+      "periodType": "TTM",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": -4252000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "trailingCommonStockDividendPaid"
+     ]
+    },
+    "trailingCommonStockDividendPaid": [
+     {
+      "asOfDate": "2026-06-30",
+      "periodType": "TTM",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": -4252000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "trailingCommonStockPayments"
+     ]
+    },
+    "trailingCommonStockPayments": [
+     {
+      "asOfDate": "2026-06-30",
+      "periodType": "TTM",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": -1507000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "trailingDepreciationAndAmortization"
+     ]
+    },
+    "trailingDepreciationAndAmortization": [
+     {
+      "asOfDate": "2026-06-30",
+      "periodType": "TTM",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 1339000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "trailingDilutedEPS"
+     ]
+    },
+    "trailingDilutedEPS": [
+     {
+      "asOfDate": "2023-06-30",
+      "periodType": "TTM",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 3.26
+      }
+     },
+     {
+      "asOfDate": "2023-12-31",
+      "periodType": "TTM",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 2.56
+      }
+     },
+     {
+      "asOfDate": "2024-12-31",
+      "periodType": "TTM",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 2.29
+      }
+     },
+     {
+      "asOfDate": "2025-06-30",
+      "periodType": "TTM",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 2.52
+      }
+     },
+     {
+      "asOfDate": "2025-12-31",
+      "periodType": "TTM",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 4.32
+      }
+     },
+     {
+      "asOfDate": "2026-06-30",
+      "periodType": "TTM",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 4.24
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "trailingInterestExpense"
+     ]
+    },
+    "trailingInterestExpense": [
+     {
+      "asOfDate": "2026-06-30",
+      "periodType": "TTM",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 1154000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "trailingInterestExpenseNonOperating"
+     ]
+    },
+    "trailingInterestExpenseNonOperating": [
+     {
+      "asOfDate": "2026-06-30",
+      "periodType": "TTM",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 1154000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "trailingNetIncome"
+     ]
+    },
+    "trailingNetIncome": [
+     {
+      "asOfDate": "2026-06-30",
+      "periodType": "TTM",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 9273000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "trailingNetIncomeCommonStockholders"
+     ]
+    },
+    "trailingNetIncomeCommonStockholders": [
+     {
+      "asOfDate": "2026-06-30",
+      "periodType": "TTM",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 9273000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "trailingOperatingCashFlow"
+     ]
+    },
+    "trailingOperatingCashFlow": [
+     {
+      "asOfDate": "2026-06-30",
+      "periodType": "TTM",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 8637000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "trailingOperatingIncome"
+     ]
+    },
+    "trailingOperatingIncome": [
+     {
+      "asOfDate": "2026-06-30",
+      "periodType": "TTM",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 10250000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "trailingOperatingRevenue"
+     ]
+    },
+    "trailingOperatingRevenue": [
+     {
+      "asOfDate": "2026-06-30",
+      "periodType": "TTM",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 50620000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "trailingPretaxIncome"
+     ]
+    },
+    "trailingPretaxIncome": [
+     {
+      "asOfDate": "2026-06-30",
+      "periodType": "TTM",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 8777000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "trailingPurchaseOfPPE"
+     ]
+    },
+    "trailingPurchaseOfPPE": [
+     {
+      "asOfDate": "2026-06-30",
+      "periodType": "TTM",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": -1418000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "trailingReconciledDepreciation"
+     ]
+    },
+    "trailingReconciledDepreciation": [
+     {
+      "asOfDate": "2026-06-30",
+      "periodType": "TTM",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 1339000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "trailingRepurchaseOfCapitalStock"
+     ]
+    },
+    "trailingRepurchaseOfCapitalStock": [
+     {
+      "asOfDate": "2026-06-30",
+      "periodType": "TTM",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": -1507000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "trailingTaxProvision"
+     ]
+    },
+    "trailingTaxProvision": [
+     {
+      "asOfDate": "2026-06-30",
+      "periodType": "TTM",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 2685000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "trailingTotalOperatingIncomeAsReported"
+     ]
+    },
+    "trailingTotalOperatingIncomeAsReported": [
+     {
+      "asOfDate": "2026-06-30",
+      "periodType": "TTM",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 9160000000.0
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "symbol": [
+      "ULVR.L"
+     ],
+     "type": [
+      "trailingTotalRevenue"
+     ]
+    },
+    "trailingTotalRevenue": [
+     {
+      "asOfDate": "2026-06-30",
+      "periodType": "TTM",
+      "currencyCode": "EUR",
+      "reportedValue": {
+       "raw": 50620000000.0
+      }
+     }
+    ]
+   }
+  ],
+  "error": null
+ }
+}

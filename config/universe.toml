@@ -1,18 +1,32 @@
 # Screener universes (PLAN.md section 6.1).
 #
 # Each [universe.<name>] lists tickers, and optionally a `csv` with a `ticker`
-# column (and any other columns) whose entries are added to the list. Tickers are
-# resolved to SEC CIKs through the company ticker file on each run; unresolved
+# column (and any other columns) whose entries are added to the list. Unresolved
 # tickers are reported, never dropped silently.
 #
-# The shipped list is a hand-maintained subset of current S&P 500 members, so it
-# carries survivorship bias (companies that left the index are absent). Replace or
-# extend it with a maintained constituents file when one is available:
+#   region        "US" or "EU": which side of the Screener page's market selector
+#                 shows the table. Default "US".
+#   source        where the accounts come from. "edgar" (default): SEC filings, the
+#                 tickers resolved to CIKs through the SEC's company ticker file,
+#                 point-in-time. "yahoo": Yahoo Finance, by Yahoo symbol (SAP.DE,
+#                 NOVO-B.CO, BT-A.L), not point-in-time.
+#   point_in_time true only for "edgar"; a "yahoo" universe must say false.
+#
+# The Screener page builds sp500_core for the US and stoxx600 for the EU
+# (DEFAULT_UNIVERSES in invest/jobs/fundamentals.py); any other universe is built with
+#   python -m invest.jobs.fundamentals --universe NAME
+# and shown under its region until the next build of that region.
+#
+# The shipped lists are hand-maintained lists of current members, so they carry
+# survivorship bias (companies that left the index are absent). Replace or extend
+# one with a maintained constituents file when one is available:
 #   csv = "config/universe/sp500.csv"
 
 [universe.sp500_core]
 label = "S&P 500 core (large members, hand-maintained)"
 note = "Current members only; about 150 of the largest names across every sector."
+region = "US"
+source = "edgar"
 tickers = [
   # technology
   "AAPL", "MSFT", "NVDA", "AVGO", "ORCL", "CSCO", "ADBE", "CRM", "AMD", "INTC", "QCOM", "TXN", "IBM",
@@ -45,4 +59,101 @@ tickers = [
 [universe.watch_examples]
 label = "Examples for tests and demos"
 note = "Three filers with different shapes: an industrial, a bank, an IFRS filer on 20-F."
+region = "US"
 tickers = ["MMM", "JPM", "SAP"]
+
+[universe.stoxx600]
+label = "STOXX Europe 600 (members, hand-maintained)"
+note = """The 600 largest by market cap (on 2026-11-11) of a hand-maintained list of current members, \
+by Yahoo symbol, one share line per company. STOXX reviews the index every quarter: check the list \
+against its composition now and then. Accounts and prices from Yahoo Finance."""
+region = "EU"
+source = "yahoo"
+point_in_time = false
+tickers = [
+  # United Kingdom
+  "AZN.L", "SHEL.L", "HSBA.L", "ULVR.L", "REL.L", "BATS.L", "BP.L", "GSK.L", "RIO.L", "LSEG.L", "DGE.L",
+  "RR.L", "BA.L", "CPG.L", "NG.L", "GLEN.L", "BARC.L", "LLOY.L", "NWG.L", "EXPN.L", "HLN.L", "AAL.L", "TSCO.L",
+  "PRU.L", "III.L", "VOD.L", "SSE.L", "IMB.L", "STAN.L", "LGEN.L", "AV.L", "RKT.L", "HLMA.L", "SGE.L", "INF.L",
+  "BNZL.L", "SMIN.L", "IHG.L", "ABF.L", "BT-A.L", "KGF.L", "SBRY.L", "MKS.L", "NXT.L", "JD.L", "BRBY.L",
+  "AUTO.L", "RMV.L", "SN.L", "ITRK.L", "WTB.L", "ENT.L", "ANTO.L", "FRES.L", "EDV.L", "ADM.L", "BKG.L",
+  "BTRW.L", "PSN.L", "TW.L", "BLND.L", "LAND.L", "SGRO.L", "DCC.L", "SPX.L", "WEIR.L", "IMI.L", "HWDN.L",
+  "CNA.L", "UU.L", "SVT.L", "MNDI.L", "CRDA.L", "JMAT.L", "PSON.L", "ICG.L", "SDR.L", "MNG.L", "SDLF.L",
+  "BEZ.L", "HIK.L", "BAB.L", "MRO.L", "STJ.L", "INVP.L", "BME.L", "DPLM.L", "GAW.L", "CCH.L", "CTEC.L",
+  "EZJ.L", "IAG.L", "RTO.L", "HSX.L", "AAF.L", "WPP.L", "ABDN.L", "LMP.L", "MTLN.L", "EMG.L", "IGG.L",
+  "WISE.L", "HBR.L", "ROR.L", "BWY.L", "QQ.L", "SRP.L", "BBY.L", "DRX.L", "ITV.L", "OCDO.L", "RS1.L", "BBOX.L",
+  "PHP.L", "QLT.L", "FRAS.L", "HOC.L", "TBCG.L", "BGEO.L",
+  # France
+  "TTE.PA", "MC.PA", "SAN.PA", "OR.PA", "SU.PA", "AIR.PA", "RMS.PA", "AI.PA", "SAF.PA", "EL.PA", "CS.PA",
+  "BNP.PA", "DG.PA", "SGO.PA", "BN.PA", "ACA.PA", "GLE.PA", "ORA.PA", "ENGI.PA", "HO.PA", "LR.PA", "KER.PA",
+  "RI.PA", "DSY.PA", "PUB.PA", "CAP.PA", "ML.PA", "VIE.PA", "STMPA.PA", "EN.PA", "BVI.PA", "CA.PA", "EDEN.PA",
+  "ERF.PA", "RNO.PA", "TEP.PA", "URW.PA", "AC.PA", "ADP.PA", "ALO.PA", "AMUN.PA", "AKE.PA", "AYV.PA", "BIM.PA",
+  "BOL.PA", "COV.PA", "AM.PA", "FGR.PA", "ELIS.PA", "ENX.PA", "RF.PA", "GFC.PA", "GET.PA", "IPN.PA", "DEC.PA",
+  "LI.PA", "FDJU.PA", "NEX.PA", "RXL.PA", "RUI.PA", "DIM.PA", "SCR.PA", "SK.PA", "SW.PA", "SOI.PA", "SOP.PA",
+  "SPIE.PA", "TE.PA", "VK.PA", "MF.PA", "AF.PA", "ATE.PA",
+  # Germany
+  "SAP.DE", "SIE.DE", "ALV.DE", "DTE.DE", "MUV2.DE", "RHM.DE", "SHL.DE", "ENR.DE", "MBG.DE", "BMW.DE",
+  "IFX.DE", "DB1.DE", "DBK.DE", "BAS.DE", "EOAN.DE", "DHL.DE", "VOW3.DE", "ADS.DE", "MRK.DE", "BAYN.DE",
+  "RWE.DE", "VNA.DE", "HNR1.DE", "CBK.DE", "HEI.DE", "MTX.DE", "DTG.DE", "BEI.DE", "HEN3.DE", "SY1.DE",
+  "FRE.DE", "FME.DE", "CON.DE", "P911.DE", "PAH3.DE", "BNR.DE", "G1A.DE", "QIA.DE", "G24.DE", "ZAL.DE",
+  "NDA.DE", "BC8.DE", "AFX.DE", "EVD.DE", "DHER.DE", "LHA.DE", "EVK.DE", "FRA.DE", "FPE3.DE", "HAG.DE",
+  "HOT.DE", "KGX.DE", "KBX.DE", "KRN.DE", "LEG.DE", "NEM.DE", "PUM.DE", "RAA.DE", "R3NK.DE", "SRT3.DE",
+  "TLX.DE", "TKA.DE", "8TRA.DE", "TUI1.DE", "UTDI.DE", "WCH.DE", "AG1.DE", "NDX1.DE", "SIX2.DE", "HLAG.DE",
+  "RRTL.DE", "SHA0.DE", "AIXA.DE",
+  # Switzerland. Lindt by its registered share (LISN), not the participation certificate (LISP):
+  # Yahoo counts its shares in registered-share equivalents, so LISP would value it at a tenth.
+  "NESN.SW", "ROP.SW", "NOVN.SW", "UBSG.SW", "ABBN.SW", "ZURN.SW", "CFR.SW", "HOLN.SW", "SREN.SW", "ALC.SW",
+  "LONN.SW", "SIKA.SW", "GIVN.SW", "PGHN.SW", "SLHN.SW", "GEBN.SW", "SGSN.SW", "SCMN.SW", "KNIN.SW", "LOGN.SW",
+  "SDZ.SW", "STMN.SW", "SOON.SW", "SCHP.SW", "BAER.SW", "LISN.SW", "UHR.SW", "GALD.SW", "HBAN.SW", "TEMN.SW",
+  "VACN.SW", "BARN.SW", "EMSN.SW", "GF.SW", "CLN.SW", "ADEN.SW", "AVOL.SW", "FHZN.SW", "PSPN.SW", "SPSN.SW",
+  "BCVN.SW", "BEAN.SW", "BANB.SW", "SIGN.SW", "ACLN.SW", "SUN.SW", "TECN.SW", "SFZN.SW", "GALE.SW", "YPSN.SW",
+  "DKSH.SW", "SQN.SW", "SRAIL.SW", "AMRZ.SW", "SUNN.SW", "VONN.SW", "BUCN.SW", "EMMN.SW",
+  # Netherlands
+  "ASML.AS", "PRX.AS", "ADYEN.AS", "INGA.AS", "HEIA.AS", "HEIO.AS", "AD.AS", "WKL.AS", "UMG.AS", "PHIA.AS",
+  "ASM.AS", "BESI.AS", "NN.AS", "AGN.AS", "ABN.AS", "KPN.AS", "AKZA.AS", "EXO.AS", "RAND.AS", "IMCD.AS",
+  "DSFIR.AS", "ASRNL.AS", "ARCAD.AS", "AALB.AS", "SBMO.AS", "VPK.AS", "CTPNV.AS", "INPST.AS", "ALLFG.AS",
+  "MT.AS",
+  # Sweden
+  "ATCO-A.ST", "INVE-B.ST", "VOLV-B.ST", "ASSA-B.ST", "SAND.ST", "ERIC-B.ST", "HEXA-B.ST", "EPI-A.ST",
+  "SEB-A.ST", "SWED-A.ST", "SHB-A.ST", "ESSITY-B.ST", "HM-B.ST", "ALFA.ST", "SKF-B.ST", "BOL.ST", "SAAB-B.ST",
+  "EVO.ST", "EQT.ST", "TELIA.ST", "TEL2-B.ST", "SKA-B.ST", "INDU-C.ST", "LIFCO-B.ST", "INDT.ST", "ADDT-B.ST",
+  "BEIJ-B.ST", "NIBE-B.ST", "GETI-B.ST", "SECU-B.ST", "SCA-B.ST", "HOLM-B.ST", "TREL-B.ST", "BALD-B.ST",
+  "SAGA-B.ST", "CAST.ST", "LUND-B.ST", "LATO-B.ST", "AXFO.ST", "AAK.ST", "SWEC-B.ST", "LAGR-B.ST", "AZA.ST",
+  "SAVE.ST", "VOLCAR-B.ST", "SSAB-A.ST", "SOBI.ST", "MYCR.ST", "LOOMIS.ST",
+  # Denmark
+  "NOVO-B.CO", "DSV.CO", "NSIS-B.CO", "VWS.CO", "ORSTED.CO", "COLO-B.CO", "DANSKE.CO", "MAERSK-B.CO",
+  "CARL-B.CO", "PNDORA.CO", "GMAB.CO", "DEMANT.CO", "TRYG.CO", "ISS.CO", "ROCK-B.CO", "JYSK.CO", "ALSYDB.CO",
+  "AMBU-B.CO", "RBREW.CO", "FLS.CO", "NKT.CO", "RILBA.CO", "ALMB.CO", "HLUN-B.CO", "ALK-B.CO",
+  # Finland
+  "NDA-FI.HE", "NOKIA.HE", "SAMPO.HE", "KNEBV.HE", "UPM.HE", "STERV.HE", "NESTE.HE", "FORTUM.HE", "WRT1V.HE",
+  "ELISA.HE", "METSO.HE", "ORNBV.HE", "KESKOB.HE", "VALMT.HE", "KCR.HE", "HIAB.HE", "MANTA.HE",
+  # Norway
+  "EQNR.OL", "DNB.OL", "TEL.OL", "NHY.OL", "MOWI.OL", "AKRBP.OL", "ORK.OL", "KOG.OL", "YAR.OL", "GJF.OL",
+  "STB.OL", "SALM.OL", "VEND.OL", "SUBC.OL", "NOD.OL", "AKER.OL", "FRO.OL", "VAR.OL", "AUTO.OL", "WAWI.OL",
+  # Italy
+  "ENEL.MI", "ENI.MI", "ISP.MI", "UCG.MI", "G.MI", "RACE.MI", "STLAM.MI", "PRY.MI", "MONC.MI", "TRN.MI",
+  "SRG.MI", "PST.MI", "MB.MI", "BAMI.MI", "BPE.MI", "LDO.MI", "TEN.MI", "TIT.MI", "FBK.MI", "REC.MI", "AMP.MI",
+  "CPR.MI", "NEXI.MI", "INW.MI", "HER.MI", "A2A.MI", "IG.MI", "SPM.MI", "UNI.MI", "BMED.MI", "AZM.MI",
+  "BMPS.MI", "IP.MI", "DIA.MI", "IVG.MI", "PIRC.MI", "BC.MI", "BZU.MI", "REY.MI", "BGN.MI", "DLG.MI",
+  "LTMC.MI", "ERG.MI", "FCT.MI",
+  # Spain
+  "IBE.MC", "ITX.MC", "SAN.MC", "BBVA.MC", "CABK.MC", "AMS.MC", "FER.MC", "AENA.MC", "REP.MC", "TEF.MC",
+  "CLNX.MC", "NTGY.MC", "ELE.MC", "RED.MC", "GRF.MC", "ACS.MC", "SAB.MC", "BKT.MC", "UNI.MC", "MAP.MC",
+  "ENG.MC", "ANA.MC", "ANE.MC", "MRL.MC", "FDR.MC", "IDR.MC", "ROVI.MC", "LOG.MC", "PUIG.MC", "COL.MC",
+  "SCYR.MC",
+  # Belgium
+  "ABI.BR", "KBC.BR", "UCB.BR", "ARGX.BR", "AGS.BR", "GBLB.BR", "SYENS.BR", "UMI.BR", "ELI.BR", "SOF.BR",
+  "DIE.BR", "ACKB.BR", "LOTB.BR", "WDP.BR", "AED.BR", "AZE.BR", "CMBT.BR",
+  # Ireland
+  "A5G.IR", "BIRG.IR", "KRZ.IR", "KRX.IR", "RYA.IR", "GL9.IR",
+  # Austria
+  "EBS.VI", "OMV.VI", "VER.VI", "RBI.VI", "VOE.VI", "ANDR.VI", "BG.VI", "VIG.VI",
+  # Portugal
+  "EDP.LS", "EDPR.LS", "GALP.LS", "JMT.LS", "BCP.LS",
+  # Poland
+  "PKO.WA", "PZU.WA", "PEO.WA", "PKN.WA", "KGH.WA", "LPP.WA", "DNP.WA", "CDR.WA", "ALE.WA", "EBP.WA", "MBK.WA",
+  "BDX.WA", "PGE.WA", "ZAB.WA", "PCO.WA",
+  # Greece
+  "ETE.AT", "EUROB.AT", "TPEIR.AT", "ALPHA.AT", "ALWN.AT", "BELA.AT", "HTO.AT", "PPC.AT", "MOH.AT",
+  "GEKTERNA.AT", "AIA.AT",
+]
