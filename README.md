@@ -56,7 +56,8 @@ and sells, and see valuation and performance in EUR.
     stores, read from DuckDB, and, with a `FRED_API_KEY`, every series FRED publishes;
     without the key, `fred:` and an id (`fred:CPIAUCSL`) charts any FRED series.
   - The dashboard's time range (1M to Max), charts per row, chart height and y axis.
-    In % change, a chart's series start together on the first day they all have data; in
+    In % change, each series starts at 0% on its first day in the range, and one whose data
+    begins inside the range starts later, at 0% on its own first day, named under the chart; in
     value, series in different units or currencies get a panel each on one time axis,
     rather than a second scale. A series keeps its colour when another is taken off.
   - The charts are kept in the page URL (`?chart=AAPL,MSFT&chart=macro:US_CPI`), with the
@@ -70,8 +71,9 @@ and sells, and see valuation and performance in EUR.
     the screener table's conservative value, margin of safety and F-score for a company in
     it, and where and when each was added.
   - The dashboard's time range, charts per row, chart height and y axis, then one chart of
-    every stock together (in price, a panel per currency; in % change, all from the first
-    day they all have data) and a chart of each, a stock in the same colour on all of them.
+    every stock together (in price, a panel per currency; in % change, each from its first
+    close in the range, a stock listed since from its own first close) and a chart of each,
+    a stock in the same colour on all of them.
     The close button on a stock's chart takes it off the watchlist.
   - Stored in DuckDB, in the `watchlist` table the weekly report reads too.
 - **Cloud Database**

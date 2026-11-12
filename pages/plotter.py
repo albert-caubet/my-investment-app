@@ -264,8 +264,8 @@ def _draw(chart: dict, about: dict[str, tuple[str, str]], preset: str, in_pct: b
     left_out = failed | view.missing
     if left_out:
         st.caption("Not drawn: " + "; ".join(f"{labels[ref]}, {why}" for ref, why in left_out.items()) + ".")
-    if view.common_start:
-        st.caption(f"Every line starts on {view.start:%d %b %Y}, the first day in the range that all of them have data.")
+    if late := charts.late_caption(view, labels):
+        st.caption(late)
 
 
 # ==========================================================================================
@@ -346,12 +346,14 @@ preset = controls.segmented_control(
 )
 per_row, height, in_pct = charts.grid_controls(
     controls, value="Value",
-    change_help="Change: every series in % from the first day of the time range that a chart's series all have data.",
+    change_help="Change: every series in % from its first value in the time range. One whose data begins inside the "
+                "range starts later, at 0% on its own first day.",
 )
 if in_pct:
     st.caption(
-        "% change from the first day in the time range on which every series of the chart has data, so the lines "
-        "start together. Yahoo closes are unadjusted: dividends paid out are not counted in it."
+        "% change from each series' first value in the time range. One whose data begins inside the range starts "
+        "later, at 0% on its own first day, marked with a dot. Yahoo closes are unadjusted: dividends paid out are "
+        "not counted in it."
     )
 
 cards = st.session_state[CHARTS]

@@ -282,18 +282,19 @@ def test_values_in_different_units_get_a_panel_each_not_a_second_scale(canned):
     assert layout["xaxis"]["anchor"] == "y2"  # the dates under the bottom panel
 
 
-def test_in_change_every_line_starts_at_zero_on_the_same_day(canned):
+def test_in_change_a_newer_stock_starts_at_zero_on_its_first_close(canned):
     at = _page(chart=["AAPL,NEWCO"], y_axis="Change")
     assert not at.exception
     (fig,) = _figures(at)
+    starts = [pd.Timestamp(trace["x"][0]) for trace in fig["data"]]
+    assert starts == [pd.Timestamp("2025-10-02"), pd.Timestamp(NEWCO_LISTED)]  # the range's, then Newco's
     for trace in fig["data"]:
-        assert pd.Timestamp(trace["x"][0]) == pd.Timestamp(NEWCO_LISTED)
         assert _numbers(trace["y"])[0] == 0
         assert trace["yaxis"] == "y"
     assert fig["layout"]["yaxis"]["tickformat"] == "+.1~%"
-    assert fig["layout"]["yaxis"]["title"]["text"] == "Change since 02 Mar 2026"
+    assert fig["layout"]["yaxis"]["title"]["text"] == "Change since 02 Oct 2025"
     assert "yaxis2" not in fig["layout"]  # one scale: every line is in %
-    assert any("the first day in the range that all of them have data" in c.value for c in at.caption)
+    assert any("Newco" in c.value and "starts later" in c.value and "02 Mar 2026" in c.value for c in at.caption)
 
 
 def test_the_grid_controls_work_as_on_the_dashboard(canned):

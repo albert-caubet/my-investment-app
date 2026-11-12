@@ -16,7 +16,7 @@ the Stock explorer and the Watchlist draw theirs alike.
 """
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 from typing import Sequence
 
@@ -161,7 +161,9 @@ class SeriesWindow:
     series: dict[str, pd.Series]
     start: date | None  # the first date shown
     missing: dict[str, str]  # why a series shows nothing
-    common_start: bool = False  # rebased from the first day every series has, later than some begin
+    #: In a rebase, the series whose history begins inside the range, by their first day: each
+    #: is at 0% there rather than on the range's first day, as the others are.
+    late: dict[str, date] = field(default_factory=dict)
 
 
 def window_series(series: Mapping[str, pd.Series], preset: str, *, rebase: bool = False) -> SeriesWindow:
@@ -170,10 +172,12 @@ def window_series(series: Mapping[str, pd.Series], preset: str, *, rebase: bool 
     The range counts back from the latest observation of any of them, so a chart of a
     daily price and a monthly indicator ends on the last price.
 
-    To be rebased, as a % change, the series start on one common day: the first in the
-    range on which every one of them has data. Lines rebased on different days do not
-    compare. A series is left out when it ends before the others start, or when it is
-    zero or below on that day, where a % change does not exist.
+    To be rebased, as a % change, each series is 0% on its first day in the range: the
+    range's first day for one with data before it, its own first day for one whose history
+    begins inside the range (``late``). So a stock listed last year does not cut ten years
+    of the others to its one; its line starts later, from 0%, and the page says where.
+    A series is left out when it is zero or below on its first day, where a % change does
+    not exist.
     """
     present = {key: s.dropna().sort_index() for key, s in series.items()}
     missing = {key: "no data" for key, s in present.items() if s.empty}
@@ -193,22 +197,30 @@ def window_series(series: Mapping[str, pd.Series], preset: str, *, rebase: bool 
     if not rebase or not shown:
         return SeriesWindow(shown, start.date() if shown else None, missing)
 
-    while True:  # each pass leaves at least one series out, or ends
-        common = max(s.index[0] for s in shown.values())
-        cut = {key: s[s.index >= common] for key, s in shown.items()}
-        out = {
-            key: "ends before the others start" if c.empty
-            else "zero or below where the others start, so it has no % change"
-            for key, c in cut.items()
-            if c.empty or c.iloc[0] <= 0
-        }
-        if not out:
-            earliest = min(s.index[0] for s in shown.values())
-            return SeriesWindow(cut, common.date(), missing, common_start=common > earliest)
-        missing.update(out)
-        shown = {key: s for key, s in shown.items() if key not in out}
-        if not shown:
-            return SeriesWindow({}, None, missing)
+    for key, s in list(shown.items()):
+        if s.iloc[0] <= 0:
+            missing[key] = "zero or below on its first day in the range, so it has no % change"
+            del shown[key]
+    if not shown:
+        return SeriesWindow({}, None, missing)
+    first_shown = min(s.index[0] for s in shown.values())
+    # Late: no data before the range, so not at 0% on its first day as the others are. A monthly
+    # series whose first print in the range comes weeks after it is not; it was there before.
+    late = {key: s.index[0].date() for key, s in shown.items()
+            if present[key].index[0] > start and s.index[0] > first_shown}
+    return SeriesWindow(shown, first_shown.date(), missing, late)
+
+
+def late_caption(view: SeriesWindow, names: Mapping[str, str]) -> str | None:
+    """Under a chart in % change: the series that start later than the range, each at 0% on its
+    own first day, by name and day; None when there is none."""
+    if not view.late:
+        return None
+    if len(view.late) == 1:
+        ((key, day),) = view.late.items()
+        return f"{names[key]} starts later, at 0% on its first day of data, {day:%d %b %Y}."
+    listed = "; ".join(f"{names[key]}, {day:%d %b %Y}" for key, day in sorted(view.late.items(), key=lambda kv: kv[1]))
+    return f"Starting later, each at 0% on its first day of data: {listed}."
 
 
 #: Characters a legend entry has room for, by charts per row, in a window about 1280 pixels
@@ -248,10 +260,12 @@ def lines_figure(view: SeriesWindow, names: Mapping[str, str], units: Mapping[st
         if base > 0 and (change_in_hover or in_pct):
             hover += " · %{customdata[1]:+.1%}"
         line = series_line(slots[key])
+        # A dot where a line that starts later than the range starts, at 0%: its first day.
+        dot = in_pct and key in view.late and len(values) > 1
         fig.add_scatter(
             x=values.index, y=change if in_pct else values, name=names[key], yaxis=f"y{panel + 1 if panel else ''}",
-            mode="lines" if len(values) > 1 else "markers",
-            line=line, marker=dict(color=line["color"], size=8),
+            mode="lines+markers" if dot else ("lines" if len(values) > 1 else "markers"),
+            line=line, marker=dict(color=line["color"], size=[8] + [0] * (len(values) - 1) if dot else 8),
             customdata=np.column_stack([values.to_numpy(), change.to_numpy()]),
             hovertemplate=hover + "<extra></extra>",
         )
@@ -292,7 +306,7 @@ class TickedLayout:
     preset: str  # one of RANGES
     per_row: int
     height: int  # pixels, as drawn
-    in_pct: bool  # % change from the first common day, or values
+    in_pct: bool  # % change from each line's first day in the range, or values
 
 
 def ticked_layout(container, prefix: str, *, noun: str, default_range: str = DEFAULT_RANGE,

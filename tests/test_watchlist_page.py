@@ -213,20 +213,19 @@ def test_the_grid_controls_lay_out_the_charts_as_on_the_dashboard(canned):
     assert {pd.Timestamp(fig["data"][0]["x"][0]) for fig in figures} == {DAYS[0]}  # Max: the whole history
 
 
-def test_in_change_the_first_chart_starts_together_and_each_chart_from_its_own_first_close(canned, seeded_db):
+def test_in_change_every_line_starts_at_zero_with_the_range_or_on_its_first_close(canned, seeded_db):
     _add(seeded_db, "NEWCO")
     at = _page(y_axis="Change")
     assert not at.exception
     together, *each = _figures(at)
-    for trace in together["data"]:
-        assert pd.Timestamp(trace["x"][0]) == pd.Timestamp(NEWCO_LISTED)
-        assert _numbers(trace["y"])[0] == 0
-    assert together["layout"]["yaxis"]["title"]["text"] == "Change since 02 Mar 2026"
+    starts = [pd.Timestamp(trace["x"][0]) for trace in together["data"]]
+    assert starts == [pd.Timestamp("2025-10-02")] * 3 + [pd.Timestamp(NEWCO_LISTED)]  # Newco listed in the range
+    assert all(_numbers(trace["y"])[0] == 0 for trace in together["data"])
+    assert together["layout"]["yaxis"]["title"]["text"] == "Change since 02 Oct 2025"
     assert "yaxis2" not in together["layout"]  # one scale: every line is in %
-    starts = [pd.Timestamp(fig["data"][0]["x"][0]) for fig in each]
-    assert starts == [pd.Timestamp("2025-10-02")] * 3 + [pd.Timestamp(NEWCO_LISTED)]
+    assert [pd.Timestamp(fig["data"][0]["x"][0]) for fig in each] == starts
     assert all(_numbers(fig["data"][0]["y"])[0] == 0 for fig in each)
-    assert any("the first day in the range that all of them have data" in c.value for c in at.caption)
+    assert any("Newco" in c.value and "starts later" in c.value and "02 Mar 2026" in c.value for c in at.caption)
 
 
 def test_a_stock_yahoo_cannot_price_is_named_and_the_rest_drawn(canned, seeded_db):

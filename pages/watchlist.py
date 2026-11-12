@@ -153,14 +153,13 @@ preset = controls.segmented_control(
 )
 per_row, height, in_pct = charts.grid_controls(
     controls, value="Price",
-    change_help="Change: each stock in % from its first close in the time range. On the chart of every stock, from "
-                "the first day in the range that all of them have data.",
+    change_help="Change: each stock in % from its first close in the time range. A stock listed since starts later, "
+                "at 0% on its own first close.",
 )
 if in_pct:
     st.caption(
-        "% change from each chart's first close in the time range; the chart of every stock starts them together, on "
-        "the first day in the range that all of them have data. The closes are unadjusted, so dividends paid out are "
-        "not counted in it."
+        "% change from each stock's first close in the time range. A stock listed since starts later, at 0% on its own "
+        "first close, marked with a dot. The closes are unadjusted, so dividends paid out are not counted in it."
     )
 
 change_column = f"Change ({preset})"
@@ -231,8 +230,8 @@ with st.container(border=True):
     left_out = failed | view.missing
     if left_out:
         st.caption("Not drawn: " + "; ".join(f"{labels[s]}, {why}" for s, why in left_out.items()) + ".")
-    if view.common_start:
-        st.caption(f"Every line starts on {view.start:%d %b %Y}, the first day in the range that all of them have data.")
+    if late := charts.late_caption(view, labels):
+        st.caption(late)
 
 for i, symbol in enumerate(symbols):
     if i % per_row == 0:

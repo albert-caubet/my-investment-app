@@ -181,7 +181,7 @@ def test_ticking_a_company_charts_it_and_puts_it_in_the_url(seeded_db):
     assert [e.label for e in _chart_cells(at)] == ["📈 3M CO (MMM)"]
 
 
-def test_together_in_change_draws_one_chart_from_a_common_start(seeded_db):
+def test_together_in_change_draws_one_chart_from_the_start_of_the_range(seeded_db):
     at = _ticked("MMM", "SAP")
     at.button_group(key="screener_layout").set_value("Together").run()
     at.button_group(key="screener_y_axis").set_value("Change").run()

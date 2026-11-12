@@ -189,47 +189,56 @@ def test_the_range_counts_back_from_the_latest_observation_of_any_series():
     assert view.start == date(2025, 10, 2)  # a year before the last price, not before the last monthly print
     assert view.series["price"].index[0] == pd.Timestamp("2025-10-02")
     assert view.series["rate"].index[0] == pd.Timestamp("2025-11-01")  # its first print in the range
-    assert not view.missing and not view.common_start
+    assert not view.missing and not view.late
 
 
-def test_rebased_series_start_on_the_first_day_every_one_has_data():
+def test_rebased_series_start_each_on_its_own_first_day_in_the_range():
+    """A series with data before the range starts with it; a newer one, on its first day."""
     view = charts.window_series({"old": _daily("2000-01-03"), "new": _daily("2026-03-02")}, "1Y", rebase=True)
-    assert view.start == date(2026, 3, 2)
-    assert {key: s.index[0] for key, s in view.series.items()} == {"old": pd.Timestamp("2026-03-02"),
+    assert view.start == date(2025, 10, 2)
+    assert {key: s.index[0] for key, s in view.series.items()} == {"old": pd.Timestamp("2025-10-02"),
                                                                    "new": pd.Timestamp("2026-03-02")}
-    assert view.common_start  # "old" had data from the start of the range, and lost it
+    assert view.late == {"new": date(2026, 3, 2)}
 
 
-def test_a_range_that_opens_on_a_weekend_is_no_common_start():
+def test_a_series_older_than_the_range_is_not_late_however_late_its_first_print_in_it():
+    view = charts.window_series({"price": _daily("2020-01-01"), "rate": _monthly("2000-01-01")}, "1Y", rebase=True)
+    assert view.series["rate"].index[0] == pd.Timestamp("2025-11-01")  # monthly: its first print in the range
+    assert not view.late
+
+
+def test_a_range_that_opens_on_a_weekend_starts_on_the_next_trading_day():
     """A year back from Monday 5 October 2026 is a Sunday. The first trading day after it is where
-    the line begins, and nothing about it is common to several series."""
+    the line begins, and the series is not late: it has data before the range."""
     view = charts.window_series({"only": _daily("2020-01-01", end="2026-10-05")}, "1Y", rebase=True)
     assert view.start == date(2025, 10, 6)
-    assert not view.common_start
+    assert not view.late
 
 
-def test_without_a_rebase_nothing_is_cut_to_a_common_start():
+def test_without_a_rebase_the_series_start_with_the_range_too():
     view = charts.window_series({"old": _daily("2000-01-03"), "new": _daily("2026-03-02")}, "1Y")
     assert view.series["old"].index[0] == pd.Timestamp("2025-10-02")
+    assert not view.late  # in value, no line is set to 0% on a day of its own
 
 
-def test_a_series_that_ends_before_the_others_start_is_left_out_of_a_rebase():
+def test_a_series_that_ends_before_another_starts_is_still_drawn_in_a_rebase():
     view = charts.window_series(
         {"gone": _daily("2025-11-03", end="2025-12-31"), "a": _daily("2026-01-05"), "b": _daily("2025-10-01")},
         "1Y", rebase=True,
     )
-    assert set(view.series) == {"a", "b"}
-    assert view.missing == {"gone": "ends before the others start"}
-    assert view.start == date(2026, 1, 5)
+    assert set(view.series) == {"gone", "a", "b"} and not view.missing
+    assert view.series["gone"].index[-1] == pd.Timestamp("2025-12-31")
+    assert view.start == date(2025, 10, 2)
+    assert view.late == {"gone": date(2025, 11, 3), "a": date(2026, 1, 5)}
 
 
-def test_a_series_at_or_below_zero_has_no_change_and_the_start_moves_back():
+def test_a_series_at_or_below_zero_on_its_first_day_has_no_change():
     spread = _daily("2026-06-01", value=0.0)  # starts at 0: no % change from there
     view = charts.window_series({"price": _daily("2020-01-01"), "spread": spread}, "1Y", rebase=True)
     assert set(view.series) == {"price"}
     assert "no % change" in view.missing["spread"]
-    assert view.start == date(2025, 10, 2)  # the price alone starts with the range again
-    assert not view.common_start
+    assert view.start == date(2025, 10, 2)
+    assert not view.late
 
 
 def test_a_series_with_nothing_in_the_range_or_no_data_says_so():
@@ -266,12 +275,29 @@ def test_in_change_the_lines_share_one_axis_and_each_takes_the_look_of_its_slot(
     view = charts.window_series({"a": _daily("2020-01-01"), "b": _daily("2026-03-02")}, "1Y", rebase=True)
     fig = charts.lines_figure(view, {"a": "A", "b": "B"}, {"a": "USD", "b": "EUR"}, {"a": 3, "b": 9}, in_pct=True)
     assert [t.yaxis for t in fig.data] == ["y", "y"]
-    assert [float(t.y[0]) for t in fig.data] == [0.0, 0.0]
-    assert fig.layout.yaxis.title.text == "Change since 02 Mar 2026"
+    assert [float(t.y[0]) for t in fig.data] == [0.0, 0.0]  # "b" on its own first day
+    assert fig.layout.yaxis.title.text == "Change since 02 Oct 2025"
+    assert fig.data[0].mode == "lines"
+    assert fig.data[1].mode == "lines+markers"  # a dot where the late line starts, and nowhere else
+    assert fig.data[1].marker.size[0] > 0 and not any(fig.data[1].marker.size[1:])
     assert fig.layout.yaxis.tickformat == "+.1~%"
     assert [t.line.color for t in fig.data] == [charts.series_line(3)["color"], charts.series_line(9)["color"]]
     assert fig.data[1].line.dash == "dash"  # past eight, the colours come round with a dash
     assert fig.layout.showlegend is True
+
+
+def test_the_series_that_start_late_are_named_with_their_first_day():
+    old, new, newer = _daily("2020-01-01"), _daily("2026-03-02"), _daily("2026-06-01")
+    names = {"old": "Old", "new": "New Co", "newer": "Newer"}
+    one = charts.window_series({"old": old, "new": new}, "1Y", rebase=True)
+    assert charts.late_caption(one, names) == "New Co starts later, at 0% on its first day of data, 02 Mar 2026."
+    two = charts.window_series({"old": old, "new": new, "newer": newer}, "1Y", rebase=True)
+    assert charts.late_caption(two, names) == ("Starting later, each at 0% on its first day of data: New Co, "
+                                               "02 Mar 2026; Newer, 01 Jun 2026.")
+    assert charts.late_caption(charts.window_series({"old": old}, "1Y", rebase=True), names) is None
+    assert charts.late_caption(charts.window_series({"old": old, "new": new}, "1Y"), names) is None  # in value
+    alone = charts.window_series({"new": new}, "Max", rebase=True)  # the range starts with it: not late
+    assert charts.late_caption(alone, names) is None
 
 
 def test_a_single_line_has_no_legend():

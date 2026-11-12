@@ -290,16 +290,16 @@ def _price_chart(tickers: list[str], slots: dict[str, int], layout: charts.Ticke
                for ticker, why in view.missing.items()}
     if missing:
         st.caption("Not drawn: " + "; ".join(f"{names[t]}, {why}" for t, why in missing.items()) + ".")
-    if view.common_start and len(view.series) > 1:
-        st.caption(f"Every line starts on {view.start:%d %b %Y}, the first day in the range that all of them have data.")
+    if late := charts.late_caption(view, names):
+        st.caption(late)
 
 
 def _charts(ticked: list[str]) -> None:
     st.subheader("Charts")
     layout = charts.ticked_layout(
         st.container(horizontal=True, vertical_alignment="bottom", gap="medium"), "screener", noun="companies",
-        value="Price", change_help="Change: each close in % from the first day of the time range on which the "
-                                   "companies of a chart all have a close.",
+        value="Price", change_help="Change: each close in % from the company's first close in the time range. One "
+                                   "listed since starts later, at 0% on its own first close.",
     )
     if not ticked:
         st.info("Tick one or more companies in the list above to chart their prices.", icon=":material/check_box:")
