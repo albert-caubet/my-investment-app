@@ -80,6 +80,12 @@ The latest close stored by the screener build, in the currency the shares are qu
 (for a foreign company listed in the US, dollars). As of {date}.
 """
 
+MARKET_CAP_HELP = """\
+What the market values the whole company at: the latest close times the shares \
+outstanding, in billions of the currency of the accounts (the close converted into it \
+first). The EV, P/E, P/B and yields in the list all start from it.
+"""
+
 EPV_HELP = """\
 **Earnings power value**: what the business is worth if it simply keeps earning what it \
 earns today, with no growth at all. Bruce Greenwald's method (*Value Investing: From \

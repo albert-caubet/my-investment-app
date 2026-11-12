@@ -172,6 +172,7 @@ SHOW = [
     ("sector", "Sector", None),
     ("market_cap", "Mkt cap (bn)", None),
     ("earnings_yield", "EBIT/EV", "{:.1%}"),
+    ("ev_ebitda", "EV/EBITDA", "{:.1f}"),
     ("roic", "ROIC", "{:.1%}"),
     ("fcf_yield", "FCF yield", "{:.1%}"),
     ("f_score", "F", "{:.0f}"),
@@ -179,7 +180,6 @@ SHOW = [
     ("gross_margin_slope", "GM slope/yr", "{:+.2%}"),
     ("pb", "P/B", "{:.2f}"),
     ("pe", "P/E", "{:.1f}"),
-    ("ev_ebitda", "EV/EBITDA", "{:.1f}"),
     ("net_debt_to_ebitda", "ND/EBITDA", "{:.1f}"),
     ("shareholder_yield", "Sh. yield", "{:.1%}"),
     ("mos_conservative", "Margin of safety", "{:+.0%}"),
@@ -353,14 +353,17 @@ def _money(value, currency: str | None) -> str:
 
 price_currency = _prices(str(DB), _version(), pick)[1]
 accounts_currency = row.get("currency") if pd.notna(row.get("currency")) else None
-d1, d2, d3, d4, d5 = st.columns(5)
+market_cap = pd.to_numeric(row.get("market_cap"), errors="coerce")
+d1, d2, d3, d4, d5, d6 = st.columns(6)
 d1.metric("Price", _money(row.get("price"), price_currency),
           help=screener_help.PRICE_HELP.format(date=row.get("price_date") or "an unknown date"))
-d2.metric("EPV / share", _money(row.get("epv_per_share"), accounts_currency), help=screener_help.EPV_HELP)
-d3.metric("DCF / share", _money(row.get("dcf_per_share"), accounts_currency), help=screener_help.DCF_HELP)
-d4.metric("Margin of safety", f"{row.get('mos_conservative'):+.0%}" if pd.notna(row.get("mos_conservative")) else "–",
+d2.metric("Market cap", f"{market_cap / 1e9:,.1f} bn {accounts_currency or ''}".strip() if pd.notna(market_cap) else "–",
+          help=screener_help.MARKET_CAP_HELP)
+d3.metric("EPV / share", _money(row.get("epv_per_share"), accounts_currency), help=screener_help.EPV_HELP)
+d4.metric("DCF / share", _money(row.get("dcf_per_share"), accounts_currency), help=screener_help.DCF_HELP)
+d5.metric("Margin of safety", f"{row.get('mos_conservative'):+.0%}" if pd.notna(row.get("mos_conservative")) else "–",
           help=screener_help.MARGIN_OF_SAFETY_HELP)
-d5.metric("Data to", str(row.get("period_end") or "–"),
+d6.metric("Data to", str(row.get("period_end") or "–"),
           help=f"{screener_help.COLUMN_HELP['Data to']}\n\nBasis: {row.get('basis')}; fiscal year end {row.get('fy_end')}.")
 
 #: The fiscal-year history, drawn as charts of fields that read together: (title, unit, fields).

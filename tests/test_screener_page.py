@@ -62,6 +62,8 @@ def test_screener_page_renders_ranked_table_and_detail(seeded_db):
     first_table = at.dataframe[0].value
     assert "JPM" not in first_table["Ticker"].tolist()
     assert set(first_table["Ticker"]) <= {"MMM", "SAP"}
+    columns = list(first_table.columns)
+    assert columns.index("EV/EBITDA") == columns.index("EBIT/EV") + 1
     assert any("survivorship" in c.value.lower() for c in at.caption)
     assert "Rebuild now" in [b.label for b in at.button]
 
@@ -344,8 +346,10 @@ def test_the_detail_shows_epv_and_dcf_with_their_currencies(seeded_db):
     assert not at.exception
     metrics = {m.label: m for m in at.metric}
     assert "Conservative value / share" not in metrics
-    assert list(metrics)[:5] == ["Price", "EPV / share", "DCF / share", "Margin of safety", "Data to"]
+    assert list(metrics)[:6] == ["Price", "Market cap", "EPV / share", "DCF / share", "Margin of safety", "Data to"]
     assert metrics["Price"].value.endswith(" USD")  # the US listing
+    assert metrics["Market cap"].value.endswith(" bn EUR")  # SAP's accounts
+    assert "shares outstanding" in metrics["Market cap"].proto.help
     for label in ("EPV / share", "DCF / share"):
         value = metrics[label].value
         assert value == "–" or value.endswith(" EUR")  # SAP's accounts
