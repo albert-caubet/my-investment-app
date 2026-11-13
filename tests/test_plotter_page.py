@@ -376,3 +376,32 @@ def test_the_first_stock_put_on_the_watchlist_creates_the_database(canned, monke
     at.button_group(key="plotter_watch_0").select("AAPL").run()
     assert not at.exception
     assert _watched(path)["symbol"].tolist() == ["AAPL"]
+
+
+def _company_links(at: AppTest) -> dict[str, str]:
+    """The links to the Company financials page: their label by their query, in page order."""
+    return {link.proto.query_string: link.proto.label for link in at.get("page_link")
+            if link.proto.page.endswith("company")}
+
+
+def test_a_charts_stocks_link_to_their_financials_and_its_other_series_do_not(canned, monkeypatch):
+    meta = md.fetch_symbol_meta
+    monkeypatch.setattr(md, "fetch_symbol_meta", lambda s: {**meta(s), "kind": "ETF"} if s == "IWDA.AS" else meta(s))
+    at = _page(chart="AAPL,IWDA.AS,fred:UNRATE")
+    assert not at.exception
+    assert _company_links(at) == {"company=AAPL": "Apple Inc."}
+    assert "Financials:" in [c.value for c in at.caption]
+
+
+def test_a_stock_picked_from_a_search_links_to_its_financials(canned):
+    at = _page()
+    _search(at, "apple")
+    next(b for b in _hits(at) if "AAPL" in b.label).click().run()
+    assert not at.exception
+    assert _company_links(at) == {"company=AAPL": "Apple Inc."}
+
+
+def test_a_chart_of_macro_series_has_no_financials(canned):
+    at = _page(chart="fred:UNRATE")
+    assert not at.exception
+    assert not _company_links(at)

@@ -532,3 +532,32 @@ def fetch_fred_meta(series_id: str) -> dict:
     if not key:
         raise LookupError("FRED series details need a FRED_API_KEY")
     return fred.series_info(series_id, api_key=key)
+
+
+# ---------------------------------------------------------------------------
+# Any company's accounts (the Company financials page)
+# ---------------------------------------------------------------------------
+
+
+@st.cache_data(ttl=86_400, show_spinner=False)
+def fetch_sec_tickers() -> pd.DataFrame:
+    """SEC's list of the tickers and CIKs of US filers. Needs ``SEC_USER_AGENT``."""
+    from invest.data.edgar import EdgarClient
+
+    return EdgarClient().company_tickers()
+
+
+@st.cache_data(ttl=43_200, show_spinner=False)
+def fetch_company(symbol: str):
+    """Any company's accounts, measures and share price, fetched now and kept only in this cache:
+    a US filer's accounts from SEC EDGAR when ``SEC_USER_AGENT`` is set, any other's from Yahoo
+    Finance (``invest.jobs.fundamentals.look_up_company``). Yahoo asking to slow down fails the
+    fetch at once, rather than holding the page while the build's client would wait it out."""
+    from invest import secrets
+    from invest.data import yahoo
+    from invest.data.edgar import EdgarClient, user_agent_ok
+    from invest.jobs.fundamentals import look_up_company
+
+    edgar = EdgarClient() if user_agent_ok(secrets.sec_user_agent()) else None
+    return look_up_company(symbol, edgar_client=edgar, yahoo_client=yahoo.YahooClient(waits=()),
+                           sec_tickers=fetch_sec_tickers)

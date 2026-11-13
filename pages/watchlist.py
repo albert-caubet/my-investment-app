@@ -6,7 +6,8 @@ weekly report reads; a company in the latest screener table of either market, US
 European, shows that table's value and margin of safety too. The prices are Yahoo
 Finance's daily closes, fetched and cached by
 ``market_data.py`` as on the Stock explorer, so a stock from any market Yahoo quotes can be
-on it. The close button on a stock's chart takes it off the watchlist.
+on it. The close button on a stock's chart takes it off the watchlist; the link beside it
+opens the stock's accounts and valuation on the Company financials page.
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ import pandas as pd
 import streamlit as st
 
 import charts
+import company_detail
 import job_panel
 import market_data as md
 import watchlist
@@ -63,13 +65,13 @@ def _closes(symbol: str) -> pd.Series | str:
 
 
 @st.cache_data(ttl=300, show_spinner=False)
-def _yahoo_about(symbol: str) -> tuple[str, str] | None:
-    """Name and currency of ``symbol`` as Yahoo gives them; None when it does not answer."""
+def _yahoo_about(symbol: str) -> tuple[str, str, str] | None:
+    """Name, currency and kind (EQUITY, ETF…) of ``symbol`` as Yahoo gives them; None when it does not answer."""
     try:
         meta = md.fetch_symbol_meta(symbol)
     except Exception:
         return None
-    return meta["name"], meta["currency"] or ""
+    return meta["name"], meta["currency"] or "", meta.get("kind") or ""
 
 
 def _db_version() -> float:
@@ -118,7 +120,7 @@ covered = [symbol for symbol in symbols if symbol in screened.index]
 def _describe(symbol: str) -> tuple[str, str]:
     """``(name, currency)``: Yahoo's, else the screener table's name and no currency, else the symbol alone."""
     if yahoo_about[symbol]:
-        return yahoo_about[symbol]
+        return yahoo_about[symbol][:2]
     name = screened.at[symbol, "name"] if symbol in covered else None
     return (name if isinstance(name, str) and name else symbol), ""
 
@@ -240,7 +242,9 @@ for i, symbol in enumerate(symbols):
         name = about[symbol][0]
         head = st.container(horizontal=True, vertical_alignment="center", gap="small")
         head.markdown(f"**{search.plain(name)}** ({search.plain(symbol)})" if name != symbol
-                      else f"**{search.plain(symbol)}**", width="stretch")  # the button to the far right
+                      else f"**{search.plain(symbol)}**", width="stretch")  # the buttons to the far right
+        if (yahoo_about[symbol] or ("", "", ""))[2] in ("", "EQUITY"):  # unless Yahoo says it has no accounts
+            company_detail.link(head, symbol)
         head.button("", icon=":material/close:", key=f"watchlist_remove_{symbol}", help="Take it off the watchlist",
                     on_click=_take_off, args=(symbol, labels[symbol]), type="tertiary")
         got = closes[symbol]

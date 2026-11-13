@@ -332,3 +332,95 @@ def test_rates_come_from_whichever_of_eurusd_and_eur_x_closed_later(tmp_path):
         assert job.convert(100.0, "EUR", "EUR", store, None) == 100.0
         assert job.convert(100.0, "USD", "EUR", store, None) == pytest.approx(80.0)
         assert job.convert(100.0, "GBp", "EUR", store, None) is None
+
+
+# --- one company in no universe, for the Company financials page -----------------------------
+
+
+@pytest.fixture
+def downloads(monkeypatch):
+    """Canned closes for every symbol asked for, euros at 0.90 a dollar, and a record of what was asked."""
+    asked = []
+
+    def fetch_history(symbols, period="12y"):
+        asked.extend(symbols)
+        frames = {**_prices([s for s in symbols if not s.endswith("=X")]), **_eu_prices(symbols)}
+        return {s: frames[s] for s in symbols if s in frames}
+
+    monkeypatch.setattr(job.yahoo, "fetch_history", fetch_history)
+    return asked
+
+
+@pytest.fixture
+def untouched(tmp_path, monkeypatch):
+    """The market database a lookup must never create or write."""
+    db = tmp_path / "market.duckdb"
+    monkeypatch.setenv("INVEST_DB", str(db))
+    return db
+
+
+def test_a_us_filer_is_looked_up_on_edgar_in_memory(downloads, untouched):
+    edgar = FakeEdgar()
+    data = job.look_up_company(" mmm ", edgar_client=edgar, yahoo_client=FakeYahoo())
+    assert (data.source, data.stored, data.problems) == ("edgar", False, [])
+    row = data.row
+    assert (row["ticker"], row["name"], row["sector"], row["currency"]) == ("MMM", "3M CO", "medical equipment", "USD")
+    assert row["market_cap"] > 0 and pd.notna(row["earnings_yield"]) and pd.notna(row["epv_per_share"])
+    assert row["tags"]["revenue"] and "f_checks" in row.index
+    assert data.currency == "USD" and len(data.history) >= 5 and "revenue" in data.history.columns
+    assert data.price_currency == "USD" and not data.prices.empty
+    assert downloads == ["MMM"]  # accounts in dollars: no exchange rate to fetch
+    assert edgar.n_requests == 2  # its facts and its submissions, nothing else
+    assert not untouched.exists()
+
+
+def test_a_filer_with_accounts_in_euros_has_its_price_converted_at_a_rate_fetched_with_it(downloads, untouched):
+    data = job.look_up_company("SAP", edgar_client=FakeEdgar(), yahoo_client=FakeYahoo())
+    assert sorted(downloads) == ["EUR=X", "SAP"]  # one download, the rate with the price
+    row = data.row
+    assert (data.source, row["currency"], data.price_currency) == ("edgar", "EUR", "USD")
+    assert row["market_cap"] == pytest.approx(row["price"] * 0.90 * row["shares_outstanding"])  # 0.90 euros a dollar
+    assert not untouched.exists()
+
+
+def test_a_symbol_with_an_exchange_suffix_comes_from_yahoo_without_asking_sec(downloads, untouched):
+    asked = []
+
+    def sec_tickers():
+        asked.append("list")
+        return FakeEdgar().company_tickers()
+
+    data = job.look_up_company("ULVR.L", edgar_client=FakeEdgar(), yahoo_client=FakeYahoo(), sec_tickers=sec_tickers)
+    assert not asked
+    row = data.row
+    assert (data.source, data.stored, row["name"], row["currency"]) == ("yahoo", False, "Unilever PLC", "EUR")
+    assert data.price_currency == "GBp" and not data.prices.empty
+    assert row["market_cap"] == pytest.approx(50.0 / 0.75 * 0.90 * row["shares_outstanding"])
+    assert row["tags"]["revenue"] == "yahoo:TotalRevenue" and 4 <= len(data.history) <= 5
+    assert not untouched.exists()
+
+
+def test_without_an_edgar_client_a_us_filer_is_asked_of_yahoo_alone(downloads):
+    with pytest.raises(LookupError, match="^MMM: Yahoo has no quote for this symbol$"):
+        job.look_up_company("MMM", yahoo_client=FakeYahoo())
+
+
+def test_a_filer_edgar_has_no_accounts_for_is_asked_of_yahoo_next_and_the_reasons_kept(downloads):
+    class Unfiled(FakeEdgar):
+        def companyfacts(self, cik):
+            raise LookupError("no XBRL facts")
+
+    with pytest.raises(LookupError) as raised:
+        job.look_up_company("MMM", edgar_client=Unfiled(), yahoo_client=FakeYahoo())
+    assert str(raised.value) == "MMM (66740): no XBRL facts; MMM: Yahoo has no quote for this symbol"
+    assert not downloads  # no prices for a company without accounts
+
+
+def test_sec_not_answering_is_said_and_yahoo_asked(downloads):
+    def down():
+        raise OSError("SEC did not answer")
+
+    with pytest.raises(LookupError) as raised:
+        job.look_up_company("MMM", edgar_client=FakeEdgar(), yahoo_client=FakeYahoo(), sec_tickers=down)
+    assert str(raised.value) == ("SEC's list of tickers could not be had: SEC did not answer; "
+                                 "MMM: Yahoo has no quote for this symbol")

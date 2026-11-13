@@ -249,3 +249,18 @@ def test_the_close_button_on_a_chart_takes_its_stock_off_the_watchlist(canned, s
     assert at.dataframe[0].value["Symbol"].tolist() == ["MMM", "SAP.DE"]
     assert len(_figures(at)) == 3
     assert [t.value for t in at.toast] == ["Apple Inc. is off the watchlist."]
+
+
+def _company_links(at: AppTest) -> list[str]:
+    """The query of each link to the Company financials page, in page order."""
+    return [link.proto.query_string for link in at.get("page_link") if link.proto.page.endswith("company")]
+
+
+def test_each_stocks_chart_links_to_its_financials_unless_yahoo_says_it_has_none(canned, monkeypatch):
+    meta = md.fetch_symbol_meta
+    monkeypatch.setattr(md, "fetch_symbol_meta", lambda s: {**meta(s), "kind": "ETF"} if s == "AAPL" else meta(s))
+    at = _page()
+    assert not at.exception
+    assert _company_links(at) == ["company=MMM", "company=SAP.DE"]
+    (link,) = [link for link in at.get("page_link") if link.proto.query_string == "company=MMM"]
+    assert link.proto.label == "Financials" and "Company financials" in link.proto.help

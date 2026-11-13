@@ -9,6 +9,9 @@ currency it is quoted in, and the exchange rates between those currencies. Then 
 either: compute every metric and the two intrinsic values per company as of a date,
 save the table as the region's screener snapshot, and, for the US, write two breadth
 series into the macro store. A company that fails is reported and the rest continue.
+
+``look_up_company`` takes the same steps for one company in no universe, into a
+throwaway in-memory store, for the Company financials page.
 """
 
 from __future__ import annotations
@@ -16,8 +19,9 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from dataclasses import asdict, is_dataclass
+from dataclasses import asdict, dataclass, field, is_dataclass
 from datetime import date
+from typing import Callable
 
 import numpy as np
 import pandas as pd
@@ -56,11 +60,13 @@ FLOAT_RATIO_BOUNDS = (0.25, 4.0)
 
 
 def refresh_universe(
-    store: Store, client, universe: Universe, *, limit: int | None = None, skip_prices: bool = False, log=print
+    store: Store, client, universe: Universe, *, limit: int | None = None, skip_prices: bool = False, log=print,
+    tickers: pd.DataFrame | None = None,
 ) -> list[str]:
-    """Facts, sectors and prices for every ticker the SEC list resolves."""
+    """Facts, sectors and prices for every ticker the SEC list resolves. ``tickers`` is that list
+    (``client.company_tickers()``), asked of the client when not given."""
     problems: list[str] = []
-    tickers_frame = client.company_tickers()
+    tickers_frame = client.company_tickers() if tickers is None else tickers
     found, missing = resolve_ciks(universe.tickers, tickers_frame)
     if missing:
         problems.append(f"{len(missing)} ticker(s) not in the SEC list: {', '.join(missing[:12])}")
@@ -319,6 +325,83 @@ def build_metrics_table(store: Store, universe: Universe, *, as_of: date | None 
             if log:
                 log(f"  {company['ticker']}: metrics FAILED {exc}")
     return pd.DataFrame(rows)
+
+
+# ==========================================================================================
+# One company in no universe, for the Company financials page
+# ==========================================================================================
+
+
+@dataclass
+class CompanyData:
+    """One company as the company detail shows it: its row of a screener table, the fiscal-year
+    history of its accounts and its share price, and where they came from."""
+
+    row: pd.Series  # every measure and both intrinsic values, as a screener table has them
+    history: pd.DataFrame  # a row per fiscal year, a column per field
+    currency: str | None  # of the accounts
+    prices: pd.Series  # daily closes, adjusted for splits, not for dividends
+    price_currency: str | None  # of the quote, which can differ from the accounts': GBp for most of London
+    source: str  # where the accounts come from: "edgar" or "yahoo"
+    stored: bool  # read from the market database; otherwise fetched just now and kept nowhere
+    problems: list[str] = field(default_factory=list)  # what could not be had, said under the detail
+
+
+def _refresh_filer(store: Store, client, universe: Universe, tickers: pd.DataFrame) -> list[str]:
+    """``refresh_universe``, its prices downloaded with the dollar rates of the currencies the
+    accounts are in: the market database has the euro's from the macro refresh, a throwaway store none."""
+    problems = refresh_universe(store, client, universe, skip_prices=True, log=None, tickers=tickers)
+    ciks = store.facts_ciks()
+    if not ciks:
+        return problems
+    units = {unit for cik in ciks for unit in store.read_facts(cik)["unit"].unique() if is_money(unit)}
+    quotes = {ticker: "USD" for ticker in universe.tickers} | {yahoo.fx_symbol(c): c for c in sorted(units - {"USD"})}
+    return problems + store_prices(store, quotes, utcnow(), log=None)
+
+
+def look_up_company(symbol: str, *, edgar_client=None, yahoo_client=None,
+                    sec_tickers: Callable[[], pd.DataFrame] | None = None) -> CompanyData:
+    """Any company, fetched now by the build's own steps for a universe of one, into a throwaway
+    in-memory store: nothing is written to the market database, and the company gets no rank.
+
+    A US filer, a symbol without an exchange suffix on SEC's list, comes from EDGAR through
+    ``edgar_client``, as the US table does: point-in-time, ten years and more. Any other company,
+    or a filer EDGAR has no accounts for, comes from Yahoo Finance through ``yahoo_client``, as the
+    European table does: four or five years, not point-in-time. ``sec_tickers`` returns SEC's list,
+    by default the client's ``company_tickers``, so a caller can keep it. A source without a client
+    is skipped. Raises ``LookupError`` saying why when no source has the company's accounts.
+    """
+    symbol = symbol.strip().upper()
+    problems: list[str] = []
+    sources: list[str] = []
+    known = None  # SEC's list
+    if edgar_client is not None and "." not in symbol:
+        try:
+            known = (sec_tickers or edgar_client.company_tickers)()
+        except Exception as exc:
+            problems.append(f"SEC's list of tickers could not be had: {exc}")
+        else:
+            if resolve_ciks([symbol], known)[0]:
+                sources.append("edgar")
+    if yahoo_client is not None:
+        sources.append("yahoo")
+    for source in sources:
+        # A universe's region sets only the currency a table of many compares market caps in.
+        universe = Universe("lookup", symbol, (symbol,), point_in_time=source == "edgar", source=source)
+        with Store(":memory:") as store:
+            if source == "edgar":
+                found = _refresh_filer(store, edgar_client, universe, known)
+            else:
+                found = refresh_yahoo_universe(store, yahoo_client, universe, log=None)
+            table = build_metrics_table(store, universe)
+            if table.empty:
+                problems += found
+                continue
+            row = table.iloc[0]
+            fund = fundamentals_as_of(store.read_facts(int(row["cik"])))
+            return CompanyData(row, fund.history_frame(), fund.currency, store.read_prices(symbol),
+                               store.price_currency(symbol), source, stored=False, problems=problems + found)
+    raise LookupError("; ".join(problems) or f"no source to fetch {symbol} from")
 
 
 def compute_breadth(store: Store, symbols: list[str]) -> dict[str, pd.Series]:

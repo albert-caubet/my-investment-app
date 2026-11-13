@@ -64,7 +64,27 @@ and sells, and see valuation and performance in EUR.
     controls, so a reload or a bookmark brings them back.
   - Under each chart, a pill for each of its Yahoo series (stocks, ETFs, funds and the
     rest; not the macro or FRED series) puts it on the watchlist, lit while it is on it;
-    a second click takes it off.
+    a second click takes it off. Each of its stocks also has a link to its accounts on the
+    Company financials page.
+- **Company financials** (Analysis)
+  - The accounts, measures and valuation of any company, found with a search box as on the
+    Stock explorer (stocks only, by name, ticker or ISIN): the Screener's company detail
+    (price, market cap, EPV, DCF and margin of safety; the share price and the fiscal-year
+    history as charts; the inputs of both values, the Piotroski checks and the tags read),
+    with the measures the Screener's list has as columns in a row above the charts.
+  - A time range above the charts (5Y, 10Y or Max; 10Y by default, kept in the URL, and on
+    the Screener's detail too) sets the fiscal years they show, the share price following.
+    Max is every year stored: back to the late 2000s for a US filer from EDGAR, while Yahoo
+    Finance gives only a company's last four or five years. The European table keeps the
+    years each build saw, so its history grows by a year with each year's rebuild.
+  - A company in the latest screener table of either market is shown as that table has it.
+    Any other is fetched when picked, by the screener build's own steps for one company
+    in an in-memory database: a US filer's accounts from SEC EDGAR when `SEC_USER_AGENT`
+    is set (point-in-time, ten years and more), any other's from Yahoo Finance (four or
+    five years, not point-in-time), with the prices and exchange rates they need. It is
+    kept in the app's cache for half a day and stored nowhere, so it gets no rank.
+  - The company is kept in the page URL (`?company=7974.T`), which the links from the
+    Watchlist and the Stock explorer open; it can be put on the watchlist from the page.
 - **Watchlist** (Analysis)
   - The stocks put on the watchlist from the Screener or the Stock explorer, listed with
     Yahoo Finance's last close, the day's change and the change over the time range, plus
@@ -74,7 +94,8 @@ and sells, and see valuation and performance in EUR.
     every stock together (in price, a panel per currency; in % change, each from its first
     close in the range, a stock listed since from its own first close) and a chart of each,
     a stock in the same colour on all of them.
-    The close button on a stock's chart takes it off the watchlist.
+    The close button on a stock's chart takes it off the watchlist; the Financials link
+    beside it opens the stock on the Company financials page.
   - Stored in DuckDB, in the `watchlist` table the weekly report reads too.
 - **Cloud Database**
   - Firebase Firestore, for multi-device sync.
@@ -316,8 +337,12 @@ carrying its observation date and source, nothing filled in silently.
   Yahoo's and FRED's answers, ranked as one list) and fetches through `market_data.py`.
 - `pages/watchlist.py`: Watchlist. Fetches its prices through `market_data.py`, as the Stock
   explorer does.
+- `pages/company.py`: Company financials. Reads a company of a stored screener table from
+  DuckDB and fetches any other through `market_data.py`
+  (`invest.jobs.fundamentals.look_up_company`, the build's steps for one company in memory).
+- `company_detail.py`: the company detail the Screener and the Company financials page share.
 - `watchlist.py`: reads and changes the watchlist in DuckDB for the Screener, the Stock
-  explorer and the Watchlist page.
+  explorer, the Company financials page and the Watchlist page.
 - `charts.py`: the look every chart shares, the time-range presets, the grid controls the
   dashboard, the Stock explorer and the Watchlist offer, and the chart of several series
   the last two draw.

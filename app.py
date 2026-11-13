@@ -15,6 +15,9 @@ transactions_page = st.Page("pages/transactions.py", title="Log Transactions", i
 design_page = st.Page("pages/design.py", title="Portfolio design", icon="🧭")
 macro_page = st.Page("pages/macro.py", title="Macro", icon="🌍")
 screener_page = st.Page("pages/screener.py", title="Screener", icon="🔎")
+# Any company's accounts, measures and valuation, found by search: one in a screener table as
+# stored, any other fetched from SEC EDGAR or Yahoo Finance when picked, and stored nowhere.
+company_page = st.Page("pages/company.py", title="Company financials", icon="🏢")
 report_page = st.Page("pages/report.py", title="Weekly report", icon="📄")
 # A sandbox: charts of anything found by search. Unlike the other analysis pages it
 # fetches from Yahoo Finance and FRED itself, as the dashboard does.
@@ -27,7 +30,7 @@ watchlist_page = st.Page("pages/watchlist.py", title="Watchlist", icon="⭐")
 pg = st.navigation(
     {
         "Portfolio": [portfolio_page, transactions_page],
-        "Analysis": [design_page, macro_page, screener_page, plotter_page, watchlist_page, report_page],
+        "Analysis": [design_page, macro_page, screener_page, company_page, plotter_page, watchlist_page, report_page],
     }
 )
 

@@ -308,6 +308,31 @@ def test_the_detail_charts_the_history_in_millions_of_the_accounts_currency(seed
     assert not any("revenue" in map(str, d.value.index) for d in at.dataframe)
 
 
+def test_the_detail_has_a_time_range_of_its_own(seeded_db):
+    at = _screener(_app().run())
+    _company(at).select("MMM").run()
+    detail = at.button_group(key="screener_detail_range")
+    assert detail.value == "10Y" and detail.options == ["5Y", "10Y", "Max"]
+    first = int(np.nanmin(_values({"y": _history_figures(at)["Revenue and profit"]["data"][0]["x"]})))
+    assert first == 2019  # every fiscal year the saved facts have, fewer than ten
+    detail.set_value("5Y").run()
+    assert not at.exception
+    revenue = _history_figures(at)["Revenue and profit"]["data"][0]
+    assert sorted(int(y) for y in _values({"y": revenue["x"]})) == [2021, 2022, 2023, 2024, 2025]
+    assert _history_figures(at)["Share price"]["data"][0]["x"][0][:4] == "2021"
+    assert at.button_group(key="screener_range").value == "1Y"  # the ticked companies' charts keep theirs
+
+
+def test_the_details_time_range_is_read_from_the_url(seeded_db):
+    at = _app().run().switch_page("pages/screener.py")
+    at.query_params["screener_detail_range"] = "5Y"
+    at.run()
+    assert not at.exception
+    assert at.button_group(key="screener_detail_range").value == "5Y"
+    revenue = _history_figures(at)["Revenue and profit"]["data"][0]
+    assert int(np.nanmin(_values({"y": revenue["x"]}))) == 2021
+
+
 def test_the_history_of_accounts_in_euros_says_so(seeded_db):
     at = _screener(_app().run())
     _company(at).select("SAP").run()

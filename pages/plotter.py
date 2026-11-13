@@ -6,7 +6,8 @@ search; the macro series the refresh job stores (the catalog in ``config/series.
 read from the database as on the Macro page; and, with a FRED API key, any series FRED
 publishes. The charts are kept in the page URL with the controls above them
 (``?chart=AAPL,MSFT&chart=macro:US_CPI``), so a reload or a bookmark brings them back.
-A chart's Yahoo series can be put on the watchlist from it, for the Watchlist page.
+A chart's Yahoo series can be put on the watchlist from it, for the Watchlist page, and
+each of its stocks has a link to its accounts on the Company financials page.
 
 Unlike the other analysis pages, this one asks the network: Yahoo and FRED answer the
 searches and send the histories, and ``market_data.py`` caches both.
@@ -22,6 +23,7 @@ import pandas as pd
 import streamlit as st
 
 import charts
+import company_detail
 import market_data as md
 import watchlist
 from invest import secrets
@@ -309,6 +311,28 @@ def _watch_pills(chart_id: int, refs: list[str], labels: dict[str, str]) -> None
              help="Pick a stock to put it on the watchlist, and again to take it off. The Watchlist page charts them.")
 
 
+@st.cache_data(ttl=300, show_spinner=False)
+def _yahoo_kind(symbol: str) -> str | None:
+    """What Yahoo says ``symbol`` is (EQUITY, ETF…); None when it does not answer."""
+    try:
+        return md.fetch_symbol_meta(symbol)["kind"]
+    except Exception:
+        return None
+
+
+def _financials(refs: list[str], labels: dict[str, str]) -> None:
+    """A link for each of the chart's shares, the series with accounts, to the Company financials page."""
+    found = st.session_state[FOUND]
+    shares = [ref for ref in refs if search.parse_ref(ref)[0] == "yahoo"
+              and (found[ref].kind == "Stock" if ref in found else _yahoo_kind(ref) == "EQUITY")]
+    if not shares:
+        return
+    row = st.container(horizontal=True, vertical_alignment="center", gap="small")
+    row.caption("Financials:", width="content")  # the links beside it, not across the row
+    for ref in shares:
+        company_detail.link(row, ref, label=search.plain(labels[ref]))
+
+
 def _card(chart: dict, preset: str, in_pct: bool, height: int, room: int) -> None:
     chart_id, refs = chart["id"], chart["refs"]
     with st.container(border=True):
@@ -334,6 +358,7 @@ def _card(chart: dict, preset: str, in_pct: bool, height: int, room: int) -> Non
                        format_func=labels.get, on_change=_keep_series, args=(chart_id,))
         _draw(chart, about, preset, in_pct, height, room)
         _watch_pills(chart_id, refs, labels)
+        _financials(refs, labels)
 
 
 # ==========================================================================================
