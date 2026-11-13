@@ -1,11 +1,13 @@
 """DuckDB store: append-only series with provenance, and the other tables."""
 
+import re
 from datetime import date, datetime
+from pathlib import Path
 
 import pandas as pd
 import pytest
 
-from invest.data.cache import Store, observations_frame
+from invest.data.cache import SCHEMA, Store, observations_frame
 
 
 @pytest.fixture
@@ -188,3 +190,10 @@ def test_new_facts_keep_the_day_they_were_first_seen(store):
 def test_a_company_from_yahoo_has_no_cik(store):
     store.upsert_companies([{"cik": -12345, "ticker": "SAP.DE", "name": "SAP SE"}])
     assert store.cik_of("SAP.DE") is None
+
+
+def test_every_table_has_a_section_in_database_md():
+    """DATABASE.md describes each table the schema creates, and no table it does not."""
+    tables = set(re.findall(r"CREATE TABLE IF NOT EXISTS (\w+)", SCHEMA))
+    text = (Path(__file__).resolve().parents[1] / "DATABASE.md").read_text(encoding="utf-8")
+    assert set(re.findall(r"^### (\w+)$", text, flags=re.MULTILINE)) == tables

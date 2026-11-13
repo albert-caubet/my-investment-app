@@ -171,6 +171,9 @@ The app opens at `http://localhost:8501`.
 
 ## Browse the market database with DuckDB UI
 
+What each table of the market database holds, who writes and reads it, and what is in it
+now is described in [DATABASE.md](DATABASE.md).
+
 DuckDB's browser interface lets you explore the tables, inspect their columns and run
 SQL queries. Use the project's Python environment; the separate `duckdb` command-line
 program is not required.
@@ -324,6 +327,8 @@ carrying its observation date and source, nothing filled in silently.
 ## Project Structure
 
 - `app.py`: Entry point and navigation.
+- `DATABASE.md`: the market database (DuckDB): every table and column, who writes and reads
+  each, and what it holds.
 - `portfolio_math.py`: Pure calculation engine — positions, cost basis, valuation, CAPM.
   No I/O, so every figure it produces is unit-testable.
 - `market_data.py`: All network access and caching (prices, FX, metadata, ISIN lookup, and
