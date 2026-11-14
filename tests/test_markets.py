@@ -16,15 +16,49 @@ def _chart(*series, id="c") -> dict:
 # --- the file -----------------------------------------------------------------
 
 
-def test_the_shipped_file_has_the_six_charts():
+def test_the_shipped_file_has_the_eight_charts():
     charts = markets.load_markets()
     assert [c.title for c in charts] == [
         "World main indices", "World small and mid caps", "Europe main indices",
         "Europe mid caps", "Europe small caps", "Commodities",
+        "Government bond yields", "Corporate bond yields",
     ]
+    assert [c.kind for c in charts] == ["change"] * 6 + ["yield"] * 2
     for chart in charts:
         assert len(chart.charted) <= markets.MAX_LINES
-        assert all(s.currency for s in chart.charted), chart.id  # the hover prints it
+        if chart.kind == "change":
+            assert all(s.currency for s in chart.charted), chart.id  # the hover prints it
+
+
+def test_the_bond_charts_draw_catalog_series_of_yields():
+    from invest.macro.catalog import load_catalog
+
+    catalog = load_catalog()
+    by_id = {c.id: c for c in markets.load_markets()}
+    government, corporate = by_id["government_yields"], by_id["corporate_yields"]
+    assert government.series_ids == ("US_2Y", "US_10Y", "US_30Y", "DE_2Y", "DE_10Y", "DE_30Y",
+                                     "FR_10Y", "IT_10Y", "ES_10Y")
+    assert corporate.series_ids == ("US_IG_YIELD", "US_HY_YIELD", "US_AAA_YIELD", "US_BAA_YIELD",
+                                    "EUR_HY_YIELD", "DE_CORP_YIELD")
+    for sid in government.series_ids + corporate.series_ids:
+        assert catalog[sid].units == "%", sid  # every line in percent, on one axis
+        assert catalog[sid].source != "derived", sid  # fetched by the refresh, not computed
+    assert [s.label for s in corporate.left_out] == ["Euro investment grade"]  # no free source: said why
+    # a colour a country, a dash a maturity
+    styles = dict(zip([s.label for s in government.charted], government.styles()))
+    assert styles["US 2-year"] == (0, "dot") and styles["US 10-year"] == (0, "solid") and styles["US 30-year"] == (0, "dash")
+    assert styles["Germany 10-year"] == (1, "solid") and styles["Spain 10-year"] == (4, "solid")
+    # the refresh downloads no Yahoo symbol for them
+    assert government.symbols == corporate.symbols == ()
+    assert len(markets.all_symbols(markets.load_markets())) == len(markets.all_symbols(markets.load_markets()[:6]))
+
+
+def test_the_palette_a_line_is_given_is_the_charts_one():
+    import charts
+
+    assert markets.N_COLORS == len(charts.SERIES_COLORS["light"]) == len(charts.SERIES_COLORS["dark"])
+    assert markets.DASHES == charts.SERIES_DASHES
+    assert markets.MAX_LINES == markets.N_COLORS * len(markets.DASHES)
 
 
 def test_every_index_asked_for_has_a_line_or_a_reason():
@@ -36,7 +70,7 @@ def test_every_index_asked_for_has_a_line_or_a_reason():
     assert commodities["Brent crude"] == "BZ=F" and commodities["European natural gas (TTF)"] == "TTF=F"
     for chart in by_title.values():
         for series in chart.series:
-            assert series.symbol or series.note, series.label
+            assert series.symbol or series.series_id or series.note, series.label
             assert series.about, f"{series.label}: say what it covers"
     europe = {s.label: s.about for s in by_title["Europe main indices"].series}
     assert europe["ATHEX Composite"].startswith("Greece")
@@ -57,6 +91,35 @@ def test_a_series_without_a_symbol_is_kept_out_of_the_lines():
     assert [s.label for s in chart.charted] == ["A"]
     assert chart.symbols == ("A",)
     assert chart.series[1].note == "no history"
+    assert [s.label for s in chart.left_out] == ["B"]
+
+
+def _yields(*series) -> dict:
+    return {"chart": [{"id": "y", "title": "Y", "kind": "yield", "series": list(series)}]}
+
+
+def test_a_yield_charts_lines_are_catalog_series():
+    chart = parse_markets(_yields(
+        {"label": "US 10-year", "series_id": "US_10Y"},
+        {"label": "Euro IG", "note": "no free source"},
+    ))[0]
+    assert chart.kind == "yield"
+    assert [s.label for s in chart.charted] == ["US 10-year"]
+    assert chart.series_ids == ("US_10Y",)
+    assert chart.symbols == ()  # nothing for the refresh to download from Yahoo
+    assert [s.label for s in chart.left_out] == ["Euro IG"]
+
+
+def test_a_line_takes_its_look_from_the_file_or_else_from_its_place():
+    chart = parse_markets(_chart(
+        {"label": "A", "symbol": "A"},
+        {"label": "B", "symbol": "B", "color": 1, "dash": "dot"},  # A's colour, another dash
+        {"label": "C", "symbol": "C", "color": 5},  # solid unless told
+        {"label": "D", "symbol": "D"},
+    ))[0]
+    assert chart.styles() == ((0, "solid"), (0, "dot"), (4, "solid"), (3, "solid"))
+    many = parse_markets(_chart(*[{"label": str(i), "symbol": str(i)} for i in range(17)]))[0]
+    assert many.styles()[8] == (0, "dash") and many.styles()[16] == (0, "dot")  # past eight, the next dash
 
 
 @pytest.mark.parametrize(
@@ -71,6 +134,17 @@ def test_a_series_without_a_symbol_is_kept_out_of_the_lines():
         (_chart({"label": "A", "symbol": "X"}, {"label": "B", "symbol": "X"}), "duplicate symbols"),
         (_chart(*[{"label": str(i), "symbol": str(i)} for i in range(markets.MAX_LINES + 1)]), "at most 24"),
         ({"chart": _chart({"label": "A", "symbol": "A"})["chart"] * 2}, "duplicate chart ids"),
+        ({"chart": [{"id": "c", "kind": "level", "series": [{"label": "A", "symbol": "A"}]}]}, "unknown kind 'level'"),
+        (_yields({"label": "A", "symbol": "^TNX"}), "a yield chart's lines are catalog series"),
+        (_chart({"label": "A", "series_id": "US_10Y"}), "only a yield chart's lines are catalog series"),
+        (_yields({"label": "A"}), "no series_id and no note"),
+        (_yields({"label": "A", "note": "n"}), "no series with a catalog series"),
+        (_yields({"label": "A", "series_id": "X"}, {"label": "B", "series_id": "X"}), "duplicate series ids"),
+        (_chart({"label": "A", "symbol": "A", "color": 9}), "color must be a number from 1 to 8"),
+        (_chart({"label": "A", "symbol": "A", "color": "1"}), "color must be a number"),
+        (_chart({"label": "A", "symbol": "A", "color": True}), "color must be a number"),
+        (_chart({"label": "A", "symbol": "A", "dash": "dashdot"}), "dash must be one of solid, dash, dot"),
+        (_chart({"label": "A", "symbol": "A"}, {"label": "B", "symbol": "B", "color": 1}), "A, B would be drawn alike"),
     ],
 )
 def test_a_broken_file_is_refused_with_the_reason(payload, message):
@@ -131,3 +205,25 @@ def test_the_common_start_is_the_latest_first_close():
     closes = {"old": _closes({"2000-01-03": 1.0, "2026-01-02": 2.0}), "young": _closes({"2021-12-14": 1.0})}
     assert markets.common_start(closes) == date(2021, 12, 14)
     assert markets.common_start({}) is None
+
+
+def test_a_monthly_average_is_on_every_weekday_of_its_month():
+    monthly = _closes({"2026-08-01": 4.0, "2026-09-01": 4.4})  # dated on the 1st, a Saturday in August
+    steps = markets.month_steps(monthly)
+    assert steps.index[0].date() == date(2026, 8, 3)  # the first weekday
+    assert steps.index[-1].date() == date(2026, 9, 30)  # the last month runs to its end
+    assert (steps.index.dayofweek < 5).all()
+    assert set(steps["2026-08"]) == {4.0} and set(steps["2026-09"]) == {4.4}
+    assert len(steps) == 21 + 22  # August's weekdays, September's
+
+
+def test_a_monthly_average_stops_where_the_daily_lines_do():
+    steps = markets.month_steps(_closes({"2026-10-01": 4.9}), until=date(2026, 10, 14))
+    assert steps.index[-1].date() == date(2026, 10, 14)
+
+
+def test_a_month_without_a_value_stays_empty():
+    steps = markets.month_steps(_closes({"2026-07-01": 3.0, "2026-09-01": 3.5}))  # August not published
+    assert steps["2026-08"].empty
+    assert set(steps["2026-07"]) == {3.0} and set(steps["2026-09"]) == {3.5}
+    assert markets.month_steps(_closes({})).empty

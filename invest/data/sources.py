@@ -13,7 +13,7 @@ from typing import Sequence
 
 import pandas as pd
 
-from invest.data import bis, ecb, eurostat, files, fred, oecd, yahoo
+from invest.data import bbk, bis, ecb, eurostat, files, fred, oecd, yahoo
 from invest.data.files import DownloadResult
 from invest.macro.catalog import SeriesSpec
 from invest.positioning import cot
@@ -139,6 +139,8 @@ class Fetcher:
                 return oecd.fetch_series(spec.key, start=spec.start or "1960-01")
             if source == "bis":
                 return bis.fetch_series(spec.key, start=spec.start or "1960-01-01")
+            if source == "bbk":
+                return bbk.fetch_series(spec.key, start=spec.start)
             if source == "yahoo":
                 if spec.key not in self.yahoo_frames:
                     if "yahoo" in self._errors:

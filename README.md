@@ -242,11 +242,11 @@ carrying its observation date and source, nothing filled in silently.
   transactions only, exactly as before.
 - **Catalog**: `config/series.toml` lists every series with its source, key, frequency,
   publication lag, transform, direction of concern and criticality. Sources: FRED (no key
-  needed; `FRED_API_KEY` adds ALFRED vintages), the ECB, Eurostat, the OECD and BIS SDMX
-  APIs, Yahoo Finance, Shiller's data file, the Fed's excess bond premium, the Philadelphia
-  and New York Fed files, CFTC positioning, plus `derived` series computed from stored ones
-  and `release` series entered by hand in `config/releases.toml` (ISM, PMIs, LEI, nowcasts,
-  whose histories are licensed).
+  needed; `FRED_API_KEY` adds ALFRED vintages), the ECB, Eurostat, the OECD, BIS and
+  Bundesbank SDMX APIs, Yahoo Finance, Shiller's data file, the Fed's excess bond premium,
+  the Philadelphia and New York Fed files, CFTC positioning, plus `derived` series computed
+  from stored ones and `release` series entered by hand in `config/releases.toml` (ISM, PMIs,
+  LEI, nowcasts, whose histories are licensed).
 - **Refresh**: `python -m invest.jobs.refresh` fetches the catalog, computes derived series,
   ingests releases and prints a freshness table (last observation, age, limit, status). It
   exits non-zero when a critical series failed or is older than its frequency and lag allow
@@ -268,7 +268,13 @@ carrying its observation date and source, nothing filled in silently.
   covers ("Greece, 60 largest"), printed under its chart, are in `config/markets.toml`.
   Where Yahoo keeps no history for an index, an ETF on the same index (or a close index)
   stands in, starred in the legend and described under the chart; an index with neither is
-  listed there as not charted.
+  listed there as not charted. Two bond charts close the section, drawn as yields in percent
+  rather than a % change: government bonds (US and German 2, 10 and 30 years daily; France,
+  Italy and Spain 10 years as monthly averages, each drawn across its month) and corporate
+  bonds (ICE BofA US investment grade, US high yield and euro high yield, of which FRED keeps
+  three years; Moody's Aaa and Baa; German companies' bonds from the Bundesbank). Their lines
+  are catalog series, named in `config/markets.toml` by id, which the refresh fetches with the
+  rest of the catalog.
 - **Fundamentals and screener**: `python -m invest.jobs.fundamentals` ingests XBRL company
   facts, SIC sectors and prices for a universe from `config/universe.toml`, builds one row per
   company (Greenblatt earnings yield and ROIC, FCF yield, margins and their slope, growth,
@@ -325,6 +331,8 @@ carrying its observation date and source, nothing filled in silently.
   `INVEST_DB` overrides the database file alone.
 
 ## Project Structure
+
+How these parts connect is drawn in [ARCHITECTURE.md](ARCHITECTURE.md).
 
 - `app.py`: Entry point and navigation.
 - `DATABASE.md`: the market database (DuckDB): every table and column, who writes and reads

@@ -1,8 +1,9 @@
-"""ECB Data Portal, and the SDMX-CSV parser it shares with the OECD and the BIS.
+"""ECB Data Portal, and the SDMX-CSV parser it shares with the OECD, the BIS and the Bundesbank.
 
-The ECB, the OECD and the BIS all answer SDMX requests with a CSV that has a
-``TIME_PERIOD`` and an ``OBS_VALUE`` column and a set of dimension columns. One
-parser covers all three; the wrappers only know the URL shape and the key format.
+The ECB, the OECD, the BIS and the Bundesbank all answer SDMX requests with a CSV
+that has a ``TIME_PERIOD`` and an ``OBS_VALUE`` column and a set of dimension
+columns. One parser covers all four; the wrappers only know the URL shape, the
+key format and the separator.
 
 Series keys are written ``FLOW/KEY``, exactly as they appear in the portal URL,
 for example ``ICP/M.U2.N.000000.4.ANR`` or ``FM/B.U2.EUR.4F.KR.DFR.LEV``.
@@ -48,14 +49,19 @@ def parse_period(text: str) -> date:
     return pd.Timestamp(text).date()
 
 
-def parse_sdmx_csv(text: str, *, time_col: str = "TIME_PERIOD", value_col: str = "OBS_VALUE") -> pd.DataFrame:
+def parse_sdmx_csv(
+    text: str, *, time_col: str = "TIME_PERIOD", value_col: str = "OBS_VALUE", delimiter: str = ","
+) -> pd.DataFrame:
     """One SDMX-CSV response into ``(obs_date, value)``.
 
     Refuses a response that contains more than one series (more than one
-    distinct ``KEY`` or ``REF_AREA``): merging two countries into one column by
-    accident is exactly the kind of silent error the catalog must not allow.
+    distinct ``KEY``, ``REF_AREA`` or Bundesbank ``BBK_ID``): merging two
+    countries into one column by accident is exactly the kind of silent error
+    the catalog must not allow. A value that is not a number (the Bundesbank's
+    "." on a holiday) is skipped, and a byte-order mark before the header is
+    ignored.
     """
-    reader = csv.DictReader(io.StringIO(text))
+    reader = csv.DictReader(io.StringIO(text.lstrip("﻿")), delimiter=delimiter)
     if reader.fieldnames is None:
         raise ValueError("empty SDMX response")
     fields = [f.strip() for f in reader.fieldnames]
@@ -63,7 +69,7 @@ def parse_sdmx_csv(text: str, *, time_col: str = "TIME_PERIOD", value_col: str =
         raise ValueError(f"SDMX response lacks {time_col}/{value_col}; columns: {fields[:8]}")
 
     rows = list(reader)
-    for dimension in ("KEY", "REF_AREA", "BORROWERS_CTY"):
+    for dimension in ("KEY", "BBK_ID", "REF_AREA", "BORROWERS_CTY"):
         if dimension in fields:
             distinct = {(r.get(dimension) or "").strip() for r in rows} - {""}
             if len(distinct) > 1:

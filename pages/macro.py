@@ -160,7 +160,8 @@ def _market_chart(
     fig.add_hline(y=0, line_width=1, line_color="rgba(128, 128, 128, 0.6)")
     # Said under the chart rather than in the legend, where every name must stay short.
     starts_late, ends_early, out_of_range = [], [], []
-    for i, series in enumerate(chart.charted):  # by place in the list, so a line keeps its look if another is missing
+    # A line's look is the file's, or its place in the list's, so it keeps it when another is missing.
+    for series, (color, dash) in zip(chart.charted, chart.styles()):
         if series.symbol not in stored:
             continue
         change = markets.rebase(stored[series.symbol], start, last)
@@ -174,7 +175,7 @@ def _market_chart(
         shown = markets.weekly(change) if weekly else change
         fig.add_scatter(
             x=shown.index, y=shown.to_numpy(), customdata=stored[series.symbol].reindex(shown.index).to_numpy(),
-            name=series.legend, mode="lines", line=charts.series_line(i),
+            name=series.legend, mode="lines", line=charts.series_line(color, dash=dash),
             hovertemplate=f"{series.legend}: %{{y:+.1%}} · %{{customdata:,.2f}} {series.currency}<extra></extra>",
         )
     fig.update_yaxes(tickformat="+.1~%", title_text=f"Change since {start:%d %b %Y}")
@@ -209,14 +210,18 @@ def _market_chart(
 
 def _market_notes(chart: markets.MarketChart) -> None:
     """What each line covers, which ones are proxies, and what the chart leaves out."""
-    covers = [f"{s.label}: {s.about}" for s in chart.charted if s.about]
+    # Lines that cover the same thing are named together: a country's yields at each maturity.
+    by_about: dict[str, list[str]] = {}
+    for s in chart.charted:
+        if s.about:
+            by_about.setdefault(s.about, []).append(s.label)
+    covers = [f"{', '.join(labels)}: {about}" for about, labels in by_about.items()]
     if covers:
         st.caption("**Covers.** " + " · ".join(covers))
     proxies = [f"{s.label}: {s.symbol}, {s.proxy}." for s in chart.charted if s.proxy]
     if proxies:
         st.caption("\\* Proxies. " + " ".join(proxies))
-    left_out = [f"{s.label} ({s.about}): {s.note}" if s.about else f"{s.label}: {s.note}"
-                for s in chart.series if not s.symbol]
+    left_out = [f"{s.label} ({s.about}): {s.note}" if s.about else f"{s.label}: {s.note}" for s in chart.left_out]
     if left_out:
         st.caption(f"Not charted: {'; '.join(left_out)}.")
 
@@ -253,6 +258,103 @@ def _eurusd_chart(preset: str, height: int) -> None:
     )
 
 
+@st.cache_data(ttl=600, show_spinner=False)
+def _yields(db: str, version: float, series_ids: tuple[str, ...]) -> dict[str, pd.Series]:
+    """``{series id: stored values}`` for every catalog series with values stored; the others are absent."""
+    with Store(db, read_only=True) as store:
+        stored = {sid: store.read_series(sid) for sid in series_ids}
+    return {sid: s for sid, s in stored.items() if not s.empty}
+
+
+def _listed(names: list[str]) -> str:
+    """``A``, ``A and B``, ``A, B and C``."""
+    return names[0] if len(names) == 1 else f"{', '.join(names[:-1])} and {names[-1]}"
+
+
+def _yield_chart(chart: markets.MarketChart, preset: str, height: int, per_row: int) -> None:
+    """Yields themselves, in percent, rather than a % change: 4.2% is the level a reader knows,
+    and a move in a yield is told in basis points, which the hover adds."""
+    stored = _yields(str(DB), _db_version(), chart.series_ids)
+    monthly = {sid for sid in stored if (spec := catalog.by_id.get(sid)) is not None and spec.frequency == "M"}
+    daily_ends = [s.index[-1] for sid, s in stored.items() if sid not in monthly]
+    # A monthly average runs across its month, and no further than the daily yields beside it.
+    until = max(daily_ends).date() if daily_ends else None
+    lines = {sid: markets.month_steps(s, until) if sid in monthly else s for sid, s in stored.items()}
+    lines = {sid: s for sid, s in lines.items() if not s.empty}
+    if not lines:
+        st.info("No yields stored for this chart yet. The next refresh downloads them.")
+        _market_notes(chart)
+        return
+    first = min(s.index[0] for s in lines.values()).date()
+    last = max(s.index[-1] for s in lines.values()).date()
+    start = charts.range_start(preset, first, last)  # Max is the whole history: levels need no common start
+    weekly = (last - start).days > markets.WEEKLY_AFTER_DAYS
+    late = pd.Timedelta(days=7)
+
+    fig = go.Figure()
+    starts_late, ends_early, out_of_range, lowest = [], [], [], 0.0
+    for series, (color, dash) in zip(chart.charted, chart.styles()):
+        if series.series_id not in lines:
+            continue
+        line = lines[series.series_id]
+        shown = line[pd.Timestamp(start):pd.Timestamp(last)]
+        if shown.empty:
+            out_of_range.append(f"{series.label} (latest {line.index[-1]:%d %b %Y})")
+            continue
+        in_months = series.series_id in monthly
+        if shown.index[0] - pd.Timestamp(start) > late:
+            starts_late.append(f"{series.label} on {shown.index[0]:%d %b %Y}")
+        if not in_months and pd.Timestamp(last) - shown.index[-1] > late:
+            ends_early.append(f"{series.label} on {shown.index[-1]:%d %b %Y}")
+        moved = ((shown - shown.iloc[0]) * 100).round()  # whole basis points since the line's first day in the range
+        plotted = markets.weekly(shown) if weekly else shown
+        # "+d", not "+.0f": Plotly puts a "~" before a format that starts with a sign and ends in f, which
+        # d3 refuses, and the hover then prints the raw number, 49.00000000000002.
+        hover = f"{series.label}: %{{y:.2f}}% · %{{customdata:+d}} bp" + (" · %{text} average" if in_months else "")
+        fig.add_scatter(
+            x=plotted.index, y=plotted.to_numpy(), customdata=moved.reindex(plotted.index).to_numpy(),
+            text=list(plotted.index.strftime("%B %Y")) if in_months else None,
+            name=series.legend, mode="lines", line=charts.series_line(color, dash=dash),
+            hovertemplate=hover + "<extra></extra>",
+        )
+        lowest = min(lowest, float(plotted.min()))
+    if lowest < 0:  # zero marked only where a yield went below it, as Bunds' did from 2016; elsewhere it squeezes the lines
+        fig.add_hline(y=0, line_width=1, line_color="rgba(128, 128, 128, 0.6)")
+    fig.update_yaxes(title_text="Yield", ticksuffix="%")
+    names = [trace.name for trace in fig.data]
+    fig.update_layout(
+        template="plotly_white", hovermode="x unified", showlegend=True, xaxis_hoverformat="%d %b %Y",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+    )
+    charts.readable(fig, height=height + charts.legend_height(names, per_row))
+    fig.update_layout(legend_font_size=charts.LEGEND_FONT, hoverlabel_font_size=charts.LEGEND_FONT)
+    st.plotly_chart(fig, width="stretch", key=f"macro_{chart.id}")
+
+    notes = [f"Latest yields on {last:%d %b %Y}."]
+    averaged = {s.label: stored[s.series_id].index[-1] for s in chart.charted if s.series_id in monthly}
+    if averaged:
+        months = set(averaged.values())
+        latest = (f"the latest is {months.pop():%B %Y}'s" if len(months) == 1 else
+                  "the latest: " + ", ".join(f"{label} {day:%B %Y}" for label, day in averaged.items()))
+        notes.append(f"{_listed(list(averaged))} {'is a monthly average' if len(averaged) == 1 else 'are monthly averages'}, "
+                     f"each drawn across its month; {latest}.")
+    if starts_late:
+        notes.append(f"Starting later: {', '.join(starts_late)}.")
+    if ends_early:
+        notes.append(f"Ending earlier: {', '.join(ends_early)}.")
+    missing = [s for s in chart.charted if s.series_id not in lines]
+    unknown = [f"{s.label} ({s.series_id})" for s in missing if s.series_id not in catalog.by_id]
+    not_stored = [f"{s.label} ({s.series_id})" for s in missing if s.series_id in catalog.by_id]
+    if not_stored:
+        notes.append(f"No yields stored for {', '.join(not_stored)}; the next refresh downloads them.")
+    if unknown:
+        notes.append(f"Not in config/series.toml, so no refresh fetches them: {', '.join(unknown)}.")
+    if out_of_range:
+        notes.append(f"No yield in the time range for {', '.join(out_of_range)}.")
+    st.caption(" ".join(notes))
+    _market_notes(chart)
+
+
 @st.fragment  # a control reruns the market charts only, not the scorecard below
 def _market_section(market_charts: tuple[markets.MarketChart, ...]) -> None:
     st.subheader("Markets")
@@ -276,7 +378,9 @@ def _market_section(market_charts: tuple[markets.MarketChart, ...]) -> None:
         "shows the close too. Most are price indices, without dividends; the DAX family and the total-return "
         "proxies include them. Futures are Yahoo's front-month contracts, so a roll can show as a jump. Ranges "
         "over two years plot weekly closes. Click a legend entry to hide its line, double-click to show it alone. "
-        "EUR/USD, first, is the exchange rate itself, in dollars per euro."
+        "EUR/USD, first, is the exchange rate itself, in dollars per euro, and the bond charts, last, are yields "
+        "themselves, in percent; their hover adds each yield's move since the start of the range in basis points "
+        "(100 bp is one percentage point)."
     )
     closes = _market_closes(str(DB), _db_version(), markets.all_symbols(market_charts))
     for i in range(len(market_charts) + 1):  # EUR/USD first
@@ -289,7 +393,10 @@ def _market_section(market_charts: tuple[markets.MarketChart, ...]) -> None:
         chart = market_charts[i - 1]
         # The chart has no title, which half a row could not fit: this label names it.
         with cells[i % per_row].expander(f"📈 {chart.title}", expanded=True):
-            _market_chart(chart, closes, preset, charts.HEIGHTS[chart_height], per_row)
+            if chart.kind == "yield":
+                _yield_chart(chart, preset, charts.HEIGHTS[chart_height], per_row)
+            else:
+                _market_chart(chart, closes, preset, charts.HEIGHTS[chart_height], per_row)
 
 
 try:

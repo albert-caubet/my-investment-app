@@ -55,7 +55,7 @@ def test_derived_series_inherit_the_slowest_input_limit(catalog):
 
 def test_dispatcher_handles_every_fetched_source(catalog):
     fetcher = Fetcher()
-    handled = {"fred", "ecb", "eurostat", "oecd", "bis", "yahoo", "shiller", "ebp", "philly",
+    handled = {"fred", "ecb", "eurostat", "oecd", "bis", "bbk", "yahoo", "shiller", "ebp", "philly",
                "nyfed_recprob", "hlw", "cot"}
     assert {s.source for s in catalog.fetched()} <= handled
     assert fetcher.yahoo_frames == {}

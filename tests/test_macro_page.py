@@ -141,6 +141,7 @@ def test_market_charts_sit_two_to_a_row_by_default(seeded_db):
     assert [e.label for c in cells for e in c.expander] == [
         "📈 World main indices", "📈 World small and mid caps", "📈 Europe main indices",
         "📈 Europe mid caps", "📈 Europe small caps", "📈 Commodities",
+        "📈 Government bond yields", "📈 Corporate bond yields",
     ]
     assert {c.weight for c in cells} == {1 / 2}
 
@@ -222,7 +223,7 @@ def test_charts_per_row_rearranges_the_market_charts(seeded_db, per_row):
     at.button_group(key="market_per_row").set_value(per_row).run()
     assert not at.exception
     cells = _market_cells(at)
-    assert len(cells) == 6
+    assert len(cells) == 8
     assert {round(c.weight, 6) for c in cells} == {round(1 / per_row, 6)}
 
 
@@ -407,3 +408,123 @@ def test_eurusd_without_a_stored_rate_says_so(seeded_db):
     at = _macro(_app().run())
     assert not at.exception
     assert any("No EUR/USD rate stored yet" in i.value for i in _eurusd_cell(at).info)
+
+
+# --- bond yields -----------------------------------------------------------------------
+
+
+def _with_yields(path: Path) -> None:
+    """Yields as the refresh stores them, to 9 Sep 2026 like the seeded prices. The 10-year Bund
+    starts below zero, as it was in 2016; the US high-yield index has FRED's last three years only;
+    Spain's 10-year is a monthly average, to August. The US 10-year is the seeded one."""
+    days = pd.bdate_range("2016-01-01", "2026-09-09")
+    months = pd.date_range("2016-01-01", "2026-08-01", freq="MS")
+    recent = days[days >= "2023-09-11"]
+    with Store(path) as store:
+        store.upsert_series("DE_10Y", pd.Series(np.linspace(-0.5, 3.0, len(days)), index=days), source="bbk")
+        store.upsert_series("ES_10Y", pd.Series(np.linspace(1.5, 3.5, len(months)), index=months), source="eurostat")
+        store.upsert_series("US_HY_YIELD", pd.Series(np.linspace(9.0, 6.5, len(recent)), index=recent), source="fred")
+        store.upsert_series("DE_CORP_YIELD", pd.Series(np.linspace(1.0, 4.0, len(days)), index=days), source="bbk")
+
+
+def _trace(fig: dict, name: str) -> dict:
+    return next(trace for trace in fig["data"] if trace["name"] == name)
+
+
+def test_the_bond_charts_are_yields_in_percent(seeded_db):
+    _with_yields(seeded_db)
+    at = _macro(_app().run())
+    assert not at.exception
+    cell = _market_chart(at, "Government bond yields")
+    fig = _figure(cell)
+    # the lines with yields stored, in the file's order
+    assert [trace["name"] for trace in fig["data"]] == ["US 10-year", "Germany 10-year", "Spain 10-year"]
+    with Store(seeded_db, read_only=True) as store:
+        bund = store.read_series("DE_10Y")
+    shown = bund["2025-09-09":]  # a year back from the last yield, 9 Sep 2026
+    np.testing.assert_allclose(_numbers(_trace(fig, "Germany 10-year")["y"]), shown)  # the yield itself, not a change
+    assert fig["layout"]["yaxis"]["title"]["text"] == "Yield" and fig["layout"]["yaxis"]["ticksuffix"] == "%"
+    # a colour a country, a dash a maturity
+    light = charts.SERIES_COLORS["light"]
+    assert [(t["line"]["color"], t["line"]["dash"]) for t in fig["data"]] == [
+        (light[0], "solid"), (light[1], "solid"), (light[4], "solid")]
+    caption = _caption(cell)
+    assert caption.startswith("Latest yields on 09 Sep 2026.")
+    assert "No yields stored for US 2-year (US_2Y), US 30-year (US_30Y), Germany 2-year (DE_2Y)" in caption
+    # what each line covers, the maturities of one country together
+    assert ("**Covers.** US 2-year, US 10-year, US 30-year: Treasuries at a constant maturity (FRED) · "
+            "Germany 2-year, Germany 10-year, Germany 30-year: Bunds,") in caption
+
+
+def test_the_hover_adds_a_yields_move_in_basis_points(seeded_db):
+    _with_yields(seeded_db)
+    bund = _trace(_figure(_market_chart(_macro(_app().run()), "Government bond yields")), "Germany 10-year")
+    moved, y = _numbers(bund["customdata"]), _numbers(bund["y"])
+    assert moved[0] == 0
+    assert moved[-1] == round((y[-1] - y[0]) * 100)  # whole basis points
+    assert (moved == np.round(moved)).all()
+    # "+d": Plotly turns "+.0f" into "~+.0f", which d3 refuses, and the hover showed the raw float
+    assert bund["hovertemplate"] == "Germany 10-year: %{y:.2f}% · %{customdata:+d} bp<extra></extra>"
+
+
+def test_a_monthly_average_is_drawn_across_its_month(seeded_db):
+    _with_yields(seeded_db)
+    cell = _market_chart(_macro(_app().run()), "Government bond yields")
+    spain = _trace(_figure(cell), "Spain 10-year")
+    days = pd.DatetimeIndex(spain["x"])
+    assert days[0] == pd.Timestamp("2025-09-09")  # September's average from the range's first day
+    assert days[-1] == pd.Timestamp("2026-08-31")  # August's, the latest, to the end of its month
+    y = pd.Series(_numbers(spain["y"]), index=days)
+    assert y.groupby(days.to_period("M")).nunique().eq(1).all()  # one value a month: a step
+    assert y.nunique() == 12
+    assert spain["text"][-1] == "August 2026" and "%{text} average" in spain["hovertemplate"]
+    assert ("Spain 10-year is a monthly average, each drawn across its month; the latest is August 2026's."
+            in _caption(cell))
+
+
+def test_monthly_averages_of_different_months_are_each_dated(seeded_db):
+    _with_yields(seeded_db)
+    months = pd.date_range("2025-01-01", "2026-07-01", freq="MS")  # Italy's published to July only
+    with Store(seeded_db) as store:
+        store.upsert_series("IT_10Y", pd.Series(np.linspace(3.5, 3.9, len(months)), index=months), source="eurostat")
+    caption = _caption(_market_chart(_macro(_app().run()), "Government bond yields"))
+    assert ("Italy 10-year and Spain 10-year are monthly averages, each drawn across its month; "
+            "the latest: Italy 10-year July 2026, Spain 10-year August 2026.") in caption
+
+
+def test_zero_is_marked_only_where_a_yield_went_below_it(seeded_db):
+    _with_yields(seeded_db)
+    assert not _figure(_market_chart(_macro(_app().run()), "Government bond yields"))["layout"].get("shapes")
+    fig = _figure(_market_chart(_with_range("Max"), "Government bond yields"))
+    assert [(s["type"], s["y0"]) for s in fig["layout"]["shapes"]] == [("line", 0)]  # the Bund in 2016
+    assert _trace(fig, "Germany 10-year")["x"][0].startswith("2016-01-01")  # Max: the whole history
+
+
+def test_a_yield_with_a_shorter_history_starts_later_and_is_named(seeded_db):
+    _with_yields(seeded_db)
+    at = _with_range("5Y")
+    cell = _market_chart(at, "Corporate bond yields")
+    fig = _figure(cell)
+    assert [trace["name"] for trace in fig["data"]] == ["US high yield", "German companies"]
+    assert [trace["line"]["dash"] for trace in fig["data"]] == ["solid", "dash"]  # Europe dashed
+    assert "Starting later: US high yield on 11 Sep 2023." in _caption(cell)
+    assert 255 <= len(_trace(fig, "German companies")["x"]) <= 265  # weekly past two years, as the indices
+    assert "Not charted: Euro investment grade (ICE BofA Euro Corporate Index): FRED does not publish it" in _caption(cell)
+
+
+def test_a_bond_chart_without_yields_says_so(seeded_db):
+    at = _macro(_app().run())
+    assert not at.exception
+    corporate = _market_chart(at, "Corporate bond yields")
+    assert any("No yields stored for this chart yet" in i.value for i in corporate.info)
+    assert "Not charted: Euro investment grade" in _caption(corporate)
+
+
+def test_the_bond_charts_follow_the_market_controls(seeded_db):
+    _with_yields(seeded_db)
+    at = _macro(_app().run())
+    at.button_group(key="market_height").set_value("Large").run()
+    assert not at.exception
+    fig = _figure(_market_chart(at, "Government bond yields"))
+    names = [trace["name"] for trace in fig["data"]]
+    assert fig["layout"]["height"] == charts.HEIGHTS["Large"] + charts.legend_height(names, 2)

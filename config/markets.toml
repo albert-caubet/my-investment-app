@@ -14,6 +14,15 @@
 #   note      a series with no symbol is not charted; the note says why, and is
 #             printed under the chart.
 #
+# A chart with kind = "yield" draws bond yields themselves, in percent, not a % change.
+# Its lines are catalog series, which the refresh fetches with the rest of the catalog:
+#   series_id the series' id in config/series.toml, in place of a symbol
+# and they take a label, about and note as above. On any chart, a line may also set
+#   color     1 to 8, the app's line colours in order, so lines that go together
+#             share one (a country's yields)
+#   dash      solid, dash or dot (a maturity)
+# Without them a line takes the next colour by its place in the list.
+#
 # Symbols checked against Yahoo on 2026-10-04. Yahoo has only a live quote, no
 # history, for the MSCI EM, MSCI World Mid Cap, Russell Midcap, OBX, WIG20, mWIG40,
 # sWIG80, BUX, FTSE Italia Mid Cap, IBEX Small Cap and OMX Stockholm Mid and Small Cap;
@@ -126,4 +135,39 @@ series = [
   { label = "Coffee", symbol = "KC=F", currency = "USc", about = "ICE arabica; cents a pound" },
   { label = "Sugar", symbol = "SB=F", currency = "USc", about = "ICE raw sugar No. 11; cents a pound" },
   { label = "Cocoa", symbol = "CC=F", currency = "USD", about = "ICE New York; dollars a tonne" },
+]
+
+# A colour a country, a dash a maturity: dot 2 years, solid 10, dash 30. Only Germany
+# publishes daily yields free; France, Italy and Spain are monthly averages, each
+# drawn across its month.
+[[chart]]
+id = "government_yields"
+title = "Government bond yields"
+kind = "yield"
+series = [
+  { label = "US 2-year", series_id = "US_2Y", color = 1, dash = "dot", about = "Treasuries at a constant maturity (FRED)" },
+  { label = "US 10-year", series_id = "US_10Y", color = 1, about = "Treasuries at a constant maturity (FRED)" },
+  { label = "US 30-year", series_id = "US_30Y", color = 1, dash = "dash", about = "Treasuries at a constant maturity (FRED)" },
+  { label = "Germany 2-year", series_id = "DE_2Y", color = 2, dash = "dot", about = "Bunds, the Bundesbank's fitted yield at a constant maturity" },
+  { label = "Germany 10-year", series_id = "DE_10Y", color = 2, about = "Bunds, the Bundesbank's fitted yield at a constant maturity" },
+  { label = "Germany 30-year", series_id = "DE_30Y", color = 2, dash = "dash", about = "Bunds, the Bundesbank's fitted yield at a constant maturity" },
+  { label = "France 10-year", series_id = "FR_10Y", color = 3, about = "OATs, the month's average (Eurostat's convergence yield)" },
+  { label = "Italy 10-year", series_id = "IT_10Y", color = 4, about = "BTPs, the month's average (Eurostat's convergence yield)" },
+  { label = "Spain 10-year", series_id = "ES_10Y", color = 5, about = "Bonos, the month's average (Eurostat's convergence yield)" },
+]
+
+# A colour a kind of bond, solid for the US and dashed for Europe. FRED keeps three
+# years of the ICE BofA indices; Moody's yields and the Bundesbank's go back decades.
+[[chart]]
+id = "corporate_yields"
+title = "Corporate bond yields"
+kind = "yield"
+series = [
+  { label = "US investment grade", series_id = "US_IG_YIELD", color = 1, about = "ICE BofA US Corporate Index, effective yield" },
+  { label = "US high yield", series_id = "US_HY_YIELD", color = 2, about = "ICE BofA US High Yield Index, effective yield" },
+  { label = "US Aaa", series_id = "US_AAA_YIELD", color = 3, about = "Moody's seasoned Aaa bonds, 20 years or more to maturity" },
+  { label = "US Baa", series_id = "US_BAA_YIELD", color = 4, about = "Moody's seasoned Baa bonds, the lowest investment grade, 20 years or more to maturity" },
+  { label = "Euro high yield", series_id = "EUR_HY_YIELD", color = 2, dash = "dash", about = "ICE BofA Euro High Yield Index, effective yield" },
+  { label = "German companies", series_id = "DE_CORP_YIELD", color = 1, dash = "dash", about = "bonds of German companies other than banks, mostly investment grade (Bundesbank)" },
+  { label = "Euro investment grade", about = "ICE BofA Euro Corporate Index", note = "FRED does not publish it and no free source has its history; German companies' bonds stand in" },
 ]

@@ -5,8 +5,8 @@
 #   label       what the scorecard prints
 #   group       rates | policy | surveys | composites | inflation | labor | housing |
 #               investment | consumer | credit | fiscal | valuation | positioning | internals
-#   source      fred | ecb | eurostat | oecd | bis | yahoo | shiller | ebp | philly |
-#               nyfed_recprob | hlw | cot | release | derived
+#   source      fred | ecb | eurostat | oecd | bis | bbk (Bundesbank) | yahoo | shiller |
+#               ebp | philly | nyfed_recprob | hlw | cot | release | derived
 #   key         the source's own identifier (FRED id, ECB FLOW/KEY, Eurostat query, ticker ...)
 #   frequency   D daily, W weekly, M monthly, Q quarterly, A annual, I irregular
 #   lag_days    typical days between the end of the period and its publication
@@ -14,7 +14,8 @@
 #   direction   which way is the concern: high_bad | low_bad | neutral
 #   units       printed after the value
 #   critical    the refresh job exits non-zero when a critical series fails or is stale
-#   show        false for raw inputs that only feed derived series
+#   show        false for raw inputs that only feed derived series, and for series only
+#               the Macro page's market charts plot (config/markets.toml)
 #   fallback    id of another series to read when this one is missing or stale
 #   inputs      (derived) catalog ids passed to the formula, in order
 #   formula     (derived) name in invest.macro.derived.FORMULAS
@@ -194,6 +195,82 @@ inputs = ["EA_10Y", "EA_2Y"]
 frequency = "D"
 direction = "low_bad"
 units = "pp"
+
+# Government bond yields for the Macro page's market charts (config/markets.toml),
+# not the scorecard. Daily for Germany; France, Italy and Spain only as monthly
+# averages, the one free source of their yields with a history.
+
+[[series]]
+id = "DE_2Y"
+label = "Germany 2-year Bund yield"
+group = "rates"
+source = "bbk"
+key = "BBSIS/D.I.ZST.ZI.EUR.S1311.B.A604.R02XX.R.A.A._Z._Z.A"
+frequency = "D"
+lag_days = 1
+units = "%"
+show = false
+notes = "The Bundesbank's yield at a constant two-year maturity, from the curve it fits to listed federal securities each business day."
+
+[[series]]
+id = "DE_10Y"
+label = "Germany 10-year Bund yield"
+group = "rates"
+source = "bbk"
+key = "BBSIS/D.I.ZST.ZI.EUR.S1311.B.A604.R10XX.R.A.A._Z._Z.A"
+frequency = "D"
+lag_days = 1
+units = "%"
+show = false
+notes = "The Bundesbank's yield at a constant ten-year maturity, from the curve it fits to listed federal securities each business day."
+
+[[series]]
+id = "DE_30Y"
+label = "Germany 30-year Bund yield"
+group = "rates"
+source = "bbk"
+key = "BBSIS/D.I.ZST.ZI.EUR.S1311.B.A604.R30XX.R.A.A._Z._Z.A"
+frequency = "D"
+lag_days = 1
+units = "%"
+show = false
+notes = "The Bundesbank's yield at a constant thirty-year maturity, from the curve it fits to listed federal securities each business day."
+
+[[series]]
+id = "FR_10Y"
+label = "France 10-year government bond yield (monthly average)"
+group = "rates"
+source = "eurostat"
+key = "irt_lt_mcby_m?geo=FR&int_rt=MCBY&freq=M"
+frequency = "M"
+lag_days = 15
+units = "%"
+show = false
+notes = "The EMU convergence-criterion yield: the month's average yield of ten-year government bonds."
+
+[[series]]
+id = "IT_10Y"
+label = "Italy 10-year government bond yield (monthly average)"
+group = "rates"
+source = "eurostat"
+key = "irt_lt_mcby_m?geo=IT&int_rt=MCBY&freq=M"
+frequency = "M"
+lag_days = 15
+units = "%"
+show = false
+notes = "The EMU convergence-criterion yield: the month's average yield of ten-year government bonds."
+
+[[series]]
+id = "ES_10Y"
+label = "Spain 10-year government bond yield (monthly average)"
+group = "rates"
+source = "eurostat"
+key = "irt_lt_mcby_m?geo=ES&int_rt=MCBY&freq=M"
+frequency = "M"
+lag_days = 15
+units = "%"
+show = false
+notes = "The EMU convergence-criterion yield: the month's average yield of ten-year government bonds."
 
 [[series]]
 id = "US_NYFED_RECPROB"
@@ -1527,6 +1604,84 @@ frequency = "D"
 lag_days = 1
 direction = "high_bad"
 units = "pp"
+
+# Corporate bond yields for the Macro page's market charts (config/markets.toml),
+# not the scorecard. FRED publishes only the last three years of the ICE BofA
+# indices; the store keeps every observation it has fetched, so their history here
+# grows from the first refresh on. FRED has no euro investment-grade index: the
+# Bundesbank's yield of German companies' bonds stands in for one.
+
+[[series]]
+id = "US_IG_YIELD"
+label = "US investment-grade corporate bond yield (ICE BofA)"
+group = "credit"
+source = "fred"
+key = "BAMLC0A0CMEY"
+frequency = "D"
+lag_days = 1
+units = "%"
+show = false
+notes = "Effective yield of the ICE BofA US Corporate Index: dollar bonds of investment-grade companies."
+
+[[series]]
+id = "US_HY_YIELD"
+label = "US high-yield corporate bond yield (ICE BofA)"
+group = "credit"
+source = "fred"
+key = "BAMLH0A0HYM2EY"
+frequency = "D"
+lag_days = 1
+units = "%"
+show = false
+notes = "Effective yield of the ICE BofA US High Yield Index: dollar bonds of companies rated below investment grade."
+
+[[series]]
+id = "US_AAA_YIELD"
+label = "Moody's seasoned Aaa corporate bond yield"
+group = "credit"
+source = "fred"
+key = "DAAA"
+frequency = "D"
+lag_days = 1
+units = "%"
+show = false
+notes = "US companies' Aaa-rated bonds with twenty years or more to maturity; the long history (since 1983) the ICE indices lack on FRED."
+
+[[series]]
+id = "US_BAA_YIELD"
+label = "Moody's seasoned Baa corporate bond yield"
+group = "credit"
+source = "fred"
+key = "DBAA"
+frequency = "D"
+lag_days = 1
+units = "%"
+show = false
+notes = "US companies' Baa-rated bonds, the lowest investment grade, with twenty years or more to maturity; daily since 1986."
+
+[[series]]
+id = "EUR_HY_YIELD"
+label = "Euro high-yield corporate bond yield (ICE BofA)"
+group = "credit"
+source = "fred"
+key = "BAMLHE00EHYIEY"
+frequency = "D"
+lag_days = 1
+units = "%"
+show = false
+notes = "Effective yield of the ICE BofA Euro High Yield Index: euro bonds of companies rated below investment grade."
+
+[[series]]
+id = "DE_CORP_YIELD"
+label = "German corporate bond yield (Bundesbank)"
+group = "credit"
+source = "bbk"
+key = "BBSIS/D.I.UMR.RD.EUR.X2000.B.A.A.R.A.A._Z._Z.A"
+frequency = "D"
+lag_days = 1
+units = "%"
+show = false
+notes = "Average yield of the bonds outstanding of German companies other than banks, every maturity, as the Bundesbank computes it each business day (Umlaufsrendite); mostly investment grade. Daily since 1979."
 
 [[series]]
 id = "US_NFCI"

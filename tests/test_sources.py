@@ -148,6 +148,47 @@ def test_sdmx_refuses_a_response_that_mixes_series():
         parse_sdmx_csv(mixed)
 
 
+# --- Bundesbank -------------------------------------------------------------
+
+
+def test_bundesbank_csv_skips_the_days_without_a_yield():
+    from invest.data import bbk
+
+    text = _read("bbk_BBSIS_R10XX.csv")  # the 10-year Bund yield over Christmas 2025, as the API sent it
+    assert text.startswith("﻿") and ";" in text.splitlines()[0]
+    frame = bbk.parse_csv(text)
+    assert list(frame["obs_date"]) == [date(2025, 12, 22), date(2025, 12, 23), date(2025, 12, 29), date(2025, 12, 30),
+                                       date(2026, 1, 2), date(2026, 1, 5), date(2026, 1, 6)]
+    assert frame["value"].iloc[-1] == 2.95  # the "." of weekends, Christmas and New Year are no values
+
+
+def test_bundesbank_refuses_a_response_that_mixes_series():
+    from invest.data import bbk
+
+    lines = _read("bbk_BBSIS_R10XX.csv").splitlines()
+    mixed = "\n".join(lines + [lines[1].replace("R10XX", "R02XX")])
+    with pytest.raises(ValueError, match="mixes"):
+        bbk.parse_csv(mixed)
+
+
+def test_the_dispatcher_asks_the_bundesbank_for_a_bbk_series(monkeypatch):
+    from invest.data import bbk
+    from invest.data.sources import Fetcher
+    from invest.macro.catalog import load_catalog
+
+    asked = []
+
+    def fetch_text(url, **kwargs):
+        asked.append(url)
+        return _read("bbk_BBSIS_R10XX.csv")
+
+    monkeypatch.setattr(bbk, "fetch_text", fetch_text)
+    frame = Fetcher().fetch(load_catalog()["DE_10Y"])
+    assert asked == ["https://api.statistiken.bundesbank.de/rest/data/BBSIS/"
+                     "D.I.ZST.ZI.EUR.S1311.B.A604.R10XX.R.A.A._Z._Z.A?format=sdmx_csv"]
+    assert len(frame) == 7
+
+
 # --- Eurostat ---------------------------------------------------------------
 
 

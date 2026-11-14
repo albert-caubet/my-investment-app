@@ -1,9 +1,13 @@
 """The market charts of the Macro page: ``config/markets.toml`` and the arithmetic they plot.
 
-Each chart overlays several indices (or the ETFs standing in for them), every
+Most charts overlay several indices (or the ETFs standing in for them), every
 one rebased to its own first close in the time range, so the lines compare as
 % change from a common start whatever currency or level each is quoted in. The
-refresh job downloads the symbols into the prices table; nothing here fetches.
+refresh job downloads their symbols into the prices table.
+
+A yield chart (``kind = "yield"``) draws bond yields themselves, in percent:
+its lines are catalog series (``config/series.toml``), which the refresh
+fetches with the rest of the catalog. Nothing here fetches.
 """
 
 from __future__ import annotations
@@ -26,6 +30,14 @@ WEEKLY_AFTER_DAYS = 2 * 366
 
 #: Lines a chart may overlay: eight colours, each in three dashes, tell 24 apart.
 MAX_LINES = 24
+#: The colours and dashes of ``charts.SERIES_COLORS`` and ``charts.SERIES_DASHES``, which
+#: a line may be given by number and name. This module stays free of Streamlit.
+N_COLORS = 8
+DASHES = ("solid", "dash", "dot")
+
+#: ``change``: each line is the % change of a Yahoo symbol's closes. ``yield``: each line is
+#: a catalog series of yields, in percent, drawn as it is.
+KINDS = ("change", "yield")
 
 
 class MarketsError(ValueError):
@@ -40,6 +52,9 @@ class MarketSeries:
     about: str = ""  # what the index covers, in a few words: "Greece, 60 largest"
     proxy: str = ""  # what the symbol is, when it stands in for the index
     note: str = ""
+    series_id: str | None = None  # a yield chart's line: its id in config/series.toml
+    color: int | None = None  # 1 to 8, the place of its colour in the palette; None: by its place
+    dash: str | None = None  # one of DASHES; None: solid with a colour set, else by its place
 
     @property
     def legend(self) -> str:
@@ -52,24 +67,67 @@ class MarketChart:
     id: str
     title: str
     series: tuple[MarketSeries, ...]
+    kind: str = "change"
 
     @property
     def charted(self) -> tuple[MarketSeries, ...]:
+        """The lines drawn: the series with a Yahoo symbol, or in a yield chart with a catalog series."""
+        if self.kind == "yield":
+            return tuple(s for s in self.series if s.series_id)
         return tuple(s for s in self.series if s.symbol)
 
     @property
+    def left_out(self) -> tuple[MarketSeries, ...]:
+        """The series with nothing to draw, whose note says why."""
+        charted = self.charted
+        return tuple(s for s in self.series if s not in charted)
+
+    @property
     def symbols(self) -> tuple[str, ...]:
-        return tuple(s.symbol for s in self.charted)
+        """The Yahoo symbols the refresh downloads for this chart; none for a yield chart."""
+        return tuple(s.symbol for s in self.charted if s.symbol)
+
+    @property
+    def series_ids(self) -> tuple[str, ...]:
+        """The catalog series a yield chart draws."""
+        return tuple(s.series_id for s in self.charted if s.series_id)
+
+    def styles(self) -> tuple[tuple[int, str], ...]:
+        """Each line's colour (0 to 7) and dash, in the order of :attr:`charted`.
+
+        As the file sets them, or else by the line's place: the eight colours in turn, then
+        again with the next dash. A line keeps its look when another has no data to draw.
+        """
+        return tuple(
+            (s.color - 1 if s.color else i % N_COLORS,
+             s.dash or (DASHES[0] if s.color else DASHES[(i // N_COLORS) % len(DASHES)]))
+            for i, s in enumerate(self.charted)
+        )
 
 
-def _series(raw: dict, chart_id: str) -> MarketSeries:
+def _series(raw: dict, chart_id: str, kind: str) -> MarketSeries:
     label = str(raw.get("label", "")).strip()
     if not label:
         raise MarketsError(f"{chart_id}: a series has no label")
     symbol = str(raw.get("symbol", "")).strip() or None
+    series_id = str(raw.get("series_id", "")).strip() or None
     note = str(raw.get("note", "")).strip()
-    if symbol is None and not note:
-        raise MarketsError(f"{chart_id}: {label} has no symbol and no note saying why")
+    if kind == "yield":
+        if symbol:
+            raise MarketsError(f"{chart_id}: {label} has a symbol; a yield chart's lines are catalog series (series_id)")
+        if series_id is None and not note:
+            raise MarketsError(f"{chart_id}: {label} has no series_id and no note saying why")
+    else:
+        if series_id:
+            raise MarketsError(f"{chart_id}: {label} has a series_id; only a yield chart's lines are catalog series")
+        if symbol is None and not note:
+            raise MarketsError(f"{chart_id}: {label} has no symbol and no note saying why")
+    color = raw.get("color")
+    if color is not None and (isinstance(color, bool) or not isinstance(color, int) or not 1 <= color <= N_COLORS):
+        raise MarketsError(f"{chart_id}: {label}: color must be a number from 1 to {N_COLORS}, not {color!r}")
+    dash = str(raw.get("dash", "")).strip() or None
+    if dash is not None and dash not in DASHES:
+        raise MarketsError(f"{chart_id}: {label}: dash must be one of {', '.join(DASHES)}, not {dash!r}")
     return MarketSeries(
         label=label,
         symbol=symbol,
@@ -77,6 +135,9 @@ def _series(raw: dict, chart_id: str) -> MarketSeries:
         about=str(raw.get("about", "")).strip(),
         proxy=str(raw.get("proxy", "")).strip(),
         note=note,
+        series_id=series_id,
+        color=color,
+        dash=dash,
     )
 
 
@@ -89,21 +150,30 @@ def parse_markets(payload: dict) -> tuple[MarketChart, ...]:
         chart_id = str(raw.get("id", "")).strip()
         if not chart_id:
             raise MarketsError(f"chart #{i} has no id")
-        series = tuple(_series(s, chart_id) for s in raw.get("series", ()))
-        n_lines = sum(1 for s in series if s.symbol)
+        kind = str(raw.get("kind", KINDS[0])).strip()
+        if kind not in KINDS:
+            raise MarketsError(f"{chart_id}: unknown kind {kind!r}; one of {', '.join(KINDS)}")
+        series = tuple(_series(s, chart_id, kind) for s in raw.get("series", ()))
+        chart = MarketChart(chart_id, str(raw.get("title", chart_id)), series, kind)
+        what = "catalog series" if kind == "yield" else "symbol"
+        n_lines = len(chart.charted)
         if not n_lines:
-            raise MarketsError(f"{chart_id}: no series with a symbol")
+            raise MarketsError(f"{chart_id}: no series with a {what}")
         if n_lines > MAX_LINES:
-            raise MarketsError(f"{chart_id}: {n_lines} series with a symbol; a chart tells at most {MAX_LINES} apart")
+            raise MarketsError(f"{chart_id}: {n_lines} series with a {what}; a chart tells at most {MAX_LINES} apart")
         labels = [s.label for s in series]
         dupes = sorted({l for l in labels if labels.count(l) > 1})
         if dupes:
             raise MarketsError(f"{chart_id}: duplicate labels {dupes}")
-        symbols = [s.symbol for s in series if s.symbol]
-        dupes = sorted({s for s in symbols if symbols.count(s) > 1})
-        if dupes:
-            raise MarketsError(f"{chart_id}: duplicate symbols {dupes}")
-        charts.append(MarketChart(chart_id, str(raw.get("title", chart_id)), series))
+        for name, keys in (("symbols", chart.symbols), ("series ids", chart.series_ids)):
+            dupes = sorted({k for k in keys if keys.count(k) > 1})
+            if dupes:
+                raise MarketsError(f"{chart_id}: duplicate {name} {dupes}")
+        styles = chart.styles()
+        alike = [s.label for s, style in zip(chart.charted, styles) if styles.count(style) > 1]
+        if alike:
+            raise MarketsError(f"{chart_id}: {', '.join(alike)} would be drawn alike; give each its own color or dash")
+        charts.append(chart)
     ids = [c.id for c in charts]
     if len(set(ids)) != len(ids):
         raise MarketsError(f"duplicate chart ids: {sorted({i for i in ids if ids.count(i) > 1})}")
@@ -160,3 +230,24 @@ def weekly(series: pd.Series) -> pd.Series:
         return series
     last_of_week = series.groupby(series.index.to_period("W-FRI")).tail(1)
     return pd.concat([series.iloc[:1], last_of_week]).pipe(lambda s: s[~s.index.duplicated()])
+
+
+def month_steps(monthly: pd.Series, until: date | None = None) -> pd.Series:
+    """A monthly series, dated on the first of each month, on every weekday of its month.
+
+    A monthly average describes the whole month. Put on each weekday of it, its line is
+    a step a month that sits under the daily yields beside it, rather than a point on
+    the 1st, half a month early, and a range of a few weeks still shows the latest
+    month. The last month runs to its end, or to ``until`` if that comes first. A month
+    without a value stays empty: nothing is carried over from the month before.
+    """
+    if monthly.empty:
+        return monthly
+    by_month = pd.Series(monthly.to_numpy(), index=monthly.index.to_period("M"))
+    by_month = by_month[~by_month.index.duplicated(keep="last")]
+    end = (by_month.index[-1] + 1).to_timestamp() - pd.Timedelta(days=1)
+    if until is not None:
+        end = min(end, pd.Timestamp(until))
+    days = pd.bdate_range(by_month.index[0].to_timestamp(), end)
+    spread = pd.Series(by_month.reindex(days.to_period("M")).to_numpy(), index=days, name=monthly.name)
+    return spread.dropna()

@@ -9,7 +9,7 @@ Portfolio value €11,725 on 2026-09-10 (source: provided); total P&L €3,834 (
 
 Macro regime: **expansion** as of 2026-09-09. 0 counted rule(s) firing.
 
-Data freshness: manual 33, missing 167, ok 7.
+Data freshness: manual 33, missing 179, ok 7.
 
 Critical series stale or failed: US_10Y, EA_DFR, EA_10Y, US_FEDFUNDS, US_POLICY_STANCE, US_CFNAI_MA3, US_EBP, US_CPI, US_CORE_PCE, EA_HICP, US_CLAIMS, US_PERMITS, US_SLOOS_TIGHTENING, SP500_CAPE.
 
@@ -148,6 +148,12 @@ No hypothesis is due for review this week.
 | EA_2Y | missing | – | – | 10 |  |  |
 | EA_3M | missing | – | – | 10 |  |  |
 | EA_CURVE_10Y2Y | missing | – | – | 10 |  |  |
+| DE_2Y | missing | – | – | 10 |  |  |
+| DE_10Y | missing | – | – | 10 |  |  |
+| DE_30Y | missing | – | – | 10 |  |  |
+| FR_10Y | missing | – | – | 84 |  |  |
+| IT_10Y | missing | – | – | 84 |  |  |
+| ES_10Y | missing | – | – | 84 |  |  |
 | US_NYFED_RECPROB | missing | – | – | 79 |  |  |
 | US_RECPROB_SMOOTHED | missing | – | – | 164 |  |  |
 | US_FEDFUNDS | missing | – | – | 70 | critical |  |
@@ -236,6 +242,12 @@ No hypothesis is due for review this week.
 | US_HY_OAS_3M_CHG | missing | – | – | 10 |  |  |
 | US_IG_OAS | missing | – | – | 10 |  |  |
 | US_BAA_10Y | missing | – | – | 10 |  |  |
+| US_IG_YIELD | missing | – | – | 10 |  |  |
+| US_HY_YIELD | missing | – | – | 10 |  |  |
+| US_AAA_YIELD | missing | – | – | 10 |  |  |
+| US_BAA_YIELD | missing | – | – | 10 |  |  |
+| EUR_HY_YIELD | missing | – | – | 10 |  |  |
+| DE_CORP_YIELD | missing | – | – | 10 |  |  |
 | US_NFCI | missing | – | – | 26 |  |  |
 | US_ANFCI | missing | – | – | 26 |  |  |
 | US_STLFSI | missing | – | – | 26 |  |  |

@@ -113,7 +113,7 @@ Indexed on `(series_id, obs_date)`.
 - `read_series(id, as_of=D)` takes, for each observation, the latest vintage on or before `D`.
 
 **Where the series come from.** The series are defined in the catalog,
-[config/series.toml](config/series.toml) (207 entries). Hand-entered releases come from
+[config/series.toml](config/series.toml) (219 entries). Hand-entered releases come from
 [config/releases.toml](config/releases.toml) and are stored with the source `release`. The
 two breadth series, the share of the US universe above its 200-day average and new highs
 minus new lows, are computed by the fundamentals build (`computed`).

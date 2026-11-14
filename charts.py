@@ -82,10 +82,15 @@ def legend_rows(names: Sequence[str], width: float, font: int) -> int:
     return -(-len(widths) // columns)
 
 
-def series_line(i: int) -> dict:
-    """The line of the ``i``-th series (from 0) of a chart: a colour, and past eight a dash."""
+def series_line(i: int, dash: str | None = None) -> dict:
+    """The line of the ``i``-th series (from 0) of a chart: a colour, and past eight a dash.
+
+    ``dash`` sets the dash instead, for a chart whose colours say which lines go together,
+    as the yields of one country, each maturity in a dash of its own.
+    """
     colors = SERIES_COLORS[_theme()]
-    return dict(color=colors[i % len(colors)], dash=SERIES_DASHES[(i // len(colors)) % len(SERIES_DASHES)], width=2)
+    return dict(color=colors[i % len(colors)], dash=dash or SERIES_DASHES[(i // len(colors)) % len(SERIES_DASHES)],
+                width=2)
 
 
 def readable(fig, *, height: int | None = None):
