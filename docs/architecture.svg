@@ -1,0 +1,254 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Architecture map of my-investment-app, drawn by hand. Explained in ARCHITECTURE.md.
+  Layers, top to bottom: what starts things, the running code, the libraries it calls,
+  where data is kept, where it comes from. Arrows run from the caller to what it calls.
+  Colours: amber = batch path (jobs -> DuckDB), blue = live path (market_data.py),
+  green = your records (Firestore). Grid: 24 px margins, bands at y 84 / 208 / 476 / 640 / 784.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="1240" height="896" viewBox="0 0 1240 896" role="img" aria-labelledby="map-title map-desc">
+  <title id="map-title">my-investment-app: architecture map</title>
+  <desc id="map-desc">A Streamlit app and a set of batch jobs share one repository. The jobs, run on a schedule or from a page's button, fetch market data through invest/data and append it to a local DuckDB file that the analysis pages read. market_data.py fetches prices, exchange rates and search results live when a page needs them, and Streamlit caches them. Transactions, cash accounts and the portfolio design are kept in Firestore through database.py; portfolio_math.py does the money arithmetic without any I/O.</desc>
+  <style>
+    svg { --bg:#ffffff; --ink:#1f2328; --muted:#59636e; --box:#f6f8fa; --line:#d1d9e0; --arrow:#6e7781;
+          --amber:#bc4c00; --amber-bg:#fff1e5; --blue:#0969da; --blue-bg:#ddf4ff; --green:#1a7f37; --green-bg:#dafbe1; }
+    @media (prefers-color-scheme: dark) {
+      svg { --bg:#0d1117; --ink:#e6edf3; --muted:#9198a1; --box:#151b23; --line:#3d444d; --arrow:#9198a1;
+            --amber:#f0883e; --amber-bg:#251a10; --blue:#4493f8; --blue-bg:#10223d; --green:#3fb950; --green-bg:#11261a; }
+    }
+    text { font-family: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif; font-size: 12px; fill: var(--ink); }
+    .mono { font-family: ui-monospace, "Cascadia Mono", Consolas, "SF Mono", Menlo, monospace; }
+    .title { font-size: 19px; font-weight: 600; }
+    .h { font-size: 14px; font-weight: 600; }
+    .h2 { font-size: 12.5px; font-weight: 600; }
+    .pg { font-size: 13px; }
+    .sm { font-size: 11.5px; }
+    .xs { font-size: 11px; }
+    .muted { fill: var(--muted); }
+    .end { text-anchor: end; }
+    .mid { text-anchor: middle; }
+    .bg { fill: var(--bg); }
+    .box { fill: var(--box); stroke: var(--line); }
+    .inner { fill: var(--bg); stroke: var(--line); }
+    .amber { fill: var(--amber-bg); stroke: var(--amber); }
+    .blue { fill: var(--blue-bg); stroke: var(--blue); }
+    .green { fill: var(--green-bg); stroke: var(--green); }
+    .net { fill: var(--box); stroke: var(--muted); stroke-dasharray: 5 4; }
+    .wire { fill: none; stroke-width: 1.6; }
+    .w-ink { stroke: var(--arrow); }
+    .w-amber { stroke: var(--amber); }
+    .w-blue { stroke: var(--blue); }
+    .w-green { stroke: var(--green); }
+    .t-amber { fill: var(--amber); }
+    .t-blue { fill: var(--blue); }
+    .t-green { fill: var(--green); }
+    .f-ink { fill: var(--arrow); }
+    .f-amber { fill: var(--amber); }
+    .f-blue { fill: var(--blue); }
+    .f-green { fill: var(--green); }
+  </style>
+  <defs>
+    <!-- Arrowheads: the base sits on the line's end, the tip 9 px beyond it. -->
+    <marker id="ah-ink" viewBox="0 0 10 10" refX="0" refY="5" markerWidth="9" markerHeight="9" markerUnits="userSpaceOnUse" orient="auto"><path d="M0 0L10 5L0 10z" class="f-ink"/></marker>
+    <marker id="ah-amber" viewBox="0 0 10 10" refX="0" refY="5" markerWidth="9" markerHeight="9" markerUnits="userSpaceOnUse" orient="auto"><path d="M0 0L10 5L0 10z" class="f-amber"/></marker>
+    <marker id="ah-blue" viewBox="0 0 10 10" refX="0" refY="5" markerWidth="9" markerHeight="9" markerUnits="userSpaceOnUse" orient="auto"><path d="M0 0L10 5L0 10z" class="f-blue"/></marker>
+    <marker id="ah-green" viewBox="0 0 10 10" refX="0" refY="5" markerWidth="9" markerHeight="9" markerUnits="userSpaceOnUse" orient="auto"><path d="M0 0L10 5L0 10z" class="f-green"/></marker>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1240" height="896" rx="14"/>
+
+  <!-- Title -->
+  <text class="title" x="24" y="40">my-investment-app — architecture</text>
+  <text class="muted" x="24" y="62">Arrows run from the caller to what it calls. Colour marks the data path: batch, live, or your records.</text>
+  <text class="muted end" x="1216" y="40">as of 13 Nov 2026</text>
+
+  <!-- Band 1: what starts things -->
+  <g id="schedules">
+    <rect class="amber" x="24" y="84" width="300" height="88" rx="10"/>
+    <text class="h" x="40" y="106">Schedules</text>
+    <text x="40" y="126">GitHub Actions — Saturdays 07:00 UTC</text>
+    <text x="40" y="143">Docker — Sat 08:00, backup daily 03:00</text>
+    <text x="40" y="160">Task Scheduler / cron — scripts/weekly.*</text>
+  </g>
+  <g id="config">
+    <rect class="box" x="396" y="84" width="284" height="88" rx="10"/>
+    <text class="mono h" x="412" y="106">config/</text>
+    <text class="muted" x="480" y="106">what to fetch, your targets</text>
+    <text class="mono sm" x="412" y="126">series · markets · universe · managers</text>
+    <text class="mono sm" x="412" y="143">targets · releases · hypotheses.md</text>
+    <text class="muted" x="412" y="160">read by the jobs and the pages</text>
+  </g>
+  <g id="you">
+    <rect class="box" x="880" y="98" width="240" height="60" rx="10"/>
+    <text class="h mid" x="1000" y="122">You</text>
+    <text class="muted mid" x="1000" y="142">in a browser, localhost:8501</text>
+  </g>
+
+  <!-- Band 2: the running code -->
+  <g id="jobs">
+    <rect class="amber" x="24" y="208" width="300" height="220" rx="10"/>
+    <text class="h" x="40" y="232">Batch jobs</text>
+    <text class="mono sm muted end" x="308" y="232">invest/jobs/</text>
+    <text class="mono sm muted" x="40" y="251">python -m invest.jobs.&lt;name&gt;</text>
+    <text class="mono" x="40" y="278">refresh</text><text x="130" y="278">macro catalog, market closes</text>
+    <text class="mono" x="40" y="298">fundamentals</text><text x="130" y="298">screener tables, US and EU</text>
+    <text class="mono" x="40" y="318">filings</text><text x="130" y="318">13F holdings, Form 4 trades</text>
+    <text class="mono" x="40" y="338">weekly</text><text x="130" y="338">builds and sends the report</text>
+    <text class="mono" x="40" y="358">vintages</text><text x="130" y="358">ALFRED revision history</text>
+    <text class="mono" x="40" y="378">backup</text><text x="130" y="378">DuckDB + reports, last 14</text>
+    <text class="mono" x="40" y="398">notify</text><text x="130" y="398">failure alerts</text>
+    <text class="xs muted" x="40" y="418">a running job holds DuckDB; pages wait</text>
+  </g>
+  <g id="app">
+    <rect class="box" x="396" y="208" width="820" height="220" rx="10"/>
+    <text class="h" x="412" y="232">Streamlit app</text>
+    <text class="mono sm muted end" x="1200" y="232">app.py → pages/*.py</text>
+    <text class="muted" x="412" y="251">One file per page, grouped here by where the page gets its data (the sidebar menu groups them differently).</text>
+    <g id="pages-research">
+      <rect class="inner" x="412" y="264" width="254" height="108" rx="7"/>
+      <text class="h2" x="424" y="284">Stored research</text>
+      <text class="xs muted end" x="654" y="284">reads DuckDB</text>
+      <text class="pg" x="424" y="308">Macro</text><text class="mono xs muted end" x="654" y="308">macro.py</text>
+      <text class="pg" x="424" y="332">Screener</text><text class="mono xs muted end" x="654" y="332">screener.py</text>
+      <text class="pg" x="424" y="356">Weekly report</text><text class="mono xs muted end" x="654" y="356">report.py</text>
+    </g>
+    <g id="pages-explore">
+      <rect class="inner" x="678" y="264" width="254" height="108" rx="7"/>
+      <text class="h2" x="690" y="284">Explore anything</text>
+      <text class="xs muted end" x="920" y="284">DuckDB + live</text>
+      <text class="pg" x="690" y="308">Stock explorer</text><text class="mono xs muted end" x="920" y="308">plotter.py</text>
+      <text class="pg" x="690" y="332">Company financials</text><text class="mono xs muted end" x="920" y="332">company.py</text>
+      <text class="pg" x="690" y="356">Watchlist</text><text class="mono xs muted end" x="920" y="356">watchlist.py</text>
+    </g>
+    <g id="pages-portfolio">
+      <rect class="inner" x="944" y="264" width="256" height="108" rx="7"/>
+      <text class="h2" x="956" y="284">Your portfolio</text>
+      <text class="xs muted end" x="1188" y="284">Firestore + live</text>
+      <text class="pg" x="956" y="308">Current Portfolio</text><text class="mono xs muted end" x="1188" y="308">portfolio.py</text>
+      <text class="pg" x="956" y="332">Log Transactions</text><text class="mono xs muted end" x="1188" y="332">transactions.py</text>
+      <text class="pg" x="956" y="356">Portfolio design</text><text class="mono xs muted end" x="1188" y="356">design.py</text>
+    </g>
+    <g id="helpers">
+      <rect class="inner" x="412" y="384" width="788" height="30" rx="7"/>
+      <text class="muted" x="424" y="404">shared by the pages</text>
+      <text class="mono" x="548" y="404">charts.py · company_detail.py · screener_help.py · watchlist.py · job_panel.py</text>
+    </g>
+  </g>
+
+  <!-- Band 3: libraries -->
+  <g id="invest">
+    <rect class="box" x="24" y="476" width="616" height="122" rx="10"/>
+    <text class="mono h" x="40" y="500">invest/</text>
+    <text class="muted" x="108" y="500">the analysis package (its jobs/ are drawn above)</text>
+    <g id="invest-data">
+      <rect class="amber" x="36" y="508" width="282" height="80" rx="7"/>
+      <text class="mono h2" x="48" y="528">invest/data/</text>
+      <text class="sm" x="48" y="545">a client per source, picked by sources.py</text>
+      <text class="sm" x="48" y="561">every network call of the package</text>
+      <text class="sm" x="48" y="577">cache.py: the Store, DuckDB's only door</text>
+    </g>
+    <g id="invest-logic">
+      <rect class="inner" x="330" y="508" width="298" height="80" rx="7"/>
+      <text class="h2" x="342" y="528">Analysis logic</text>
+      <text class="mono sm" x="342" y="545">macro/ · fundamentals/ · positioning/</text>
+      <text class="mono sm" x="342" y="561">portfolio/ · report/ · research/</text>
+      <text class="sm muted" x="342" y="577">mostly pure, tested on saved fixtures</text>
+    </g>
+  </g>
+  <g id="market-data">
+    <rect class="blue" x="704" y="476" width="228" height="122" rx="10"/>
+    <text class="mono h" x="720" y="500">market_data.py</text>
+    <text x="720" y="524">every live fetch of the app:</text>
+    <text x="720" y="542">prices, FX, search, accounts</text>
+    <text x="720" y="560">cached 15 min to 30 days</text>
+    <text class="muted" x="720" y="578">via invest/data's clients</text>
+  </g>
+  <g id="portfolio-math">
+    <rect class="box" x="944" y="476" width="136" height="122" rx="10"/>
+    <text class="mono h2" x="954" y="500">portfolio_math.py</text>
+    <text x="954" y="524">pure money math:</text>
+    <text x="954" y="542">positions, P&amp;L,</text>
+    <text x="954" y="560">FX, CAPM</text>
+    <text class="muted" x="954" y="578">no I/O, tested</text>
+  </g>
+  <g id="database">
+    <rect class="green" x="1092" y="476" width="124" height="122" rx="10"/>
+    <text class="mono h" x="1104" y="500">database.py</text>
+    <text x="1104" y="524">Firestore client:</text>
+    <text x="1104" y="542">transactions,</text>
+    <text x="1104" y="560">cash accounts,</text>
+    <text x="1104" y="578">portfolio design</text>
+  </g>
+
+  <!-- Band 4: where data is kept -->
+  <g id="duckdb">
+    <rect class="amber" x="112" y="640" width="576" height="104" rx="10"/>
+    <text class="mono h" x="128" y="662">data/market.duckdb</text>
+    <text class="muted" x="290" y="662">one local DuckDB file, gitignored</text>
+    <text x="128" y="683">series, append-only with vintage dates · prices · facts · companies</text>
+    <text x="128" y="700">snapshots (the screener tables) · holdings13f · insider_tx · runs · fetches</text>
+    <text x="128" y="717">pages write only the watchlist and hand-recorded releases</text>
+    <text class="muted" x="128" y="734">the data/ folder also holds reports/ · downloads/ · backups/ · logs/</text>
+  </g>
+  <g id="firestore">
+    <rect class="green" x="944" y="640" width="272" height="104" rx="10"/>
+    <text class="h" x="960" y="662">Firestore</text>
+    <text class="muted" x="1032" y="662">Google Cloud</text>
+    <text class="mono sm" x="960" y="683">transactions · cash_accounts</text>
+    <text class="mono sm" x="960" y="700">portfolio_design</text>
+    <text class="muted" x="960" y="717">the weekly job reads it too</text>
+  </g>
+
+  <!-- Band 5: where data comes from -->
+  <g id="internet">
+    <rect class="net" x="24" y="784" width="1192" height="56" rx="10"/>
+    <text class="h" x="40" y="817">Internet</text>
+    <text x="116" y="817">Yahoo Finance · SEC EDGAR · FRED / ALFRED · ECB · Eurostat · OECD · BIS · CFTC · Onvista · Shiller and Fed files</text>
+  </g>
+
+  <!-- Arrows, each ending 9 px short of its target so the arrowhead tip touches the edge -->
+  <g id="arrows">
+    <!-- starts -->
+    <line class="wire w-amber" x1="174" y1="172" x2="174" y2="199" marker-end="url(#ah-amber)"/>
+    <text class="sm t-amber" x="182" y="194">run the weekly chain</text>
+    <line class="wire w-ink" x1="1000" y1="158" x2="1000" y2="199" marker-end="url(#ah-ink)"/>
+    <text class="mono xs muted" x="1008" y="188">streamlit run app.py</text>
+    <line class="wire w-amber" x1="396" y1="318" x2="333" y2="318" marker-end="url(#ah-amber)"/>
+    <text class="sm t-amber mid" x="360" y="309">starts</text>
+    <text class="sm t-amber mid" x="360" y="336">a job</text>
+    <!-- code to libraries -->
+    <line class="wire w-amber" x1="174" y1="428" x2="174" y2="467" marker-end="url(#ah-amber)"/>
+    <text class="sm t-amber" x="182" y="456">fetch · compute · store</text>
+    <line class="wire w-ink" x1="540" y1="428" x2="540" y2="467" marker-end="url(#ah-ink)"/>
+    <text class="sm muted" x="548" y="456">rules, screens</text>
+    <line class="wire w-amber" x1="672" y1="428" x2="672" y2="631" marker-end="url(#ah-amber)"/>
+    <text class="sm t-amber" x="680" y="456">read-only</text>
+    <line class="wire w-blue" x1="818" y1="428" x2="818" y2="467" marker-end="url(#ah-blue)"/>
+    <text class="sm t-blue" x="826" y="456">prices, FX, search</text>
+    <line class="wire w-ink" x1="980" y1="428" x2="980" y2="467" marker-end="url(#ah-ink)"/>
+    <text class="sm muted" x="988" y="456">values holdings</text>
+    <line class="wire w-green" x1="1130" y1="428" x2="1130" y2="467" marker-end="url(#ah-green)"/>
+    <text class="sm t-green" x="1138" y="456">your records</text>
+    <!-- libraries to stores and the internet -->
+    <line class="wire w-amber" x1="232" y1="598" x2="232" y2="631" marker-end="url(#ah-amber)"/>
+    <text class="sm t-amber" x="240" y="620">append, with fetch time and vintage</text>
+    <line class="wire w-green" x1="1130" y1="598" x2="1130" y2="631" marker-end="url(#ah-green)"/>
+    <text class="sm t-green" x="1138" y="620">read · write</text>
+    <line class="wire w-amber" x1="72" y1="598" x2="72" y2="775" marker-end="url(#ah-amber)"/>
+    <text class="sm t-amber" x="80" y="768">fetch all that config/ lists</text>
+    <line class="wire w-blue" x1="818" y1="598" x2="818" y2="775" marker-end="url(#ah-blue)"/>
+    <text class="sm t-blue" x="826" y="768">fetched when a page needs it</text>
+  </g>
+
+  <!-- Legend -->
+  <g id="legend">
+    <line class="wire w-amber" x1="24" y1="866" x2="43" y2="866" marker-end="url(#ah-amber)"/>
+    <text x="60" y="870">batch: jobs fetch and store, pages read the file</text>
+    <line class="wire w-blue" x1="380" y1="866" x2="399" y2="866" marker-end="url(#ah-blue)"/>
+    <text x="416" y="870">live: fetched when a page needs it</text>
+    <line class="wire w-green" x1="660" y1="866" x2="679" y2="866" marker-end="url(#ah-green)"/>
+    <text x="696" y="870">your records, kept in Firestore</text>
+    <line class="wire w-ink" x1="920" y1="866" x2="939" y2="866" marker-end="url(#ah-ink)"/>
+    <text x="956" y="870">calls and uses</text>
+  </g>
+</svg>
