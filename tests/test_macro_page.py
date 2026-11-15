@@ -141,7 +141,7 @@ def test_market_charts_sit_two_to_a_row_by_default(seeded_db):
     assert [e.label for c in cells for e in c.expander] == [
         "📈 World main indices", "📈 World small and mid caps", "📈 Europe main indices",
         "📈 Europe mid caps", "📈 Europe small caps", "📈 Commodities",
-        "📈 Government bond yields", "📈 Corporate bond yields",
+        "📈 Government bond yields", "📈 Corporate bond yields", "📈 US corporate bond yields by rating",
     ]
     assert {c.weight for c in cells} == {1 / 2}
 
@@ -223,7 +223,7 @@ def test_charts_per_row_rearranges_the_market_charts(seeded_db, per_row):
     at.button_group(key="market_per_row").set_value(per_row).run()
     assert not at.exception
     cells = _market_cells(at)
-    assert len(cells) == 8
+    assert len(cells) == 9
     assert {round(c.weight, 6) for c in cells} == {round(1 / per_row, 6)}
 
 
@@ -510,6 +510,22 @@ def test_a_yield_with_a_shorter_history_starts_later_and_is_named(seeded_db):
     assert "Starting later: US high yield on 11 Sep 2023." in _caption(cell)
     assert 255 <= len(_trace(fig, "German companies")["x"]) <= 265  # weekly past two years, as the indices
     assert "Not charted: Euro investment grade (ICE BofA Euro Corporate Index): FRED does not publish it" in _caption(cell)
+
+
+def test_corporate_yields_by_rating_run_from_aaa_to_ccc(seeded_db):
+    days = pd.bdate_range("2023-11-14", "2026-09-09")  # FRED's three years
+    with Store(seeded_db) as store:
+        store.upsert_series("US_CORP_AAA_YIELD", pd.Series(np.linspace(4.5, 4.9, len(days)), index=days), source="fred")
+        store.upsert_series("US_HY_CCC_YIELD", pd.Series(np.linspace(13.0, 11.5, len(days)), index=days), source="fred")
+    cell = _market_chart(_macro(_app().run()), "US corporate bond yields by rating")
+    fig = _figure(cell)
+    assert [trace["name"] for trace in fig["data"]] == ["AAA", "CCC and lower"]
+    light = charts.SERIES_COLORS["light"]
+    assert [trace["line"]["color"] for trace in fig["data"]] == [light[0], light[6]]  # by place: AAA first, CCC seventh
+    caption = _caption(cell)
+    assert "No yields stored for AA (US_CORP_AA_YIELD), A (US_CORP_A_YIELD), BBB (US_CORP_BBB_YIELD)" in caption
+    assert ("**Covers.** AAA, AA, A, BBB: ICE BofA US Corporate Index by rating, investment grade, effective yield · "
+            "BB, B, CCC and lower: ICE BofA US High Yield Index by rating, below investment grade") in caption
 
 
 def test_a_bond_chart_without_yields_says_so(seeded_db):

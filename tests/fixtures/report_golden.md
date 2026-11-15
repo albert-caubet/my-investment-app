@@ -9,7 +9,7 @@ Portfolio value €11,725 on 2026-09-10 (source: provided); total P&L €3,834 (
 
 Macro regime: **expansion** as of 2026-09-09. 0 counted rule(s) firing.
 
-Data freshness: manual 33, missing 179, ok 7.
+Data freshness: manual 33, missing 186, ok 7.
 
 Critical series stale or failed: US_10Y, EA_DFR, EA_10Y, US_FEDFUNDS, US_POLICY_STANCE, US_CFNAI_MA3, US_EBP, US_CPI, US_CORE_PCE, EA_HICP, US_CLAIMS, US_PERMITS, US_SLOOS_TIGHTENING, SP500_CAPE.
 
@@ -248,6 +248,13 @@ No hypothesis is due for review this week.
 | US_BAA_YIELD | missing | – | – | 10 |  |  |
 | EUR_HY_YIELD | missing | – | – | 10 |  |  |
 | DE_CORP_YIELD | missing | – | – | 10 |  |  |
+| US_CORP_AAA_YIELD | missing | – | – | 10 |  |  |
+| US_CORP_AA_YIELD | missing | – | – | 10 |  |  |
+| US_CORP_A_YIELD | missing | – | – | 10 |  |  |
+| US_CORP_BBB_YIELD | missing | – | – | 10 |  |  |
+| US_HY_BB_YIELD | missing | – | – | 10 |  |  |
+| US_HY_B_YIELD | missing | – | – | 10 |  |  |
+| US_HY_CCC_YIELD | missing | – | – | 10 |  |  |
 | US_NFCI | missing | – | – | 26 |  |  |
 | US_ANFCI | missing | – | – | 26 |  |  |
 | US_STLFSI | missing | – | – | 26 |  |  |

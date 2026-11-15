@@ -268,13 +268,14 @@ carrying its observation date and source, nothing filled in silently.
   covers ("Greece, 60 largest"), printed under its chart, are in `config/markets.toml`.
   Where Yahoo keeps no history for an index, an ETF on the same index (or a close index)
   stands in, starred in the legend and described under the chart; an index with neither is
-  listed there as not charted. Two bond charts close the section, drawn as yields in percent
-  rather than a % change: government bonds (US and German 2, 10 and 30 years daily; France,
-  Italy and Spain 10 years as monthly averages, each drawn across its month) and corporate
-  bonds (ICE BofA US investment grade, US high yield and euro high yield, of which FRED keeps
-  three years; Moody's Aaa and Baa; German companies' bonds from the Bundesbank). Their lines
-  are catalog series, named in `config/markets.toml` by id, which the refresh fetches with the
-  rest of the catalog.
+  listed there as not charted. Three bond charts close the section, drawn as yields in
+  percent rather than a % change: government bonds (US and German 2, 10 and 30 years daily;
+  France, Italy and Spain 10 years as monthly averages, each drawn across its month),
+  corporate bonds (ICE BofA US investment grade, US high yield and euro high yield, of which
+  FRED keeps three years; Moody's Aaa and Baa; German companies' bonds from the Bundesbank),
+  and US corporate bonds by rating, from AAA down to CCC (ICE BofA). Their lines are catalog
+  series, named in `config/markets.toml` by id, which the refresh fetches with the rest of
+  the catalog.
 - **Fundamentals and screener**: `python -m invest.jobs.fundamentals` ingests XBRL company
   facts, SIC sectors and prices for a universe from `config/universe.toml`, builds one row per
   company (Greenblatt earnings yield and ROIC, FCF yield, margins and their slope, growth,

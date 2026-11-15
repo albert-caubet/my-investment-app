@@ -171,3 +171,19 @@ series = [
   { label = "German companies", series_id = "DE_CORP_YIELD", color = 1, dash = "dash", about = "bonds of German companies other than banks, mostly investment grade (Bundesbank)" },
   { label = "Euro investment grade", about = "ICE BofA Euro Corporate Index", note = "FRED does not publish it and no free source has its history; German companies' bonds stand in" },
 ]
+
+# The ICE BofA US indices by rating: the extra yield each step down the ratings pays.
+# FRED keeps three years of them; the store keeps what it fetches from then on.
+[[chart]]
+id = "corporate_yields_by_rating"
+title = "US corporate bond yields by rating"
+kind = "yield"
+series = [
+  { label = "AAA", series_id = "US_CORP_AAA_YIELD", about = "ICE BofA US Corporate Index by rating, investment grade, effective yield" },
+  { label = "AA", series_id = "US_CORP_AA_YIELD", about = "ICE BofA US Corporate Index by rating, investment grade, effective yield" },
+  { label = "A", series_id = "US_CORP_A_YIELD", about = "ICE BofA US Corporate Index by rating, investment grade, effective yield" },
+  { label = "BBB", series_id = "US_CORP_BBB_YIELD", about = "ICE BofA US Corporate Index by rating, investment grade, effective yield" },
+  { label = "BB", series_id = "US_HY_BB_YIELD", about = "ICE BofA US High Yield Index by rating, below investment grade, effective yield" },
+  { label = "B", series_id = "US_HY_B_YIELD", about = "ICE BofA US High Yield Index by rating, below investment grade, effective yield" },
+  { label = "CCC and lower", series_id = "US_HY_CCC_YIELD", about = "ICE BofA US High Yield Index by rating, below investment grade, effective yield" },
+]

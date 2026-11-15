@@ -1683,6 +1683,93 @@ units = "%"
 show = false
 notes = "Average yield of the bonds outstanding of German companies other than banks, every maturity, as the Bundesbank computes it each business day (Umlaufsrendite); mostly investment grade. Daily since 1979."
 
+# The ICE BofA US indices by rating, from AAA down to CCC, for the chart of corporate
+# yields by rating; three years on FRED, like the indices above.
+
+[[series]]
+id = "US_CORP_AAA_YIELD"
+label = "US AAA corporate bond yield (ICE BofA)"
+group = "credit"
+source = "fred"
+key = "BAMLC0A1CAAAEY"
+frequency = "D"
+lag_days = 1
+units = "%"
+show = false
+notes = "Effective yield of the ICE BofA AAA US Corporate Index: dollar bonds of companies rated AAA."
+
+[[series]]
+id = "US_CORP_AA_YIELD"
+label = "US AA corporate bond yield (ICE BofA)"
+group = "credit"
+source = "fred"
+key = "BAMLC0A2CAAEY"
+frequency = "D"
+lag_days = 1
+units = "%"
+show = false
+notes = "Effective yield of the ICE BofA AA US Corporate Index: dollar bonds of companies rated AA."
+
+[[series]]
+id = "US_CORP_A_YIELD"
+label = "US A corporate bond yield (ICE BofA)"
+group = "credit"
+source = "fred"
+key = "BAMLC0A3CAEY"
+frequency = "D"
+lag_days = 1
+units = "%"
+show = false
+notes = "Effective yield of the ICE BofA Single-A US Corporate Index: dollar bonds of companies rated A."
+
+[[series]]
+id = "US_CORP_BBB_YIELD"
+label = "US BBB corporate bond yield (ICE BofA)"
+group = "credit"
+source = "fred"
+key = "BAMLC0A4CBBBEY"
+frequency = "D"
+lag_days = 1
+units = "%"
+show = false
+notes = "Effective yield of the ICE BofA BBB US Corporate Index: dollar bonds of companies rated BBB, the lowest investment grade."
+
+[[series]]
+id = "US_HY_BB_YIELD"
+label = "US BB high-yield bond yield (ICE BofA)"
+group = "credit"
+source = "fred"
+key = "BAMLH0A1HYBBEY"
+frequency = "D"
+lag_days = 1
+units = "%"
+show = false
+notes = "Effective yield of the ICE BofA BB US High Yield Index: dollar bonds of companies rated BB, the highest grade below investment grade."
+
+[[series]]
+id = "US_HY_B_YIELD"
+label = "US B high-yield bond yield (ICE BofA)"
+group = "credit"
+source = "fred"
+key = "BAMLH0A2HYBEY"
+frequency = "D"
+lag_days = 1
+units = "%"
+show = false
+notes = "Effective yield of the ICE BofA Single-B US High Yield Index: dollar bonds of companies rated B."
+
+[[series]]
+id = "US_HY_CCC_YIELD"
+label = "US CCC and lower high-yield bond yield (ICE BofA)"
+group = "credit"
+source = "fred"
+key = "BAMLH0A3HYCEY"
+frequency = "D"
+lag_days = 1
+units = "%"
+show = false
+notes = "Effective yield of the ICE BofA CCC & Lower US High Yield Index: dollar bonds of companies rated CCC or below, the closest to default."
+
 [[series]]
 id = "US_NFCI"
 label = "Chicago Fed financial conditions (NFCI)"

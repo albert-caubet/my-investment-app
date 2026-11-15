@@ -16,14 +16,14 @@ def _chart(*series, id="c") -> dict:
 # --- the file -----------------------------------------------------------------
 
 
-def test_the_shipped_file_has_the_eight_charts():
+def test_the_shipped_file_has_the_nine_charts():
     charts = markets.load_markets()
     assert [c.title for c in charts] == [
         "World main indices", "World small and mid caps", "Europe main indices",
         "Europe mid caps", "Europe small caps", "Commodities",
-        "Government bond yields", "Corporate bond yields",
+        "Government bond yields", "Corporate bond yields", "US corporate bond yields by rating",
     ]
-    assert [c.kind for c in charts] == ["change"] * 6 + ["yield"] * 2
+    assert [c.kind for c in charts] == ["change"] * 6 + ["yield"] * 3
     for chart in charts:
         assert len(chart.charted) <= markets.MAX_LINES
         if chart.kind == "change":
@@ -36,11 +36,15 @@ def test_the_bond_charts_draw_catalog_series_of_yields():
     catalog = load_catalog()
     by_id = {c.id: c for c in markets.load_markets()}
     government, corporate = by_id["government_yields"], by_id["corporate_yields"]
+    by_rating = by_id["corporate_yields_by_rating"]
     assert government.series_ids == ("US_2Y", "US_10Y", "US_30Y", "DE_2Y", "DE_10Y", "DE_30Y",
                                      "FR_10Y", "IT_10Y", "ES_10Y")
     assert corporate.series_ids == ("US_IG_YIELD", "US_HY_YIELD", "US_AAA_YIELD", "US_BAA_YIELD",
                                     "EUR_HY_YIELD", "DE_CORP_YIELD")
-    for sid in government.series_ids + corporate.series_ids:
+    # the ratings from the best to the worst, each its own colour
+    assert [s.label for s in by_rating.charted] == ["AAA", "AA", "A", "BBB", "BB", "B", "CCC and lower"]
+    assert len(set(by_rating.styles())) == 7
+    for sid in government.series_ids + corporate.series_ids + by_rating.series_ids:
         assert catalog[sid].units == "%", sid  # every line in percent, on one axis
         assert catalog[sid].source != "derived", sid  # fetched by the refresh, not computed
     assert [s.label for s in corporate.left_out] == ["Euro investment grade"]  # no free source: said why
@@ -49,7 +53,7 @@ def test_the_bond_charts_draw_catalog_series_of_yields():
     assert styles["US 2-year"] == (0, "dot") and styles["US 10-year"] == (0, "solid") and styles["US 30-year"] == (0, "dash")
     assert styles["Germany 10-year"] == (1, "solid") and styles["Spain 10-year"] == (4, "solid")
     # the refresh downloads no Yahoo symbol for them
-    assert government.symbols == corporate.symbols == ()
+    assert government.symbols == corporate.symbols == by_rating.symbols == ()
     assert len(markets.all_symbols(markets.load_markets())) == len(markets.all_symbols(markets.load_markets()[:6]))
 
 
