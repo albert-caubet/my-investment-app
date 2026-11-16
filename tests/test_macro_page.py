@@ -191,7 +191,8 @@ def test_what_each_line_covers_is_said_under_its_chart(seeded_db):
 def test_the_market_charts_open_the_page(seeded_db):
     headers = [h.value for h in _macro(_app().run()).subheader]
     assert headers.index("Markets") == 0
-    assert headers[1].startswith("Regime:")
+    assert headers[1] == "Compare"
+    assert headers[2].startswith("Regime:")
 
 
 def test_a_line_starting_inside_the_range_is_named_under_the_chart(seeded_db):
@@ -359,6 +360,86 @@ def test_an_unknown_id_in_the_url_is_dropped(seeded_db):
     at = _ticked("NOT_A_SERIES", "US_UNRATE")
     assert [e.label for e in _indicator_cells(at)] == ["📊 US unemployment rate"]
     assert at.query_params["macro_chart"] == ["US_UNRATE"]
+
+
+# --- compare plots ---------------------------------------------------------------------
+
+
+def _compared(*plots: str) -> AppTest:
+    """The Macro page opened from a URL with a compare plot for each of ``plots``, written ``LEFT,LEFT~RIGHT``."""
+    at = _app().run().switch_page("pages/macro.py")
+    at.query_params["compare"] = list(plots)
+    at.run()
+    assert not at.exception
+    return at
+
+
+def _compare_figures(at: AppTest) -> list[dict]:
+    return [json.loads(c.proto.spec) for c in at.get("plotly_chart") if "macro_compare_figure_" in c.proto.id]
+
+
+def test_compare_starts_with_one_empty_plot(seeded_db):
+    at = _macro(_app().run())
+    assert at.multiselect(key="macro_compare_left_0").value == []
+    assert at.multiselect(key="macro_compare_right_0").value == []
+    assert len(at.multiselect(key="macro_compare_left_0").options) == len(load_catalog())  # every series, shown or not
+    assert any("Pick a series for each axis" in c.value for c in at.caption)
+    assert not _compare_figures(at)
+    assert "compare" not in at.query_params
+    assert at.button_group(key="compare_range").value == "10Y"
+
+
+def test_a_compare_plot_has_a_scale_on_each_side(seeded_db):
+    (fig,) = _compare_figures(_compared("US_UNRATE~US_10Y"))
+    assert [(t["name"], t.get("yaxis", "y")) for t in fig["data"]] == [
+        ("US unemployment rate (left)", "y"), ("US 10-year Treasury yield (right)", "y2")]
+    layout, light = fig["layout"], charts.SERIES_COLORS["light"]
+    assert layout["yaxis2"]["overlaying"] == "y" and layout["yaxis2"]["side"] == "right"
+    assert layout["yaxis"]["title"]["text"] == "%" and layout["yaxis2"]["title"]["text"] == "%"
+    # one line a side: each scale in its line's colour
+    assert layout["yaxis"]["tickfont"]["color"] == light[0] and layout["yaxis2"]["tickfont"]["color"] == light[1]
+    assert layout["yaxis"]["exponentformat"] == "none"  # 1,400,000, not 1.4M
+    # ten years back from the latest observation, 9 Sep 2026; the 2020 recession shaded across the plot
+    assert fig["data"][1]["x"][0].startswith("2016-09")
+    assert [(s["x0"][:7], s["yref"]) for s in layout["shapes"] if s["type"] == "rect"] == [("2020-03", "paper")]
+
+
+def test_picking_series_draws_them_and_keeps_them_in_the_url(seeded_db):
+    at = _macro(_app().run())
+    at.multiselect(key="macro_compare_left_0").set_value(["US_UNRATE", "US_10Y"]).run()
+    at.multiselect(key="macro_compare_right_0").set_value(["US_CPI"]).run()
+    assert not at.exception
+    assert at.query_params["compare"] == ["US_UNRATE,US_10Y~US_CPI"]
+    (fig,) = _compare_figures(at)
+    assert [t.get("yaxis", "y") for t in fig["data"]] == ["y", "y", "y2"]
+    # two lines on the left: its scale stays black; one on the right, in the CPI's colour
+    assert fig["layout"]["yaxis"]["tickfont"]["color"] == charts.TEXT_COLOR["light"]
+    assert fig["layout"]["yaxis2"]["tickfont"]["color"] == charts.SERIES_COLORS["light"][2]
+    assert "US CPI, YoY" in fig["data"][2]["hovertemplate"]
+
+
+def test_add_plot_and_remove_a_plot(seeded_db):
+    at = _compared("US_UNRATE~US_CPI")
+    at.button(key="macro_compare_add").click().run()
+    assert [m.key for m in at.multiselect if m.key.startswith("macro_compare_left_")] == [
+        "macro_compare_left_0", "macro_compare_left_1"]
+    at.button(key="macro_compare_remove_0").click().run()
+    assert not at.exception
+    assert [m.key for m in at.multiselect if m.key.startswith("macro_compare_left_")] == ["macro_compare_left_1"]
+    assert "compare" not in at.query_params  # the empty plot left is not kept
+
+
+def test_a_series_on_both_sides_is_drawn_once_and_an_unknown_id_dropped(seeded_db):
+    at = _compared("US_UNRATE~US_UNRATE,US_CPI", "NOT_A_SERIES~US_10Y")
+    first, second = _compare_figures(at)
+    assert [t["name"] for t in first["data"]] == ["US unemployment rate (left)", "US CPI, YoY (right)"]
+    assert any("On the left axis already, so not on the right too: US unemployment rate." in c.value
+               for c in at.caption)
+    # the second plot has the right axis alone: no names to tell the sides apart, and no left scale
+    assert [t["name"] for t in second["data"]] == ["US 10-year Treasury yield"]
+    assert second["layout"]["yaxis"]["visible"] is False
+    assert at.multiselect(key="macro_compare_left_1").value == []
+    assert at.query_params["compare"] == ["US_UNRATE~US_UNRATE,US_CPI", "~US_10Y"]
 
 
 # --- EUR/USD ---------------------------------------------------------------------------

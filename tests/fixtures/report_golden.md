@@ -9,7 +9,7 @@ Portfolio value €11,725 on 2026-09-10 (source: provided); total P&L €3,834 (
 
 Macro regime: **expansion** as of 2026-09-09. 0 counted rule(s) firing.
 
-Data freshness: manual 33, missing 186, ok 7.
+Data freshness: manual 33, missing 188, ok 7.
 
 Critical series stale or failed: US_10Y, EA_DFR, EA_10Y, US_FEDFUNDS, US_POLICY_STANCE, US_CFNAI_MA3, US_EBP, US_CPI, US_CORE_PCE, EA_HICP, US_CLAIMS, US_PERMITS, US_SLOOS_TIGHTENING, SP500_CAPE.
 
@@ -265,6 +265,8 @@ No hypothesis is due for review this week.
 | US_NET_LIQUIDITY | missing | – | – | 22 |  |  |
 | US_NET_LIQUIDITY_13W | missing | – | – | 22 |  |  |
 | US_M2 | missing | – | – | 97 |  |  |
+| US_MARGIN_DEBT_LEVEL | missing | – | – | 90 |  |  |
+| US_MARGIN_DEBT_GDP | missing | – | – | 221 |  |  |
 | EA_BLS_TIGHTENING | missing | – | – | 216 |  |  |
 | EA_M3 | missing | – | – | 97 |  |  |
 | US_CREDIT_GAP | missing | – | – | 381 |  |  |
@@ -473,6 +475,7 @@ No hypothesis is due for review this week.
 | Net liquidity, 13-week change | derived | change_13w | W | 0 |
 | M2 money stock, YoY | fred | M2SL | M | 28 |
 | FINRA margin debt, YoY | release |  | M | 0 |
+| FINRA margin debt / GDP | derived | share_of_gdp | M | 0 |
 | ECB bank lending survey: net tightening on loans to firms | ecb | BLS/Q.U2.ALL.O.E.Z.B3.ST.S.WFNET | Q | 25 |
 | Euro area M3, annual growth | ecb | BSI/M.U2.Y.V.M30.X.I.U2.2300.Z01.A | M | 28 |
 | US credit-to-GDP gap (BIS) | bis | WS_CREDIT_GAP/Q.US.P.A.C | Q | 190 |

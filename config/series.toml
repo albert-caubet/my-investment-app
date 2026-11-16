@@ -6,7 +6,7 @@
 #   group       rates | policy | surveys | composites | inflation | labor | housing |
 #               investment | consumer | credit | fiscal | valuation | positioning | internals
 #   source      fred | ecb | eurostat | oecd | bis | bbk (Bundesbank) | yahoo | shiller |
-#               ebp | philly | nyfed_recprob | hlw | cot | release | derived
+#               ebp | philly | nyfed_recprob | hlw | finra | cot | release | derived
 #   key         the source's own identifier (FRED id, ECB FLOW/KEY, Eurostat query, ticker ...)
 #   frequency   D daily, W weekly, M monthly, Q quarterly, A annual, I irregular
 #   lag_days    typical days between the end of the period and its publication
@@ -1891,6 +1891,30 @@ source = "release"
 frequency = "M"
 direction = "high_bad"
 units = "%"
+
+[[series]]
+id = "US_MARGIN_DEBT_LEVEL"
+label = "FINRA margin debt (customer debit balances)"
+group = "positioning"
+source = "finra"
+key = "debit_balances"
+frequency = "M"
+lag_days = 21
+units = "USD mn"
+show = false
+notes = "Debit balances in customers' securities margin accounts at month end, from FINRA's Margin Statistics workbook, published in the third week of the next month. From February 2010 every FINRA member firm; before that, NYSE member firms."
+
+[[series]]
+id = "US_MARGIN_DEBT_GDP"
+label = "FINRA margin debt / GDP"
+group = "positioning"
+source = "derived"
+formula = "share_of_gdp"
+inputs = ["US_MARGIN_DEBT_LEVEL", "US_GDP"]
+frequency = "M"
+direction = "high_bad"
+units = "%"
+notes = "Margin debt over nominal GDP at an annual rate. The months after the latest GDP quarter are over that quarter's GDP until the next one is published."
 
 [[series]]
 id = "EA_BLS_TIGHTENING"

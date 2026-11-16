@@ -490,7 +490,8 @@ def _compare_chart(plot: dict, preset: str, height: int, per_row: int) -> None:
     for sid in drawn["left"] + drawn["right"]:
         spec, values = catalog[sid], view.series[sid]
         name = spec.label + (f" ({side[sid]})" if both else "")
-        digits = ",.2f" if values.abs().max() >= 1 else ",.4f"
+        biggest = values.abs().max()
+        digits = ",.0f" if biggest >= 1000 else ",.2f" if biggest >= 1 else ",.4f"  # 1,448,360 USD mn, 4.39%
         unit = spec.units if spec.units in ("", "%") else f" {spec.units}"  # 3.50%, but 0.12 prob
         fig.add_scatter(
             x=values.index, y=values.to_numpy(), name=name, yaxis="y2" if side[sid] == "right" else "y",
@@ -505,10 +506,12 @@ def _compare_chart(plot: dict, preset: str, height: int, per_row: int) -> None:
     def units(ids: list[str]) -> str | None:
         return ", ".join(dict.fromkeys(catalog[sid].units for sid in ids if catalog[sid].units)) or None
 
-    fig.update_layout(yaxis=dict(title=units(drawn["left"]), visible=bool(drawn["left"])))
+    # Numbers in full, 1,400,000, not Plotly's 1.4M: beside a unit such as "USD mn" that reads as millions of millions.
+    plain = dict(exponentformat="none", separatethousands=True)
+    fig.update_layout(yaxis=dict(title=units(drawn["left"]), visible=bool(drawn["left"]), **plain))
     if drawn["right"]:
         fig.update_layout(yaxis2=dict(title=units(drawn["right"]), overlaying="y", side="right", showgrid=False,
-                                      zeroline=False))
+                                      zeroline=False, **plain))
     first = min(s.index[0] for s in view.series.values())
     last = max(s.index[-1] for s in view.series.values())
     for start, end in data["recessions"]:

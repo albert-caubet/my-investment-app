@@ -21,7 +21,7 @@ SERIES_PATH = CONFIG_DIR / "series.toml"
 #: in ``invest.jobs.fundamentals``); the refresh job reports them but does not fetch them.
 SOURCES = frozenset(
     {"fred", "ecb", "eurostat", "oecd", "bis", "bbk", "yahoo", "shiller", "ebp", "philly",
-     "nyfed_recprob", "hlw", "cot", "release", "derived", "computed"}
+     "nyfed_recprob", "hlw", "finra", "cot", "release", "derived", "computed"}
 )
 #: ``I`` is irregular (policy-rate changes): never stale by construction.
 FREQUENCIES = frozenset({"D", "W", "M", "Q", "A", "I"})

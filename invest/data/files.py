@@ -1,5 +1,5 @@
 """Downloaded files: Shiller's data, the excess bond premium, regional Fed surveys,
-NY Fed model outputs. Each download is kept on disk with its SHA-256 and fetch
+NY Fed model outputs, FINRA's margin statistics. Each download is kept on disk with its SHA-256 and fetch
 time, and each parser is a pure function over rows so it can be tested on a CSV
 fixture instead of a binary workbook.
 
@@ -35,6 +35,9 @@ HLW_URL = (
     "https://www.newyorkfed.org/medialibrary/media/research/economists/williams/data/"
     "Holston_Laubach_Williams_current_estimates.xlsx"
 )
+#: The workbook behind "Download the Data" on FINRA's Margin Statistics page. The 2021-03 in the
+#: path is when the link was made: the file is replaced in place each month.
+FINRA_MARGIN_URL = "https://www.finra.org/sites/default/files/2021-03/margin-statistics.xlsx"
 BROWSER_HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; my-investment-app research tool)"}
 
 
@@ -365,3 +368,68 @@ def read_hlw_xlsx(path: Path) -> pd.DataFrame:
     sheet = book["HLW Estimates"]
     rows = [list(r) for r in sheet.iter_rows(values_only=True)]
     return parse_hlw_rows(rows)
+
+
+# ---------------------------------------------------------------------------
+# FINRA: customer margin balances, monthly since 1997 (xlsx)
+# ---------------------------------------------------------------------------
+
+#: The workbook's columns, each found by words its header has, not by position.
+FINRA_COLUMNS = {
+    "debit_balances": ("debit balances",),  # margin debt
+    "free_credit_cash": ("free credit", "cash accounts"),
+    "free_credit_margin": ("free credit", "margin accounts"),
+}
+
+
+def _finra_month(raw) -> date | None:
+    """``2026-10``, as the workbook writes a month, or a date, should a cell come typed as one."""
+    if isinstance(raw, (datetime, date)):
+        return date(raw.year, raw.month, 1)
+    match = re.fullmatch(r"\s*(\d{4})-(\d{1,2})\s*", str(raw or ""))
+    if not match or not 1 <= int(match[2]) <= 12:
+        return None
+    return date(int(match[1]), int(match[2]), 1)
+
+
+def parse_finra_margin_rows(rows: Iterable[Sequence]) -> pd.DataFrame:
+    """FINRA's customer margin balances: ``obs_date`` and a column per balance, in $ millions.
+
+    The file lists the newest month first; the frame is oldest first, each month dated on
+    its first day, though the balances are as of its last business day. Until January 2010
+    the free credit balances were one figure, which ``free_credit_cash`` holds, so
+    ``free_credit_margin`` is blank there.
+    """
+    rows = [list(r) for r in rows]
+    header_idx = next((i for i, r in enumerate(rows) if r and str(r[0] or "").strip().lower() == "year-month"), None)
+    if header_idx is None:
+        raise ValueError("FINRA margin statistics: no 'Year-Month' header row")
+    headers = [str(h or "").strip().lower() for h in rows[header_idx]]
+    columns = {}
+    for name, words in FINRA_COLUMNS.items():
+        found = next((col for col, header in enumerate(headers) if all(w in header for w in words)), None)
+        if found is not None:
+            columns[name] = found
+    if "debit_balances" not in columns:
+        raise ValueError(f"FINRA margin statistics: no debit balances column in {rows[header_idx]}")
+    records = []
+    for row in rows[header_idx + 1:]:
+        month = _finra_month(row[0]) if row else None
+        if month is None:
+            continue
+        records.append({"obs_date": month, **{name: _num(row[col]) if col < len(row) else None
+                                               for name, col in columns.items()}})
+    if not records:
+        raise ValueError("FINRA margin statistics: no monthly rows")
+    return pd.DataFrame(records).sort_values("obs_date").reset_index(drop=True)
+
+
+def read_finra_margin_xlsx(path: Path) -> pd.DataFrame:
+    import openpyxl
+
+    book = openpyxl.load_workbook(str(path), read_only=True, data_only=True)
+    try:
+        rows = list(book.worksheets[0].iter_rows(values_only=True))  # "Customer Margin Balances", the only sheet
+    finally:
+        book.close()  # read-only mode holds the file open, and the next run writes it again
+    return parse_finra_margin_rows(rows)

@@ -2,7 +2,7 @@
 
 import csv
 import json
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 import pytest
@@ -12,6 +12,7 @@ from invest.data.ecb import parse_period, parse_sdmx_csv, split_key
 from invest.data.eurostat import parse_jsonstat
 from invest.data.files import (
     parse_ebp_csv,
+    parse_finra_margin_rows,
     parse_hlw_rows,
     parse_nyfed_recprob_rows,
     parse_philly_csv,
@@ -298,6 +299,43 @@ def test_hlw_rows_locate_rstar_columns_by_title():
 def test_hlw_rejects_a_sheet_without_a_header():
     with pytest.raises(ValueError):
         parse_hlw_rows([["x", "y"], ["1", "2"]])
+
+
+# --- FINRA margin statistics -------------------------------------------------------
+
+
+def test_finra_margin_rows_oldest_first_on_the_first_of_the_month():
+    frame = parse_finra_margin_rows(_rows("finra_margin_rows.csv"))
+    assert list(frame.columns) == ["obs_date", "debit_balances", "free_credit_cash", "free_credit_margin"]
+    assert frame.iloc[0]["obs_date"] == date(1997, 1, 1)
+    assert frame.iloc[0]["debit_balances"] == pytest.approx(103_337)
+    assert frame.iloc[-1]["obs_date"] == date(2026, 10, 1)
+    assert frame.iloc[-1]["debit_balances"] == pytest.approx(1_448_360)  # $ millions
+    # Until January 2010 the free credit balances were one figure, in the cash-account column
+    january_2010 = frame.set_index("obs_date").loc[date(2010, 1, 1)]
+    assert january_2010["free_credit_cash"] == pytest.approx(281_035)
+    assert january_2010["free_credit_margin"] != january_2010["free_credit_margin"]  # blank -> NaN
+
+
+def test_finra_margin_finds_columns_by_header_and_reads_typed_dates():
+    rows = [
+        ["FINRA Statistics"],
+        ["Year-Month", "Free Credit Balances in Customers' Cash Accounts",
+         "Debit Balances in Customers' Securities Margin Accounts"],
+        [datetime(2026, 10, 31), 210290, 1448360],
+        ["Note: in $ millions", None, None],
+    ]
+    frame = parse_finra_margin_rows(rows)
+    assert list(frame["obs_date"]) == [date(2026, 10, 1)]
+    assert frame.iloc[0]["debit_balances"] == pytest.approx(1_448_360)
+    assert "free_credit_margin" not in frame.columns
+
+
+def test_finra_margin_rejects_a_sheet_without_debit_balances():
+    with pytest.raises(ValueError, match="no debit balances"):
+        parse_finra_margin_rows([["Year-Month", "Free Credit Balances"], ["2026-10", 1]])
+    with pytest.raises(ValueError, match="Year-Month"):
+        parse_finra_margin_rows([["Month", "Debit Balances"], ["2026-10", 1]])
 
 
 # --- releases -----------------------------------------------------------------

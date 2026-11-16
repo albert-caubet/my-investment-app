@@ -262,6 +262,18 @@ def buffett(corp_equities_millions: pd.Series, gdp_billions: pd.Series) -> pd.Se
     return f[0] / f[1]
 
 
+def share_of_gdp(level_millions: pd.Series, gdp_billions: pd.Series) -> pd.Series:
+    """A dollar level in $ millions as a percent of nominal GDP ($ billions, annual rate, quarterly).
+
+    On the level's dates only: each one over the GDP of its quarter, and past the last
+    quarter published, over the latest GDP, until the next quarter's comes out.
+    """
+    level = _clean(level_millions)
+    f = align(level / 1000.0, gdp_billions, how="ffill")
+    share = f[0] / f[1] * 100.0
+    return share[share.index.isin(level.index)]
+
+
 def trend_deviation(series: pd.Series) -> pd.Series:
     """Percent deviation from a log-linear trend fitted over the whole history.
 
@@ -379,6 +391,7 @@ FORMULAS: dict[str, Formula] = {
     "deflated_yoy": deflated_yoy,
     "real_earnings_growth": real_earnings_growth,
     "buffett": buffett,
+    "share_of_gdp": share_of_gdp,
     "trend_deviation": trend_deviation,
     "excess_cape_yield": excess_cape_yield,
     "pct_vs_ma200": lambda p: pct_vs_ma(p, 200),

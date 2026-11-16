@@ -130,6 +130,23 @@ def test_buffett_ratio_converts_millions_over_billions():
     assert out.iloc[0] == pytest.approx(50_000 / 28_000)
 
 
+def test_share_of_gdp_divides_each_month_by_its_quarter_in_percent():
+    margin = monthly([1_000_000.0, 1_100_000.0, 1_200_000.0, 1_300_000.0, 1_400_000.0], start="2025-12-01")  # $ mn
+    gdp = pd.Series([30_000.0, 31_000.0], index=pd.date_range("2025-10-01", periods=2, freq="QS"))  # $ bn
+    out = d.share_of_gdp(margin, gdp)
+    assert list(out.index) == list(margin.index)  # the margin's months only, none of GDP's quarter starts
+    assert out["2025-12-01"] == pytest.approx(1_000 / 30_000 * 100)  # Q4 2025
+    assert out["2026-01-01"] == pytest.approx(1_100 / 31_000 * 100)  # Q1 2026
+    # April is in a quarter not published yet: over the latest GDP, Q1's
+    assert out["2026-04-01"] == pytest.approx(1_400 / 31_000 * 100)
+
+
+def test_share_of_gdp_has_nothing_before_the_first_gdp_quarter():
+    margin = monthly([1_000_000.0, 1_000_000.0], start="2025-08-01")
+    gdp = pd.Series([30_000.0], index=pd.DatetimeIndex(["2025-10-01"]))
+    assert d.share_of_gdp(margin, gdp).empty
+
+
 def test_trend_deviation_is_zero_on_an_exact_exponential():
     idx = pd.date_range("2000-01-01", periods=40, freq="QS")
     years = (idx - idx[0]).days / 365.25

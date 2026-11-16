@@ -88,6 +88,14 @@ class Fetcher:
 
         return self._cached("hlw", load)
 
+    def _finra(self) -> pd.DataFrame:
+        def load():
+            result = files.download(files.FINRA_MARGIN_URL, "finra_margin_statistics.xlsx")
+            self.downloads.append(result)
+            return files.read_finra_margin_xlsx(result.path)
+
+        return self._cached("finra", load)
+
     def _cot(self) -> pd.DataFrame:
         def load():
             years = self.cot_years
@@ -161,6 +169,8 @@ class Fetcher:
                 return _column(self._nyfed(), spec.key, "NY Fed recession probabilities")
             if source == "hlw":
                 return _column(self._hlw(), spec.key, "HLW estimates")
+            if source == "finra":
+                return _column(self._finra(), spec.key, "FINRA margin statistics")
             if source == "cot":
                 return cot.net_speculative(self._cot(), spec.key)
         except SourceError:
