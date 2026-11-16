@@ -83,6 +83,8 @@ def format_value(value: float | None, units: str) -> str:
         return f"${value:.2f}"
     if units == "0/1":
         return "yes" if value >= 0.5 else "no"
+    if units == "index" and abs(value) < 1:  # a 0-to-1 index such as the CISS: 0.005, not 0.01
+        return f"{value:.3f}"
     if abs(value) >= 1000:
         return f"{value:,.0f}"
     return f"{value:.2f}"

@@ -1805,6 +1805,19 @@ direction = "high_bad"
 units = "sd"
 
 [[series]]
+id = "EA_CISS"
+label = "Euro area financial stress (ECB CISS)"
+group = "credit"
+source = "ecb"
+key = "CISS/D.U2.Z0Z.4F.EC.SS_CIN.IDX"
+start = "1980-01"
+frequency = "D"
+lag_days = 7
+direction = "high_bad"
+units = "index"
+notes = "The ECB's new Composite Indicator of Systemic Stress: stress in money, bond, equity and currency markets and in banks, weighted up when they move together, from 0 (calm) to 1 (the peak was 0.94 in November 2008). It replaced the original CISS, which stopped in May 2025."
+
+[[series]]
 id = "US_SLOOS_TIGHTENING"
 label = "Loan officer survey: net share tightening on C&I loans, large and mid firms"
 group = "credit"

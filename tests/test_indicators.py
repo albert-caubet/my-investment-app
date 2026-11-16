@@ -93,6 +93,8 @@ def test_concern_score_follows_direction():
         (float("nan"), "%", "–"),
         (7636.36, "", "7,636"),
         (15.72, "", "15.72"),
+        (0.0052, "index", "0.005"),  # the CISS, 0 to 1
+        (48.7, "index", "48.70"),
     ],
 )
 def test_format_value(value, units, text):

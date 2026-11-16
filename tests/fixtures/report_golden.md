@@ -9,7 +9,7 @@ Portfolio value €11,725 on 2026-09-10 (source: provided); total P&L €3,834 (
 
 Macro regime: **expansion** as of 2026-09-09. 0 counted rule(s) firing.
 
-Data freshness: manual 33, missing 188, ok 7.
+Data freshness: manual 33, missing 189, ok 7.
 
 Critical series stale or failed: US_10Y, EA_DFR, EA_10Y, US_FEDFUNDS, US_POLICY_STANCE, US_CFNAI_MA3, US_EBP, US_CPI, US_CORE_PCE, EA_HICP, US_CLAIMS, US_PERMITS, US_SLOOS_TIGHTENING, SP500_CAPE.
 
@@ -258,6 +258,7 @@ No hypothesis is due for review this week.
 | US_NFCI | missing | – | – | 26 |  |  |
 | US_ANFCI | missing | – | – | 26 |  |  |
 | US_STLFSI | missing | – | – | 26 |  |  |
+| EA_CISS | missing | – | – | 16 |  |  |
 | US_SLOOS_TIGHTENING | missing | – | – | 231 | critical |  |
 | US_WALCL | missing | – | – | 22 |  |  |
 | US_TGA | missing | – | – | 22 |  |  |
@@ -470,6 +471,7 @@ No hypothesis is due for review this week.
 | Baa corporate minus 10-year Treasury | fred | BAA10Y | D | 1 |
 | Chicago Fed financial conditions (NFCI) | fred | NFCI | W | 5 |
 | St. Louis Fed financial stress index | fred | STLFSI4 | W | 5 |
+| Euro area financial stress (ECB CISS) | ecb | CISS/D.U2.Z0Z.4F.EC.SS_CIN.IDX | D | 7 |
 | Loan officer survey: net share tightening on C&I loans, large and mid firms | fred | DRTSCILM | Q | 40 |
 | Net liquidity (Fed assets minus TGA minus RRP) | derived | net_liquidity | W | 0 |
 | Net liquidity, 13-week change | derived | change_13w | W | 0 |
