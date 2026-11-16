@@ -7,7 +7,7 @@ Everything the analysis side of the app stores lives in one DuckDB file:
 - the screener tables,
 - 13F holdings and insider trades,
 - the history of job runs,
-- the watchlist.
+- the watchlist, of stocks and of macro series.
 
 The portfolio's transactions and cash accounts are not here; they are in Firestore.
 
@@ -48,7 +48,7 @@ opens the file only for as long as the change takes.
 | `python -m invest.jobs.filings [--insiders CIK,CIK]` | `holdings13f`, `insider_tx`, `runs` |
 | `python -m invest.jobs.weekly` | `snapshots` (`report`), `runs` |
 | The research scripts (`invest/research/hypotheses.py`) | `snapshots` (`research`), `runs` |
-| The Screener, Company financials, Stock explorer and Watchlist pages (through [watchlist.py](watchlist.py)) | `watchlist` |
+| The Screener, Company financials, Stock explorer and Watchlist pages (through [watchlist.py](watchlist.py)) | `watchlist`, `watched_series` |
 
 ## The tables at a glance
 
@@ -66,6 +66,7 @@ Row counts as of 13 November 2026.
 | [`holdings13f`](#holdings13f) | One position in one quarter's 13F filing of one manager | 285 | The filings job, weekly report |
 | [`insider_tx`](#insider_tx) | One transaction in a Form 4 filing | 0 | Weekly report |
 | [`watchlist`](#watchlist) | One stock on the watchlist | 11 | Watchlist page, the pages with a watchlist button, weekly report |
+| [`watched_series`](#watched_series) | One macro series on the watchlist | 0 | Watchlist page, the Stock explorer's watchlist buttons |
 | [`files`](#files) | One download of a raw file | 18 | Nothing in the app; kept for provenance |
 
 ## Conventions
@@ -411,6 +412,18 @@ The stocks put on the watchlist from the Screener, the Company financials page o
 | `added_at` | TIMESTAMP | When it was added |
 
 **Contents.** 11 stocks, 7 of them with a CIK.
+
+### watched_series
+
+The macro series put on the watchlist from the Watchlist page or the Stock explorer. The Watchlist page reads each one as the Stock explorer does ([series_data.py](series_data.py)).
+
+| Column | Type | Meaning |
+|---|---|---|
+| `ref` | VARCHAR | Primary key: the series' reference as the Stock explorer writes it. `macro:` and a catalog id (`macro:US_NFCI`) is read from `series`, as the Macro page reads it; `fred:` and a FRED id (`fred:NFCI`) is fetched from FRED |
+| `note` | VARCHAR | Where and when it was added, e.g. `from the Watchlist page on 2026-11-16` |
+| `added_at` | TIMESTAMP | When it was added |
+
+**Contents.** Not created yet: the first series put on the watchlist creates the table. The pages read a database without it as an empty list.
 
 ### files
 

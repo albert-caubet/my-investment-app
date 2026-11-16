@@ -134,6 +134,26 @@ def test_watchlist_round_trip(store):
     assert store.watchlist().empty
 
 
+def test_watched_series_round_trip(store):
+    store.add_watched_series("macro:US_NFCI", note="from the Watchlist page")
+    store.add_watched_series("fred:NFCI")
+    watched = store.watched_series()
+    assert watched["ref"].tolist() == ["macro:US_NFCI", "fred:NFCI"]  # as written, first added first
+    assert watched.iloc[0]["note"] == "from the Watchlist page"
+    store.remove_watched_series("macro:US_NFCI")
+    assert store.watched_series()["ref"].tolist() == ["fred:NFCI"]
+    assert store.watchlist().empty  # the stocks' list is another table
+
+
+def test_a_database_made_before_the_watched_series_table_reads_as_none_watched(tmp_path):
+    path = tmp_path / "older.duckdb"
+    with Store(path) as store:
+        store.con.execute("DROP TABLE watched_series")
+    with Store(path, read_only=True) as store:  # as the pages open it: nothing creates the table
+        assert store.watched_series().empty
+        assert list(store.watched_series().columns) == ["ref", "note", "added_at"]
+
+
 def test_a_tickers_cik_is_the_one_stored_for_its_company(store):
     store.upsert_companies([{"cik": 320193, "ticker": "AAPL", "name": "Apple Inc."}])
     assert store.cik_of("aapl") == 320193

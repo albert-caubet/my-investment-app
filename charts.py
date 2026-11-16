@@ -276,6 +276,8 @@ def lines_figure(view: SeriesWindow, names: Mapping[str, str], units: Mapping[st
         )
     if in_pct:
         fig.update_yaxes(tickformat="+.1~%")  # +12%, -0.5%: no trailing zeros
+    else:  # 1,400,000, not Plotly's 1.4M: beside a unit such as "USD mn" that reads as millions of millions
+        fig.update_yaxes(exponentformat="none", separatethousands=True)
     fig.update_layout(
         template="plotly_white", hovermode="x unified", hoversubplots="axis",
         xaxis=dict(anchor=f"y{len(panels) if len(panels) > 1 else ''}", hoverformat="%d %b %Y"),
@@ -285,6 +287,22 @@ def lines_figure(view: SeriesWindow, names: Mapping[str, str], units: Mapping[st
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
     )
     return fig
+
+
+def shade_recessions(fig: go.Figure, spans: Sequence[tuple[date, date]], first, last) -> None:
+    """Shade the recessions in ``spans`` that fall between ``first`` and ``last``, the dates a chart shows.
+
+    ``spans`` are ``(start, end)`` pairs, the end being the first day of the last recession
+    month, as ``invest.macro.indicators.recession_spans`` gives them; each is shaded to the
+    end of that month. Across the whole plot, every panel and both scales, which
+    ``add_vrect`` would not do: it shades the first panel only, and where the left scale is
+    hidden, a strip of the plot.
+    """
+    for start, end in spans:
+        end = pd.Timestamp(end) + pd.offsets.MonthEnd(0)
+        if end >= pd.Timestamp(first) and pd.Timestamp(start) <= pd.Timestamp(last):
+            fig.add_shape(type="rect", xref="x", yref="paper", x0=start, x1=end, y0=0, y1=1,
+                          fillcolor="grey", opacity=0.18, line_width=0, layer="below")
 
 
 #: A legend above a chart of many lines: smaller than FONT, so up to 19 names sit above a

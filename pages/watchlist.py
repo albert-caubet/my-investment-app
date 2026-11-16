@@ -1,18 +1,27 @@
-"""Watchlist page: the stocks put on the watchlist from the Screener or the Stock explorer.
+"""Watchlist page: the stocks and the macro series put on the watchlist.
 
-The list comes first, then the dashboard's chart controls, a chart of every stock together
-and a chart of each. The list is the market database's ``watchlist`` table, the one the
-weekly report reads; a company in the latest screener table of either market, US or
-European, shows that table's value and margin of safety too. The prices are Yahoo
-Finance's daily closes, fetched and cached by
-``market_data.py`` as on the Stock explorer, so a stock from any market Yahoo quotes can be
-on it. The close button on a stock's chart takes it off the watchlist; the link beside it
-opens the stock's accounts and valuation on the Company financials page.
+Stocks first, put on from the Screener or the Stock explorer. Their list comes first, then
+the dashboard's chart controls, a chart of every stock together and a chart of each. The
+list is the market database's ``watchlist`` table, the one the weekly report reads; a
+company in the latest screener table of either market, US or European, shows that table's
+value and margin of safety too. The prices are Yahoo Finance's daily closes, fetched and
+cached by ``market_data.py`` as on the Stock explorer, so a stock from any market Yahoo
+quotes can be on it. The link beside a stock's chart opens its accounts and valuation on
+the Company financials page.
+
+Macro series below, put on from the box above them or from a chart on the Stock explorer:
+any series of the catalog, read from the database as the Macro page reads it, or any
+series FRED publishes, fetched from FRED (``series_data.py`` reads both). Their list, chart
+controls of their own, and a chart of each with NBER recessions shaded. They are the
+database's ``watched_series`` table.
+
+The close button on a chart takes its stock or series off the watchlist.
 """
 
 from __future__ import annotations
 
 import os
+from datetime import date
 
 import pandas as pd
 import streamlit as st
@@ -21,10 +30,13 @@ import charts
 import company_detail
 import job_panel
 import market_data as md
+import series_data
 import watchlist
 from invest.data import search
 from invest.data.cache import Store
 from invest.fundamentals.universe import REGIONS, screener_kind
+from invest.macro.catalog import load_catalog
+from invest.macro.indicators import recession_spans
 from invest.paths import db_path
 
 st.title("Watchlist")
@@ -32,19 +44,172 @@ st.title("Watchlist")
 job_panel.follow_if_running()  # a job holds the database; nothing below may read it
 
 DB = db_path()
+catalog = load_catalog()
 
 try:
     entries = watchlist.entries()
+    watched_series = watchlist.series_entries()
 except Exception as exc:
     st.warning(f"Could not read the watchlist from the market database: {exc}. If a job is running, wait for it "
                f"and reload.")
     st.stop()
 
+# ==========================================================================================
+# Macro series, under the stocks: from the market database, or from FRED
+# ==========================================================================================
+
+SERIES_RANGE = "10Y"  # most macro series are monthly: a year is a dozen points, as on the Macro page
+ADD_SERIES = "watchlist_add_series"
+
+
+def _put_series_on() -> None:
+    """Puts the series just picked in the box on the watchlist, and empties the box for the next one."""
+    ref = st.session_state[ADD_SERIES]
+    st.session_state[ADD_SERIES] = None
+    if ref is None:
+        return
+    name = series_data.about(ref, catalog)[0]
+    try:
+        if ref in watchlist.series_refs():
+            st.toast(f"{name} is on the watchlist already.", icon=":material/star:")
+            return
+        watchlist.add_series(ref, note=f"from the Watchlist page on {date.today():%Y-%m-%d}")
+    except Exception as exc:
+        st.toast(f"Could not change the watchlist: {md.reason(exc)}", icon=":material/error:")
+    else:
+        st.toast(f"{name} is on the watchlist.", icon=":material/star:")
+
+
+def _take_series_off(ref: str, name: str) -> None:
+    try:
+        watchlist.remove_series(ref)
+    except Exception as exc:
+        st.toast(f"Could not change the watchlist: {md.reason(exc)}", icon=":material/error:")
+    else:
+        st.toast(f"{name} is off the watchlist.", icon=":material/star_border:")
+
+
+def _decimals(values: pd.Series) -> int:
+    """Decimals enough for a series: none past a thousand (1,448,360), three below one (0.005), else two (4.39)."""
+    biggest = float(values.abs().max())
+    return 0 if biggest >= 1000 else 2 if biggest >= 1 else 3
+
+
+def _recessions() -> list:
+    """NBER recessions, from the catalog's US_RECESSION as stored; none while it is not."""
+    try:
+        return recession_spans(series_data.history(search.MACRO + "US_RECESSION", catalog))
+    except Exception:
+        return []
+
+
+SERIES_HELP = {
+    "Latest": "The latest value, in the series' unit.",
+    "As of": "The date of the latest value. A monthly or quarterly figure is dated on the first day of its period.",
+    "From": "Macro catalog: stored by the Macro page's refresh and read as its scorecard reads it, so a name ending "
+            "in YoY is the change over a year. FRED: fetched from FRED, as FRED publishes it.",
+    "Note": "Where the series was put on the watchlist from, and when.",
+    "Added": "The day it was put on the watchlist.",
+}
+
+
+def _macro_section() -> None:
+    st.subheader("Macro series")
+    st.selectbox(
+        "Put a macro series on the watchlist", [search.MACRO + spec.id for spec in catalog], index=None,
+        key=ADD_SERIES, on_change=_put_series_on, format_func=lambda ref: catalog[search.parse_ref(ref)[1]].label,
+        placeholder="Put a macro series on the watchlist: type to search", label_visibility="collapsed",
+    )
+    refs = watched_series["ref"].tolist()
+    if not refs:
+        st.caption("No macro series is on the watchlist. Pick one in the box above, or put one on from a chart on the "
+                   "Stock explorer, which finds any series FRED publishes too.")
+        return
+
+    described = {ref: series_data.about(ref, catalog) for ref in refs}
+    labels = search.series_labels(described)  # with the id where two names are alike
+    loaded, failed = {}, {}
+    with st.spinner("Reading the macro series…"):
+        for ref in refs:
+            try:
+                loaded[ref] = series_data.history(ref, catalog).dropna()
+            except Exception as exc:
+                failed[ref] = md.reason(exc)
+
+    listing = st.container()  # the list, above the chart controls whose time range it uses
+    # Kept in the URL (?series_range=5Y&series_per_row=3&series_height=Large), apart from the stocks' controls.
+    controls = st.container(horizontal=True, vertical_alignment="bottom", gap="medium")
+    preset = controls.segmented_control(
+        "Time range", charts.RANGES, default=SERIES_RANGE, required=True, key="series_range", bind="query-params"
+    )
+    per_row = controls.segmented_control(
+        "Charts per row", (1, 2, 3), default=2, required=True, key="series_per_row", bind="query-params"
+    )
+    height = charts.HEIGHTS[controls.segmented_control(
+        "Chart height", tuple(charts.HEIGHTS), default="Medium", required=True, key="series_height",
+        bind="query-params",
+    )]
+
+    change_column = f"Change ({preset})"
+    rows = []
+    for entry in watched_series.itertuples(index=False):
+        row = {"Series": labels[entry.ref], "Latest": None, "Unit": described[entry.ref][1] or None, "As of": None,
+               change_column: None, "From": "FRED" if search.parse_ref(entry.ref)[0] == "fred" else "Macro catalog",
+               "Note": entry.note or None, "Added": pd.Timestamp(entry.added_at).date()}
+        values = loaded.get(entry.ref)
+        if values is not None and not values.empty:
+            digits = _decimals(values)
+            row["Latest"], row["As of"] = f"{values.iloc[-1]:,.{digits}f}", values.index[-1].date()
+            shown = charts.window_series({entry.ref: values}, preset).series.get(entry.ref)
+            if shown is not None and len(shown) > 1:
+                row[change_column] = f"{shown.iloc[-1] - shown.iloc[0]:+,.{digits}f}"
+        rows.append(row)
+    column_help = SERIES_HELP | {
+        change_column: "The latest value minus the first in the time range chosen above the charts, in the series' "
+                       "unit: percentage points for a rate in %."}
+    with listing:
+        st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True, placeholder="–",
+                     column_config={c: st.column_config.Column(c, help=text) for c, text in column_help.items()})
+        st.caption(f"{len(refs)} series, first added first.")
+
+    recessions = _recessions()
+    for n, ref in enumerate(refs):
+        if n % per_row == 0:
+            cells = st.columns(per_row)  # a row per group, so neighbours line up at the top
+        with cells[n % per_row], st.container(border=True):
+            head = st.container(horizontal=True, vertical_alignment="center", gap="small")
+            head.markdown(f"**{search.plain(labels[ref])}**", width="stretch")  # the button to the far right
+            head.button("", icon=":material/close:", key=f"watchlist_remove_series_{ref}",
+                        help="Take it off the watchlist", on_click=_take_series_off, args=(ref, labels[ref]),
+                        type="tertiary")
+            view = charts.window_series({ref: loaded[ref]} if ref in loaded else {}, preset)
+            if not view.series:
+                st.caption(f"Not drawn: {failed.get(ref) or view.missing[ref]}.")
+                continue
+            # A colour by place, as the stocks have: each series keeps it however the grid is laid out.
+            fig = charts.lines_figure(view, {ref: labels[ref]}, {ref: described[ref][1]}, {ref: n}, in_pct=False,
+                                      change_in_hover=False)
+            shown = view.series[ref]
+            charts.shade_recessions(fig, recessions, shown.index[0], shown.index[-1])
+            st.plotly_chart(charts.readable(fig, height=height), width="stretch",
+                            key=f"watchlist_series_chart_{ref}")
+    st.caption(
+        "Catalog series as the Macro page reads them, from the market database; FRED series as FRED publishes them. "
+        "Shaded: NBER recessions. The close button on a chart takes its series off the watchlist."
+    )
+
+
+# ==========================================================================================
+# Stocks
+# ==========================================================================================
+
+st.subheader("Stocks")
 if entries.empty:
-    st.info("The watchlist is empty. Put a stock on it from the company detail on the Screener, or from a chart on "
-            "the Stock explorer.")
+    st.info("No stock is on the watchlist. Put one on from the company detail on the Screener, or from a chart on the "
+            "Stock explorer.")
     st.page_link("pages/screener.py", label="Open the Screener", icon="🔎")
     st.page_link("pages/plotter.py", label="Open the Stock explorer", icon="📈")
+    _macro_section()
     st.stop()
 
 # ==========================================================================================
@@ -260,3 +425,5 @@ st.caption(
     "its colour on every chart. The close button on a chart takes its stock off the watchlist; put one on from the "
     "company detail on the Screener or from a chart on the Stock explorer."
 )
+
+_macro_section()

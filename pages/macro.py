@@ -514,12 +514,7 @@ def _compare_chart(plot: dict, preset: str, height: int, per_row: int) -> None:
                                       zeroline=False, **plain))
     first = min(s.index[0] for s in view.series.values())
     last = max(s.index[-1] for s in view.series.values())
-    for start, end in data["recessions"]:
-        end = pd.Timestamp(end) + pd.offsets.MonthEnd(0)
-        if end >= first and pd.Timestamp(start) <= last:
-            # The plot's height, not the left axis's, which is hidden when the right one has every line.
-            fig.add_shape(type="rect", xref="x", yref="paper", x0=start, x1=end, y0=0, y1=1,
-                          fillcolor="grey", opacity=0.18, line_width=0, layer="below")
+    charts.shade_recessions(fig, data["recessions"], first, last)  # the plot's height, whichever scale is shown
     names = [trace.name for trace in fig.data]
     fig.update_layout(
         template="plotly_white", hovermode="x unified", xaxis_hoverformat="%d %b %Y", showlegend=len(names) > 1,
@@ -759,12 +754,7 @@ def _indicator_chart(ids: list[str], slots: dict[str, int], preset: str, height:
         fig = charts.lines_figure(view, names, units, slots, in_pct=False, change_in_hover=False)
         first = min(s.index[0] for s in view.series.values())
         last = max(s.index[-1] for s in view.series.values())
-        for start, end in data["recessions"]:
-            end = pd.Timestamp(end) + pd.offsets.MonthEnd(0)
-            if end >= first and pd.Timestamp(start) <= last:
-                # Across every panel, which add_vrect would not do: it shades the first one only.
-                fig.add_shape(type="rect", xref="x", yref="paper", x0=start, x1=end, y0=0, y1=1,
-                              fillcolor="grey", opacity=0.18, line_width=0, layer="below")
+        charts.shade_recessions(fig, data["recessions"], first, last)  # across every panel
         axis = {trace.name: trace.yaxis or "y" for trace in fig.data}  # the panel each line is on
         for n, sid in enumerate(view.series):
             # Every other indicator's names on the right, so two on one panel do not overprint

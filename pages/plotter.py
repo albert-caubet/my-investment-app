@@ -6,36 +6,31 @@ search; the macro series the refresh job stores (the catalog in ``config/series.
 read from the database as on the Macro page; and, with a FRED API key, any series FRED
 publishes. The charts are kept in the page URL with the controls above them
 (``?chart=AAPL,MSFT&chart=macro:US_CPI``), so a reload or a bookmark brings them back.
-A chart's Yahoo series can be put on the watchlist from it, for the Watchlist page, and
-each of its stocks has a link to its accounts on the Company financials page.
+A chart's series can be put on the watchlist from it, for the Watchlist page, and each
+of its stocks has a link to its accounts on the Company financials page.
 
 Unlike the other analysis pages, this one asks the network: Yahoo and FRED answer the
-searches and send the histories, and ``market_data.py`` caches both.
+searches and send the histories, and ``market_data.py`` caches both. ``series_data.py``
+reads a series by its reference, as the Watchlist page does.
 """
 
 from __future__ import annotations
 
-import os
 from datetime import date
 
-import duckdb
-import pandas as pd
 import streamlit as st
 
 import charts
 import company_detail
 import market_data as md
+import series_data
 import watchlist
 from invest import secrets
 from invest.data import search
-from invest.data.cache import Store
 from invest.macro.catalog import load_catalog
-from invest.macro.derived import apply_transform
-from invest.paths import db_path
 
 st.title("Stock explorer")
 
-DB = db_path()
 CHARTS = "plotter_charts"  # [{"id": int, "refs": [reference, ...], "slots": {reference: colour slot}}]
 NEXT_ID = "plotter_next_id"
 FOUND = "plotter_found"  # {reference: search.Hit}: what a search said a series is, so it is not asked again
@@ -164,84 +159,15 @@ def _results(chart_id: int, query: str, refs: list[str]) -> None:
 # ==========================================================================================
 
 
-def _db_version() -> float:
-    """Cache key: the file's modification time, so a refresh invalidates what was read."""
-    try:
-        return os.path.getmtime(DB)
-    except OSError:
-        return 0.0
-
-
-@st.cache_data(ttl=600, show_spinner=False)
-def _macro_series(db: str, version: float, series_id: str) -> pd.Series:
-    """A catalog series as the Macro page charts it: stored, and transformed the way the scorecard reads it."""
-    spec = catalog[series_id]
-    with Store(db, read_only=True) as store:
-        raw = store.read_series(series_id)
-        if raw.empty and spec.fallback:
-            raw = store.read_series(spec.fallback)
-    if raw.empty:
-        raise LookupError("not stored yet; the refresh on the Macro page fetches it")
-    return apply_transform(raw, spec.transform)
-
-
-# A Yahoo or FRED request that fails is kept as failed for five minutes, rather than asked
-# again on every rerun of the page while the series sits on a chart. What does arrive is
-# kept for hours, by market_data.
-
-
-@st.cache_data(ttl=300, show_spinner=False)
-def _online_series(ref: str) -> pd.Series | str:
-    """The history of a Yahoo or FRED series, or why there is none."""
-    source, key = search.parse_ref(ref)
-    try:
-        return md.fetch_fred_series(key) if source == "fred" else md.fetch_close_history(key)
-    except Exception as exc:
-        return md.reason(exc)
-
-
-@st.cache_data(ttl=300, show_spinner=False)
-def _online_about(ref: str) -> tuple[str, str] | None:
-    """Name and unit of a Yahoo or FRED series as its source gives them; None when it does not."""
-    source, key = search.parse_ref(ref)
-    try:
-        if source == "fred":
-            meta = md.fetch_fred_meta(key)
-            return meta["title"], meta["units"]
-        meta = md.fetch_symbol_meta(key)
-        return meta["name"], meta["currency"] or ""
-    except Exception:  # no FRED key, or the source did not answer
-        return None
-
-
-def _load(ref: str) -> pd.Series:
-    """The whole history of one series. Raises with a reason a reader can act on when there is none."""
-    source, key = search.parse_ref(ref)
-    if source != "macro":
-        got = _online_series(ref)
-        if isinstance(got, str):
-            raise LookupError(got)
-        return got
-    if key not in catalog.by_id:
-        raise LookupError("not in the catalog, config/series.toml")
-    if not DB.exists():
-        raise LookupError("no market database yet; the refresh on the Macro page builds it")
-    try:
-        return _macro_series(str(DB), _db_version(), key)
-    except duckdb.Error as exc:
-        raise LookupError(f"the market database could not be read; if a job is writing it, wait for it ({exc})")
-
-
 def _describe(ref: str) -> tuple[str, str]:
     """``(name, unit)``: what the legend calls a series, and what its values are in."""
     source, key = search.parse_ref(ref)
     if source == "macro":
-        spec = catalog.by_id.get(key)
-        return (spec.label, spec.units) if spec else (key, "")
+        return series_data.about(ref, catalog)
     found = st.session_state[FOUND].get(ref)
     if source == "fred" and found:  # FRED's search said it all; Yahoo's search gives no currency
         return found.name, found.unit
-    return _online_about(ref) or ((found.name, found.unit) if found else (key, ""))
+    return series_data.online_about(ref) or ((found.name, found.unit) if found else (key, ""))
 
 
 # ==========================================================================================
@@ -253,7 +179,7 @@ def _draw(chart: dict, about: dict[str, tuple[str, str]], preset: str, in_pct: b
     loaded, failed = {}, {}
     for ref in chart["refs"]:
         try:
-            loaded[ref] = _load(ref)
+            loaded[ref] = series_data.history(ref, catalog)
         except Exception as exc:
             failed[ref] = md.reason(exc)
     view = charts.window_series(loaded, preset, rebase=in_pct)
@@ -275,40 +201,44 @@ def _draw(chart: dict, about: dict[str, tuple[str, str]], preset: str, in_pct: b
 # ==========================================================================================
 
 
+def _is_stock(ref: str) -> bool:
+    """A Yahoo series, which goes on the watchlist with the stocks; a macro or FRED one goes with the macro series."""
+    return search.parse_ref(ref)[0] == "yahoo"
+
+
 def _watch_changed(key: str, was: list[str], labels: dict[str, str]) -> None:
-    """Puts the stock just picked on the watchlist, or takes the one just unpicked off it."""
+    """Puts the series just picked on the watchlist, or takes the one just unpicked off it."""
     now = st.session_state[key] or []
+    note = f"from the Stock explorer on {date.today():%Y-%m-%d}"
     try:
         for ref in now:
             if ref not in was:
-                watchlist.add(ref, note=f"from the Stock explorer on {date.today():%Y-%m-%d}")
+                (watchlist.add if _is_stock(ref) else watchlist.add_series)(ref, note=note)
                 st.toast(f"{labels[ref]} is on the watchlist.", icon=":material/star:")
         for ref in was:
             if ref not in now:
-                watchlist.remove(ref)
+                (watchlist.remove if _is_stock(ref) else watchlist.remove_series)(ref)
                 st.toast(f"{labels[ref]} is off the watchlist.", icon=":material/star_border:")
     except Exception as exc:
         st.toast(f"Could not change the watchlist: {md.reason(exc)}", icon=":material/error:")
 
 
 def _watch_pills(chart_id: int, refs: list[str], labels: dict[str, str]) -> None:
-    """A pill for each of the chart's Yahoo series, lit while it is on the watchlist. Macro and FRED series are no stocks."""
-    stocks = [ref for ref in refs if search.parse_ref(ref)[0] == "yahoo"]
-    if not stocks:
-        return
+    """A pill for each of the chart's series, lit while it is on the watchlist."""
     try:
-        watched = set(watchlist.symbols())
+        # A Yahoo symbol never has a colon and a macro or FRED reference always has one, so the two never meet.
+        watched = set(watchlist.symbols()) | set(watchlist.series_refs())
     except Exception as exc:  # the market database is held by a job
         st.caption(f"The watchlist could not be read: {md.reason(exc)}")
         return
     key = f"plotter_watch_{chart_id}"
-    on = [ref for ref in stocks if ref.upper() in watched]
+    on = [ref for ref in refs if (ref.upper() if _is_stock(ref) else ref) in watched]
     # The watchlist is the truth: set before the widget and never as its default, so a change
     # made on another page shows here too.
     st.session_state[key] = on
-    st.pills("Watchlist", stocks, selection_mode="multi", key=key, format_func=lambda ref: search.plain(labels[ref]),
+    st.pills("Watchlist", refs, selection_mode="multi", key=key, format_func=lambda ref: search.plain(labels[ref]),
              on_change=_watch_changed, args=(key, on, labels),
-             help="Pick a stock to put it on the watchlist, and again to take it off. The Watchlist page charts them.")
+             help="Pick a series to put it on the watchlist, and again to take it off. The Watchlist page charts them.")
 
 
 @st.cache_data(ttl=300, show_spinner=False)

@@ -152,6 +152,12 @@ CREATE TABLE IF NOT EXISTS watchlist (
     added_at TIMESTAMP NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS watched_series (
+    ref      VARCHAR PRIMARY KEY,
+    note     VARCHAR,
+    added_at TIMESTAMP NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS files (
     name        VARCHAR NOT NULL,
     url         VARCHAR,
@@ -761,6 +767,26 @@ class Store:
 
     def watchlist(self) -> pd.DataFrame:
         return self.con.execute("SELECT * FROM watchlist ORDER BY added_at").df()
+
+    def add_watched_series(self, ref: str, *, note: str = "") -> None:
+        """Put a macro series on the watchlist by its reference: ``macro:US_NFCI`` or ``fred:NFCI``, as written."""
+        self.con.execute("INSERT OR REPLACE INTO watched_series VALUES (?, ?, ?)", [ref, note, utcnow()])
+
+    def remove_watched_series(self, ref: str) -> None:
+        self.con.execute("DELETE FROM watched_series WHERE ref = ?", [ref])
+
+    def watched_series(self) -> pd.DataFrame:
+        """The macro series on the watchlist, first added first: ``ref``, ``note``, ``added_at``.
+
+        Empty in a database made before the table was: only a connection that writes creates
+        it, and the pages read the file read-only.
+        """
+        exists = self.con.execute(
+            "SELECT count(*) FROM information_schema.tables WHERE table_name = 'watched_series'"
+        ).fetchone()[0]
+        if not exists:
+            return pd.DataFrame(columns=["ref", "note", "added_at"])
+        return self.con.execute("SELECT * FROM watched_series ORDER BY added_at").df()
 
     def record_file(
         self, name: str, *, url: str | None, sha256: str, n_bytes: int, path: str | None

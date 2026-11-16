@@ -336,7 +336,7 @@ def test_a_charts_stocks_go_on_the_watchlist_and_off_it_by_their_pills(canned, s
         store.upsert_companies([{"cik": 320193, "ticker": "AAPL", "name": "Apple Inc."}])
     at = _page(chart=["AAPL,MSFT,macro:US_UNRATE"])
     pills = at.button_group(key="plotter_watch_0")
-    assert pills.options == ["Apple Inc.", "Microsoft Corporation"]  # a macro series is no stock
+    assert pills.options == ["Apple Inc.", "Microsoft Corporation", "US unemployment rate"]  # every series on it
     assert pills.value == []
 
     pills.select("AAPL").run()
@@ -362,10 +362,38 @@ def test_a_stock_put_on_the_watchlist_elsewhere_is_lit(canned, seeded_db):
     assert at.button_group(key="plotter_watch_1").value == []
 
 
-def test_a_chart_of_macro_series_has_no_watchlist_pills(canned):
-    at = _page(chart=["macro:US_UNRATE"])
+def _watched_series(path: Path) -> pd.DataFrame:
+    with Store(path, read_only=True) as store:
+        return store.watched_series()
+
+
+def test_a_charts_macro_and_fred_series_go_on_the_watchlist_by_their_pills(canned, seeded_db):
+    at = _page(chart=["macro:US_UNRATE,fred:CPIAUCSL"])
+    pills = at.button_group(key="plotter_watch_0")
+    assert pills.options == ["US unemployment rate", "CPIAUCSL"]  # FRED's own name needs a key, which these tests lack
+    pills.select("macro:US_UNRATE").run()
     assert not at.exception
-    assert not [g for g in at.button_group if str(g.key).startswith("plotter_watch_")]
+    watched = _watched_series(seeded_db)
+    assert watched["ref"].tolist() == ["macro:US_UNRATE"]
+    assert watched.iloc[0]["note"].startswith("from the Stock explorer on ")
+    assert _watched(seeded_db).empty  # not with the stocks
+    assert [t.value for t in at.toast] == ["US unemployment rate is on the watchlist."]
+
+    at.button_group(key="plotter_watch_0").select("fred:CPIAUCSL").run()
+    assert _watched_series(seeded_db)["ref"].tolist() == ["macro:US_UNRATE", "fred:CPIAUCSL"]
+    at.button_group(key="plotter_watch_0").unselect("macro:US_UNRATE").run()
+    assert not at.exception
+    assert _watched_series(seeded_db)["ref"].tolist() == ["fred:CPIAUCSL"]
+    assert at.button_group(key="plotter_watch_0").value == ["fred:CPIAUCSL"]
+    assert [t.value for t in at.toast] == ["US unemployment rate is off the watchlist."]
+
+
+def test_a_macro_series_put_on_the_watchlist_elsewhere_is_lit(canned, seeded_db):
+    with Store(seeded_db) as store:
+        store.add_watched_series("macro:US_UNRATE", note="from the Watchlist page")
+    at = _page(chart=["AAPL,macro:US_UNRATE,macro:US_CPI"])
+    assert not at.exception
+    assert at.button_group(key="plotter_watch_0").value == ["macro:US_UNRATE"]
 
 
 def test_the_first_stock_put_on_the_watchlist_creates_the_database(canned, monkeypatch, tmp_path):

@@ -6,6 +6,7 @@ page makes goes through ``market_data``, replaced here before each run.
 
 import base64
 import json
+from datetime import date
 from pathlib import Path
 
 import numpy as np
@@ -162,16 +163,20 @@ def test_an_empty_watchlist_says_where_to_put_a_stock_on_it(canned, seeded_db):
             store.remove_watch(symbol)
     at = _page()
     assert not at.exception
-    assert any("The watchlist is empty" in i.value for i in at.info)
+    assert any("No stock is on the watchlist" in i.value for i in at.info)
     assert not _figures(at)
     assert canned == []  # nothing to fetch
+    # the macro series' box is there, and says how to put one on
+    assert at.selectbox(key="watchlist_add_series").value is None
+    assert any("No macro series is on the watchlist" in c.value for c in at.caption)
 
 
 def test_without_a_database_the_watchlist_is_empty_and_none_is_created(canned, tmp_path, monkeypatch):
     monkeypatch.setenv("INVEST_DB", str(tmp_path / "absent.duckdb"))
     at = _page()
     assert not at.exception
-    assert any("The watchlist is empty" in i.value for i in at.info)
+    assert any("No stock is on the watchlist" in i.value for i in at.info)
+    assert any("No macro series is on the watchlist" in c.value for c in at.caption)
     assert not (tmp_path / "absent.duckdb").exists()
 
 
@@ -264,3 +269,153 @@ def test_each_stocks_chart_links_to_its_financials_unless_yahoo_says_it_has_none
     assert _company_links(at) == ["company=MMM", "company=SAP.DE"]
     (link,) = [link for link in at.get("page_link") if link.proto.query_string == "company=MMM"]
     assert link.proto.label == "Financials" and "Company financials" in link.proto.help
+
+
+# --- macro series ----------------------------------------------------------------------------
+
+WEEKS = pd.date_range("2014-01-03", "2026-09-25", freq="W-FRI")
+MONTHS = pd.date_range("2000-01-01", "2026-09-01", freq="MS")
+NFCI = pd.Series(np.linspace(-0.2, -0.5, len(WEEKS)), index=WEEKS)
+MARGIN_DEBT = pd.Series(np.linspace(400_000.0, 1_448_360.0, len(MONTHS)), index=MONTHS)
+HY_OAS = pd.Series(np.linspace(5.0, 3.0, len(MONTHS)), index=MONTHS)  # what FRED sends, canned
+HY_TITLE = "ICE BofA US High Yield Index Option-Adjusted Spread"
+WATCHED = ["macro:US_NFCI", "macro:US_MARGIN_DEBT_LEVEL", "fred:BAMLH0A0HYM2"]
+NAMES_OF_WATCHED = ["Chicago Fed financial conditions (NFCI)", "FINRA margin debt (customer debit balances)", HY_TITLE]
+
+
+@pytest.fixture
+def macro(seeded_db, monkeypatch):
+    """Two catalog series stored with the NBER recessions, a FRED series canned, and the three on the watchlist.
+    Returns the FRED ids fetched."""
+    with Store(seeded_db) as store:
+        store.upsert_series("US_NFCI", NFCI, source="fred")
+        store.upsert_series("US_MARGIN_DEBT_LEVEL", MARGIN_DEBT, source="finra")
+        usrec = pd.Series(0.0, index=MONTHS)
+        usrec["2020-03-01":"2020-04-01"] = 1.0
+        store.upsert_series("US_RECESSION", usrec, source="fred")
+        for ref in WATCHED:
+            store.add_watched_series(ref, note=f"seeded {ref}")
+    fetched = []
+
+    def fetch_fred_series(series_id):
+        fetched.append(series_id)
+        if series_id == "DOWN":
+            raise LookupError("FRED did not answer")
+        return HY_OAS.rename(series_id)
+
+    monkeypatch.setattr(md, "fetch_fred_series", fetch_fred_series)
+    monkeypatch.setattr(md, "fetch_fred_meta", lambda series_id: {"title": HY_TITLE, "units": "Percent"})
+    return fetched
+
+
+def _watched_series(path: Path) -> pd.DataFrame:
+    with Store(path, read_only=True) as store:
+        return store.watched_series()
+
+
+def _macro_table(at: AppTest) -> pd.DataFrame:
+    return at.dataframe[-1].value  # under the stocks' list
+
+
+def _series_figures(at: AppTest) -> list[dict]:
+    return [json.loads(c.proto.spec) for c in at.get("plotly_chart") if "watchlist_series_chart_" in c.proto.id]
+
+
+def _change(series: pd.Series, years: int, digits: int) -> str:
+    """The change a list shows for ``series`` over ``years`` back from its latest value."""
+    shown = series[series.index >= series.index[-1] - pd.DateOffset(years=years)]
+    return f"{shown.iloc[-1] - shown.iloc[0]:+,.{digits}f}"
+
+
+def test_the_macro_series_are_listed_under_the_stocks_with_their_latest_values(canned, macro):
+    at = _page()
+    assert not at.exception
+    assert [h.value for h in at.subheader] == ["Stocks", "Price history", "Macro series"]
+    table = _macro_table(at)
+    assert table["Series"].tolist() == NAMES_OF_WATCHED  # first added first
+    # Decimals by size: three for a series that stays below one, none for $ millions, two between
+    assert table["Latest"].tolist() == ["-0.500", "1,448,360", "3.00"]
+    assert table["Unit"].tolist() == ["sd", "USD mn", "Percent"]
+    assert table["As of"].tolist() == [date(2026, 9, 25), date(2026, 9, 1), date(2026, 9, 1)]
+    # Over ten years, the macro charts' default range, in the series' own unit
+    assert table["Change (10Y)"].tolist() == [_change(NFCI, 10, 3), _change(MARGIN_DEBT, 10, 0), _change(HY_OAS, 10, 2)]
+    assert table["From"].tolist() == ["Macro catalog", "Macro catalog", "FRED"]
+    assert table["Note"].tolist() == [f"seeded {ref}" for ref in WATCHED]
+    assert macro == ["BAMLH0A0HYM2"]  # only the FRED series is fetched; the others are the database's
+
+
+def test_each_macro_series_has_its_own_chart_with_the_recessions_shaded(canned, macro):
+    at = _page()
+    figures = _series_figures(at)
+    assert [fig["data"][0]["name"] for fig in figures] == NAMES_OF_WATCHED
+    assert [fig["data"][0]["line"]["color"] for fig in figures] == list(charts.SERIES_COLORS["light"][:3])
+    nfci, margin_debt, _ = figures
+    assert nfci["layout"]["yaxis"]["title"]["text"] == "sd"
+    assert pd.Timestamp(nfci["data"][0]["x"][0]) == pd.Timestamp("2016-09-30")  # ten years back from 25 Sep 2026
+    assert [(s["x0"][:7], s["yref"]) for s in nfci["layout"]["shapes"]] == [("2020-03", "paper")]
+    assert margin_debt["layout"]["yaxis"]["exponentformat"] == "none"  # 1,400,000 USD mn, not 1.4M USD mn
+    assert {fig["layout"]["height"] for fig in figures} == {charts.HEIGHTS["Medium"]}
+    assert not any(fig["layout"]["showlegend"] for fig in figures)  # the heading above names it
+
+
+def test_the_macro_charts_have_controls_of_their_own(canned, macro):
+    at = _page(series_range="Max", series_per_row="3", series_height="Large")
+    assert not at.exception
+    assert at.button_group(key="time_range").value == charts.DEFAULT_RANGE  # the stocks' range is untouched
+    figures = _series_figures(at)
+    assert {fig["layout"]["height"] for fig in figures} == {charts.HEIGHTS["Large"]}
+    assert pd.Timestamp(figures[1]["data"][0]["x"][0]) == MONTHS[0]  # Max: the whole history
+    assert round(1 / 3, 6) in {round(c.weight, 6) for c in at.columns}
+    assert "Change (Max)" in _macro_table(at).columns
+
+
+def test_a_series_picked_in_the_box_goes_on_the_watchlist(canned, seeded_db):
+    at = _page()
+    at.selectbox(key="watchlist_add_series").set_value("macro:US_NFCI").run()
+    assert not at.exception
+    watched = _watched_series(seeded_db)
+    assert watched["ref"].tolist() == ["macro:US_NFCI"]
+    assert watched.iloc[0]["note"].startswith("from the Watchlist page on ")
+    assert [t.value for t in at.toast] == ["Chicago Fed financial conditions (NFCI) is on the watchlist."]
+    assert at.selectbox(key="watchlist_add_series").value is None  # emptied for the next one
+    assert _macro_table(at)["Series"].tolist() == ["Chicago Fed financial conditions (NFCI)"]
+    # nothing is stored for it in this database: listed all the same, and its chart says why it is empty
+    assert "Not drawn: not stored yet; the refresh on the Macro page fetches it." in [c.value for c in at.caption]
+
+    at.selectbox(key="watchlist_add_series").set_value("macro:US_NFCI").run()
+    assert [t.value for t in at.toast] == ["Chicago Fed financial conditions (NFCI) is on the watchlist already."]
+    assert len(_watched_series(seeded_db)) == 1
+
+
+def test_the_close_button_on_a_macro_chart_takes_its_series_off(canned, macro, seeded_db):
+    at = _page()
+    at.button(key="watchlist_remove_series_macro:US_NFCI").click().run()
+    assert not at.exception
+    assert _watched_series(seeded_db)["ref"].tolist() == WATCHED[1:]
+    assert [t.value for t in at.toast] == ["Chicago Fed financial conditions (NFCI) is off the watchlist."]
+    assert len(_series_figures(at)) == 2
+    assert _watched(seeded_db) == SEEDED  # the stocks stay
+
+
+def test_with_no_stock_on_the_watchlist_its_macro_series_still_show(canned, macro, seeded_db):
+    with Store(seeded_db) as store:
+        for symbol in SEEDED:
+            store.remove_watch(symbol)
+    at = _page()
+    assert not at.exception
+    assert any("No stock is on the watchlist" in i.value for i in at.info)
+    assert _macro_table(at)["Series"].tolist() == NAMES_OF_WATCHED
+    assert len(_series_figures(at)) == 3
+    assert canned == []  # no stock's prices fetched
+
+
+def test_a_fred_series_that_does_not_answer_is_listed_and_the_rest_drawn(canned, macro, seeded_db):
+    with Store(seeded_db) as store:
+        store.add_watched_series("fred:DOWN")
+    at = _page()
+    assert not at.exception
+    row = _macro_table(at).iloc[-1]
+    assert row["Series"] == f"{HY_TITLE} (DOWN)"  # named apart from the other series FRED gives that title
+    assert pd.isna(row["Latest"])
+    assert "Not drawn: FRED did not answer." in [c.value for c in at.caption]
+    assert len(_series_figures(at)) == 3
