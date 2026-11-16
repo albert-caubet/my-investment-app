@@ -408,6 +408,203 @@ else:
     _market_section(market_charts)
 
 # ==========================================================================================
+# Compare: macro series on one chart, with a y axis on each side
+# ==========================================================================================
+
+COMPARE = "macro_compare"  # [{"id": int, "left": [series id, ...], "right": [series id, ...]}], in order
+COMPARE_NEXT_ID = "macro_compare_next_id"
+#: The plots, kept in the URL (?compare=US_UNRATE~US_CPI&compare=US_10Y,US_2Y~EA_10Y): a parameter
+#: each, the left axis's series before the "~" and the right's after it, so a reload or a bookmark
+#: brings them back.
+COMPARE_URL = "compare"
+COMPARE_PER_AXIS = len(charts.SERIES_COLORS["light"]) // 2  # eight lines at most, a colour each
+COMPARE_RANGE = "10Y"  # most series are monthly, as in the scorecard's chart
+SIDES = ("left", "right")
+#: Every series in the catalog, scorecard or not, in the file's order, so related ones sit together.
+COMPARE_OPTIONS = [spec.id for spec in catalog]
+
+
+def _compare_plot(left: list[str], right: list[str]) -> dict:
+    plot_id = st.session_state[COMPARE_NEXT_ID]
+    st.session_state[COMPARE_NEXT_ID] += 1
+    return {"id": plot_id, "left": left, "right": right}
+
+
+def _compare_from_url() -> list[dict]:
+    """The plots the URL carries. Ids the catalog no longer has are dropped."""
+    plots = []
+    for value in st.query_params.get_all(COMPARE_URL):
+        left, _, right = value.partition("~")
+        plots.append(_compare_plot(
+            *([sid for sid in dict.fromkeys(part.split(",")) if sid in catalog.by_id][:COMPARE_PER_AXIS]
+              for part in (left, right))
+        ))
+    return plots
+
+
+if COMPARE not in st.session_state:
+    st.session_state[COMPARE_NEXT_ID] = 0
+    st.session_state[COMPARE] = _compare_from_url() or [_compare_plot([], [])]  # one empty plot to start
+
+
+def _add_compare() -> None:
+    st.session_state[COMPARE].append(_compare_plot([], []))
+
+
+def _remove_compare(plot_id: int) -> None:
+    st.session_state[COMPARE] = [p for p in st.session_state[COMPARE] if p["id"] != plot_id]
+
+
+def _compare_values(sid: str) -> pd.Series:
+    """A series as the scorecard reads it, transformed; its fallback's history when it has none stored."""
+    spec = catalog[sid]
+    values = _series(str(DB), _db_version(), sid, spec.transform)
+    if values.empty and spec.fallback:
+        values = _series(str(DB), _db_version(), spec.fallback, spec.transform)
+    return values
+
+
+def _period(day: pd.Timestamp, frequency: str) -> str:
+    """The period an observation stands for: a monthly one is dated on the 1st, but it is the month's."""
+    if frequency == "M":
+        return f"{day:%b %Y}"
+    if frequency == "Q":
+        return f"Q{day.quarter} {day.year}"
+    if frequency == "A":
+        return f"{day.year}"
+    return f"{day:%d %b %Y}"
+
+
+def _compare_chart(plot: dict, preset: str, height: int, per_row: int) -> None:
+    """The plot's series on one time axis, the left list's on the left scale and the right's on the right."""
+    twice = [sid for sid in plot["right"] if sid in plot["left"]]
+    side = {sid: "left" for sid in plot["left"]} | {sid: "right" for sid in plot["right"] if sid not in twice}
+    view = charts.window_series({sid: _compare_values(sid) for sid in side}, preset)
+    drawn = {s: [sid for sid in side if sid in view.series and side[sid] == s] for s in SIDES}
+    both = all(drawn.values())
+    # A colour by place, left first, so one series a side is blue against orange, and a
+    # series keeps its colour when another one has nothing to draw.
+    slot = {sid: n for n, sid in enumerate(side)}
+
+    fig = go.Figure()
+    for sid in drawn["left"] + drawn["right"]:
+        spec, values = catalog[sid], view.series[sid]
+        name = spec.label + (f" ({side[sid]})" if both else "")
+        digits = ",.2f" if values.abs().max() >= 1 else ",.4f"
+        unit = spec.units if spec.units in ("", "%") else f" {spec.units}"  # 3.50%, but 0.12 prob
+        fig.add_scatter(
+            x=values.index, y=values.to_numpy(), name=name, yaxis="y2" if side[sid] == "right" else "y",
+            mode="lines" if len(values) > 1 else "markers", line=charts.series_line(slot[sid]),
+            hovertemplate=f"{name}: %{{y:{digits}}}{unit}<extra></extra>",
+        )
+    if not fig.data:
+        st.info("Nothing to draw: " + "; ".join(f"{catalog[sid].label}, {why}" for sid, why in view.missing.items())
+                + ". The next refresh fetches what is not stored yet.")
+        return
+
+    def units(ids: list[str]) -> str | None:
+        return ", ".join(dict.fromkeys(catalog[sid].units for sid in ids if catalog[sid].units)) or None
+
+    fig.update_layout(yaxis=dict(title=units(drawn["left"]), visible=bool(drawn["left"])))
+    if drawn["right"]:
+        fig.update_layout(yaxis2=dict(title=units(drawn["right"]), overlaying="y", side="right", showgrid=False,
+                                      zeroline=False))
+    first = min(s.index[0] for s in view.series.values())
+    last = max(s.index[-1] for s in view.series.values())
+    for start, end in data["recessions"]:
+        end = pd.Timestamp(end) + pd.offsets.MonthEnd(0)
+        if end >= first and pd.Timestamp(start) <= last:
+            # The plot's height, not the left axis's, which is hidden when the right one has every line.
+            fig.add_shape(type="rect", xref="x", yref="paper", x0=start, x1=end, y0=0, y1=1,
+                          fillcolor="grey", opacity=0.18, line_width=0, layer="below")
+    names = [trace.name for trace in fig.data]
+    fig.update_layout(
+        template="plotly_white", hovermode="x unified", xaxis_hoverformat="%d %b %Y", showlegend=len(names) > 1,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+    )
+    charts.readable(fig, height=height + (charts.legend_height(names, per_row) if len(names) > 1 else 0))
+    fig.update_layout(legend_font_size=charts.LEGEND_FONT, hoverlabel_font_size=charts.LEGEND_FONT)
+    if both:  # after readable, which makes every axis black: a scale in its line's colour, where it has one line
+        for s, axis in zip(SIDES, ("yaxis", "yaxis2")):
+            if len(drawn[s]) == 1:
+                color = charts.series_line(slot[drawn[s][0]])["color"]
+                fig.update_layout({axis: dict(tickfont_color=color, title_font_color=color)})
+    st.plotly_chart(fig, width="stretch", key=f"macro_compare_figure_{plot['id']}")
+
+    latest = [f"{catalog[sid].label} {format_value(float(view.series[sid].iloc[-1]), catalog[sid].units)} "
+              f"({_period(view.series[sid].index[-1], catalog[sid].frequency)})" for sid in drawn["left"] + drawn["right"]]
+    notes = ["Latest: " + "; ".join(latest) + "."]
+    if view.missing:
+        notes.append("Not drawn: " + "; ".join(f"{catalog[sid].label}, {why}" for sid, why in view.missing.items())
+                     + ".")
+    if twice:
+        notes.append(f"On the left axis already, so not on the right too: {_listed([catalog[s].label for s in twice])}.")
+    st.caption(" ".join(notes))
+
+
+def _compare_card(plot: dict, preset: str, height: int, per_row: int) -> None:
+    plot_id = plot["id"]
+    with st.container(border=True):
+        head = st.container(horizontal=True, vertical_alignment="bottom", gap="small")
+        for s in SIDES:
+            key = f"macro_compare_{s}_{plot_id}"
+            # The plot's own list, the first time it is drawn and when the page is opened again,
+            # by which time Streamlit has forgotten the widget; after that the widget keeps it.
+            if key not in st.session_state:
+                st.session_state[key] = list(plot[s])
+            plot[s] = head.multiselect(
+                f"{s.title()} axis", COMPARE_OPTIONS, key=key, format_func=lambda sid: catalog[sid].label,
+                max_selections=COMPARE_PER_AXIS, placeholder="Type to search the macro series",
+            )
+        head.button("", icon=":material/close:", key=f"macro_compare_remove_{plot_id}", help="Remove this plot",
+                    on_click=_remove_compare, args=(plot_id,), type="tertiary")
+        if plot["left"] or plot["right"]:
+            _compare_chart(plot, preset, height, per_row)
+        else:
+            st.caption("Pick a series for each axis to compare them.")
+
+
+@st.fragment  # a pick reruns these plots only
+def _compare_section() -> None:
+    st.subheader("Compare")
+    st.caption(
+        "Any of the catalog's macro series, scorecard or not, on one chart with a scale on each side: "
+        "each as the scorecard reads it, so a name ending in YoY is the change over a year. The two scales "
+        "are independent, so where the lines cross or meet means nothing; compare their turns and trends. "
+        "Shaded: NBER recessions."
+    )
+    controls = st.container(horizontal=True, vertical_alignment="bottom", gap="medium")
+    preset = controls.segmented_control(
+        "Time range", charts.RANGES, default=COMPARE_RANGE, required=True, key="compare_range", bind="query-params"
+    )
+    # One by default: a chart with a scale on each side needs the width.
+    per_row = controls.segmented_control(
+        "Charts per row", (1, 2, 3), default=1, required=True, key="compare_per_row", bind="query-params"
+    )
+    chart_height = controls.segmented_control(
+        "Chart height", tuple(charts.HEIGHTS), default="Medium", required=True, key="compare_height",
+        bind="query-params",
+    )
+    plots = st.session_state[COMPARE]
+    for n in range(len(plots) + 1):  # one cell more, for the button that adds a plot
+        if n % per_row == 0:
+            cells = st.columns(per_row)  # a row per group, so neighbours line up at the top
+        with cells[n % per_row]:
+            if n < len(plots):
+                _compare_card(plots[n], preset, charts.HEIGHTS[chart_height], per_row)
+            else:
+                st.button("Add plot", icon=":material/add:", key="macro_compare_add", on_click=_add_compare,
+                          width="stretch")
+    kept = [f"{','.join(p['left'])}~{','.join(p['right'])}" for p in plots if p["left"] or p["right"]]
+    if kept:
+        st.query_params[COMPARE_URL] = kept
+    elif COMPARE_URL in st.query_params:
+        del st.query_params[COMPARE_URL]
+
+
+_compare_section()
+
+# ==========================================================================================
 # Regime
 # ==========================================================================================
 
