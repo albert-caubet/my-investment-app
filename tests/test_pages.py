@@ -754,7 +754,173 @@ def test_a_usd_total_is_also_shown_in_euros(canned):
     at.selectbox(key="tx_currency").select("USD")
     at.button(key="calculate_total").click().run()
     assert _metric_value(at, "Total cost") == "1,000.00 USD"
-    assert any("€854.70 at FX 1.1700" in c.value for c in at.caption)
+    assert any("€854.70 at FX 1.1700 USD per EUR" in c.value for c in at.caption)
+
+
+# --- transactions: the FX override -------------------------------------------
+
+
+def _usd_trade(at: AppTest) -> AppTest:
+    """$1,000 even, 10 at 100 with no fees, so every euro amount can be checked by hand."""
+    at = _trade(at, fees=0.0)
+    at.selectbox(key="tx_currency").select("USD")
+    return at.run()
+
+
+def _turn(at: AppTest) -> AppTest:
+    return at.button(key="tx_fx_turn").click().run()
+
+
+def _saved(canned) -> dict:
+    (doc, *_), = canned["synced"]
+    return doc
+
+
+def test_fetch_fx_puts_the_close_of_the_transaction_date_in_the_override(canned, monkeypatch):
+    asked = []
+    saturday, friday = date(2026, 11, 14), date(2026, 11, 13)
+
+    def fetch_close_on(symbol, day):
+        asked.append((symbol, day))
+        return 1.1050212383270264, friday  # as Yahoo sends it, single precision
+
+    monkeypatch.setattr(md, "fetch_close_on", fetch_close_on)
+    at = _usd_trade(_transactions_page(_app().run()))
+    at.date_input(key="tx_date").set_value(saturday).run()
+    assert at.button(key="tx_fx_fetch").label == "Fetch EUR to USD"
+    at.button(key="tx_fx_fetch").click().run()
+
+    assert not at.exception and not at.error
+    assert asked == [("EURUSD=X", saturday)]
+    assert at.number_input(key="tx_fx").value == 1.105  # to the box's four decimals: what it shows is what is used
+    assert any("Close of 2026-11-13 on EURUSD=X: 1 EUR = 1.105021 USD." in c.value for c in at.caption)
+
+    at.button(key="calculate_total").click().run()
+    assert any("€904.98 at FX 1.1050 USD per EUR." in c.value for c in at.caption)  # $1,000 / 1.105, by hand
+    at = _turn(at)
+    assert any("€904.98 at FX 0.904977 EUR per USD." in c.value for c in at.caption)  # $1,000 x 0.904977
+
+
+def test_fetch_fx_without_a_date_takes_today_s_rate(canned, monkeypatch):
+    asked = []
+    monkeypatch.setattr(md, "fetch_close_on", lambda symbol, day: asked.append(day) or (1.25, day))
+    at = _usd_trade(_transactions_page(_app().run()))
+    at.date_input(key="tx_date").set_value(None).run()
+    at.button(key="tx_fx_fetch").click().run()
+    assert asked == [date.today()]
+    assert at.number_input(key="tx_fx").value == 1.25
+
+
+def test_a_fetched_rate_is_saved_as_yahoo_s(canned, monkeypatch):
+    monkeypatch.setattr(md, "fetch_close_on", _closes({"EURUSD=X": 1.25}))
+    at = _usd_trade(_transactions_page(_app().run()))
+    at.button(key="tx_fx_fetch").click().run()
+    at.button(key="save_trade").click().run()
+    doc = _saved(canned)
+    assert doc["fx_rate"] == 1.25 and doc["fx_source"] == "yahoo"
+    assert doc["cost_eur"] == pytest.approx(800.0)
+
+
+def test_a_failed_fetch_says_so_and_leaves_the_override_alone(canned, monkeypatch):
+    monkeypatch.setattr(md, "fetch_close_on", _closes({}))
+    at = _usd_trade(_transactions_page(_app().run()))
+    at.number_input(key="tx_fx").set_value(1.2).run()
+    at.button(key="tx_fx_fetch").click().run()
+    assert not at.exception
+    assert any("No EURUSD rate found" in e.value for e in at.error)
+    assert at.number_input(key="tx_fx").value == 1.2
+
+
+def test_the_override_can_be_entered_as_eur_per_usd(canned):
+    at = _usd_trade(_transactions_page(_app().run()))
+    assert at.number_input(key="tx_fx").label.startswith("FX override (USD per 1 EUR,")
+    at = _turn(at)
+    assert at.number_input(key="tx_fx").label.startswith("FX override (EUR per 1 USD,")
+    assert at.button(key="tx_fx_fetch").label == "Fetch USD to EUR"
+
+    at.number_input(key="tx_fx").set_value(0.8).run()
+    at.button(key="calculate_total").click().run()
+    assert any("€800.00 at FX 0.8000 EUR per USD." in c.value for c in at.caption)
+    at.button(key="save_trade").click().run()
+    doc = _saved(canned)
+    assert doc["fx_rate"] == 1.25  # stored as USD per EUR, like every other rate
+    assert doc["fx_source"] == "manual"
+    assert doc["cost_eur"] == pytest.approx(800.0)
+    assert canned["synced"][0][2] == pytest.approx(1700.0)
+    assert any("(FX 0.8000 EUR per USD, manual)" in s.value for s in at.success)
+
+
+@pytest.mark.parametrize("turned, typed", [(False, 1.17), (True, 0.8547)])
+def test_either_way_round_books_the_same_cost_to_the_cent(canned, turned, typed):
+    at = _usd_trade(_transactions_page(_app().run()))
+    if turned:
+        at = _turn(at)
+    at.number_input(key="tx_fx").set_value(typed).run()
+    at.button(key="save_trade").click().run()
+    doc = _saved(canned)
+    assert doc["fx_rate"] == pytest.approx(1.17, abs=1e-4)
+    assert round(doc["cost_eur"], 2) == 854.70  # $1,000 / 1.17, and $1,000 x 0.8547
+
+
+def test_turning_the_override_around_keeps_the_rate_exactly(canned):
+    at = _usd_trade(_transactions_page(_app().run()))
+    at = _turn(at)
+    at.number_input(key="tx_fx").set_value(0.851).run()  # 1 / (1 / 0.851) is not 0.851 in floats
+    at.button(key="calculate_total").click().run()
+    at = _turn(at)
+    assert at.number_input(key="tx_fx").value == 1 / 0.851
+    assert any("€851.00 at FX 1.175088 USD per EUR." in c.value for c in at.caption)  # the total stays
+    at = _turn(at)
+    assert at.number_input(key="tx_fx").value == pytest.approx(0.851, abs=1e-15)
+    at.button(key="save_trade").click().run()
+    assert _saved(canned)["fx_rate"] == 1 / 0.851  # as if typed and saved without turning
+
+
+def test_fetching_the_other_way_round_gives_eur_per_usd(canned, monkeypatch):
+    monkeypatch.setattr(md, "fetch_close_on", _closes({"EURUSD=X": 1.1649999618530273}))
+    at = _turn(_usd_trade(_transactions_page(_app().run())))
+    at.button(key="tx_fx_fetch").click().run()
+    assert at.number_input(key="tx_fx").value == 0.8584  # 1 / 1.165, to four decimals
+    assert any("on EURUSD=X: 1 EUR = 1.1650 USD." in c.value for c in at.caption)
+    at.button(key="calculate_total").click().run()
+    assert any("€858.40 at FX 0.8584 EUR per USD." in c.value for c in at.caption)  # $1,000 x 0.8584, by hand
+
+    at = _turn(_turn(at))
+    assert at.number_input(key="tx_fx").value == pytest.approx(0.8584, abs=1e-15)
+    at.button(key="save_trade").click().run()
+    doc = _saved(canned)
+    assert doc["fx_rate"] == 1 / 0.8584 and doc["fx_source"] == "yahoo"  # still Yahoo's after turning
+    assert doc["cost_eur"] == pytest.approx(858.40)
+
+
+def test_a_fetched_rate_goes_when_the_date_changes_and_a_typed_one_stays(canned, monkeypatch):
+    monkeypatch.setattr(md, "fetch_close_on", _closes({"EURUSD=X": 1.25}))
+    at = _usd_trade(_transactions_page(_app().run()))
+    at.button(key="tx_fx_fetch").click().run()
+    at.date_input(key="tx_date").set_value(date(2026, 1, 5)).run()
+    assert at.number_input(key="tx_fx").value == 0.0  # looked up for the new date on saving
+    assert not any("Close of" in c.value for c in at.caption)
+
+    at.number_input(key="tx_fx").set_value(1.2).run()
+    at.date_input(key="tx_date").set_value(date(2026, 1, 6)).run()
+    assert at.number_input(key="tx_fx").value == 1.2
+
+
+def test_the_way_round_stays_for_the_next_trade(canned):
+    at = _turn(_usd_trade(_transactions_page(_app().run())))
+    at.number_input(key="tx_fx").set_value(0.8).run()
+    at.button(key="save_trade").click().run()
+    assert not at.exception
+    assert at.number_input(key="tx_fx").value == 0.0
+    assert at.number_input(key="tx_fx").label.startswith("FX override (EUR per 1 USD,")
+
+
+def test_a_euro_trade_has_no_rate_to_fetch_or_turn(canned):
+    at = _transactions_page(_app().run())
+    assert at.selectbox(key="tx_currency").value == "EUR"
+    assert at.number_input(key="tx_fx").disabled
+    assert at.button(key="tx_fx_fetch").disabled and at.button(key="tx_fx_turn").disabled
+    assert at.button(key="tx_fx_fetch").label == "Fetch EUR to USD"
 
 
 # --- transactions: Dry Powder sync -------------------------------------------
@@ -958,6 +1124,26 @@ def test_a_legacy_document_can_be_opened_and_upgraded(canned):
     assert doc_id == "legacy_schema"
     assert doc["price_nominal"] == 50.0 and "price" not in doc
     assert doc["currency"] == "EUR" and doc["schema_version"] == 2
+
+
+def test_an_unreadable_document_still_opens_in_the_edit_form_to_be_mended(canned):
+    """The fixture row has a zero quantity, so no position can use it: the reason it needs the form."""
+    at = _transactions_page(_app().run())
+    log = at.dataframe[0].value
+    row = int(log.index[log["_doc_id"] == "unusable_no_qty"][0])
+    at = _select_history_row(at, row)
+    assert not at.exception
+    assert at.date_input(key="edit_date_unusable_no_qty").value == date(2025, 5, 1)  # read from the raw field
+    assert at.number_input(key="edit_price_unusable_no_qty").value == pytest.approx(10.0)
+
+    at.number_input(key="edit_quantity_unusable_no_qty").set_value(4.0)
+    at.button(key="edit_save_unusable_no_qty").click()
+    at = _select_history_row(at, row)
+    assert not at.exception
+    (doc_id, doc), = canned["updated"]
+    assert doc_id == "unusable_no_qty"
+    assert doc["date"] == "2025-05-01"  # kept, not replaced by today
+    assert doc["quantity"] == 4.0 and doc["cost_eur"] == pytest.approx(40.0)
 
 
 # --- cash accounts and portfolio design --------------------------------------

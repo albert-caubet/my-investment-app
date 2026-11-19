@@ -31,6 +31,10 @@ and sells, and see valuation and performance in EUR.
     without its exchange (P911) becomes its listing (P911.DE).
   - Fetch Price takes the unadjusted close of the trade date, or of the last day before it
     that traded. Calculate total shows the cost or proceeds, fees included.
+  - The FX override of a USD trade is USD per 1 EUR, or EUR per 1 USD after the swap button
+    beside it; either way it is stored as USD per 1 EUR, and swapping back and forth never
+    changes the rate. Fetch EUR to USD (USD to EUR once swapped) fills it with that day's
+    EURUSD close, or the last one before it, to the four decimals the box shows.
   - Saving moves the trade's cash in a Dry Powder account, unless the sync is unticked: a
     buy takes its cost, a sell adds its proceeds, written together with the transaction.
     A buy the account cannot cover is refused. Editing or deleting a transaction does not

@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 
 import pandas as pd
 import streamlit as st
@@ -46,7 +46,8 @@ KIND_CATEGORIES = {
 }
 
 #: The fields that describe one trade, emptied once it is saved. The date, category, action
-#: and currency stay for the next one, and so does the Dry Powder sync.
+#: and currency stay for the next one, and so do the Dry Powder sync and the way round the
+#: FX override is entered.
 TRADE_FIELDS = {
     "tx_ticker": "", "tx_isin": "", "tx_name": "",
     "tx_quantity": None, "tx_price": None, "tx_fees": 0.0, "tx_fx": 0.0,
@@ -55,7 +56,7 @@ TRADE_FIELDS = {
 if st.session_state.pop("tx_reset", False):
     # Set, not removed: the browser would go on showing the value of a widget whose state is merely gone.
     st.session_state.update(TRADE_FIELDS)
-    for held in ("tx_picked", "tx_listing", "tx_fetched", "tx_total_for"):
+    for held in ("tx_picked", "tx_listing", "tx_fetched", "tx_total_for", "tx_fx_exact", "tx_fx_fetched"):
         st.session_state.pop(held, None)
 
 
@@ -80,8 +81,88 @@ def _trade_fx(currency: str, manual_fx: float, day: date) -> tuple[float | None,
     if currency == pm.BASE_CCY:
         return 1.0, "base"
     if manual_fx > 0:
-        return manual_fx, "manual"
+        fetched = st.session_state.get("tx_fx_fetched")
+        return manual_fx, "yahoo" if fetched and fetched["rate"] == manual_fx else "manual"
     return md.fetch_historical_fx(day.strftime("%Y-%m-%d"), currency), "yahoo"
+
+
+# The FX override is entered either way round: USD per 1 EUR, which is what is stored and
+# used everywhere, or EUR per 1 USD when "tx_fx_inverted" is set. Only the box turns around.
+
+
+def _turned(rate: float) -> float:
+    """A rate the other way round: EUR per 1 USD from USD per 1 EUR, and back. 0, look it up, stays 0."""
+    return 1 / rate if rate > 0 else 0.0
+
+
+def _override_per_eur() -> float:
+    """The FX override as units of the trade currency per 1 EUR, whichever way round it is entered.
+
+    A rate this page put in the box itself, fetched or turned around, is the very rate it
+    put there: 1 / (1 / x) is a float's width off x for about one rate in eight, and turning
+    the box twice must give back the rate it started with.
+    """
+    shown = st.session_state.get("tx_fx") or 0.0
+    exact = st.session_state.get("tx_fx_exact")
+    if exact and exact["shown"] == shown:
+        return exact["rate"]
+    return _turned(shown) if st.session_state.get("tx_fx_inverted") else shown
+
+
+def _show_rate(rate: float) -> None:
+    """Put a rate in units per 1 EUR into the FX override, the way round it is entered."""
+    shown = _turned(rate) if st.session_state.get("tx_fx_inverted") else rate
+    st.session_state["tx_fx"] = shown
+    st.session_state["tx_fx_exact"] = {"shown": shown, "rate": rate}
+
+
+def _decimals(rate: float) -> str:
+    """Four decimals, or up to six when the rate has them, as a turned-around rate mostly does:
+    1 / 1.0999 is 0.909174, and a euro amount worked out from 0.9092 would be cents off the one shown."""
+    text = f"{rate:.6f}".rstrip("0")
+    return text + "0" * (4 - len(text.partition(".")[2]))
+
+
+def _rate_text(rate: float, currency: str) -> str:
+    """A rate in units of ``currency`` per 1 EUR, written the way round the FX override is entered."""
+    if currency == pm.BASE_CCY:
+        return f"{rate:.4f}"
+    if st.session_state.get("tx_fx_inverted"):
+        return f"{_decimals(_turned(rate))} {pm.BASE_CCY} per {currency}"
+    return f"{_decimals(rate)} {currency} per {pm.BASE_CCY}"
+
+
+def _turn_fx() -> None:
+    rate = _override_per_eur()
+    st.session_state["tx_fx_inverted"] = not st.session_state.get("tx_fx_inverted", False)
+    _show_rate(rate)
+
+
+def _fetch_fx() -> None:
+    currency = st.session_state["tx_currency"]
+    day = st.session_state.get("tx_date") or date.today()
+    symbol = f"{pm.BASE_CCY}{currency}=X"
+    try:
+        # Uncached, unlike the lookup on saving: today's rate is still moving.
+        close, on = md.fetch_close_on(symbol, day)
+    except Exception as exc:
+        st.session_state["tx_fx_error"] = (
+            f"No {pm.BASE_CCY}{currency} rate found up to {day:%Y-%m-%d}: {md.reason(exc)}. Enter the rate by hand."
+        )
+        return
+    # To the box's four decimals, the way round it is entered, as if typed: the rate used is
+    # the one the box shows, so the euro total can be checked by hand.
+    inverted = st.session_state.get("tx_fx_inverted")
+    st.session_state["tx_fx"] = round(_turned(close) if inverted else close, 4)
+    st.session_state.pop("tx_fx_exact", None)
+    st.session_state["tx_fx_fetched"] = {"rate": _override_per_eur(), "close": close, "on": on, "symbol": symbol}
+
+
+def _forget_fetched_fx() -> None:
+    """A fetched rate belongs to one currency on one day. Changing either takes it out of the form; a rate typed over it stays."""
+    fetched = st.session_state.pop("tx_fx_fetched", None)
+    if fetched and _override_per_eur() == fetched["rate"]:
+        _show_rate(0.0)
 
 
 def _clean(field: str) -> str:
@@ -99,6 +180,11 @@ def _forget_fetched_price() -> None:
     fetched = st.session_state.pop("tx_fetched", None)
     if fetched and st.session_state.get("tx_price") == fetched["price"]:
         st.session_state["tx_price"] = None
+
+
+def _date_changed() -> None:
+    _forget_fetched_price()
+    _forget_fetched_fx()
 
 
 def _isin_for(hit: search.Hit, query: str) -> tuple[str, str]:
@@ -224,7 +310,7 @@ dry_powder = [a for a in stored_accounts if a.category != pm.RESERVE_CATEGORY]
 # fields say at that moment, which a form would hold back until it is submitted.
 col1, col2 = st.columns(2)
 with col1:
-    date_input = st.date_input("Transaction Date", value=date.today(), key="tx_date", on_change=_forget_fetched_price)
+    date_input = st.date_input("Transaction Date", value=date.today(), key="tx_date", on_change=_date_changed)
     category = st.selectbox("Asset Category", options=ASSET_CLASSES, key="tx_category")
     typed_ticker = st.text_input(
         "Ticker", key="tx_ticker", placeholder="Ticker, name or ISIN, then Enter", icon=":material/search:",
@@ -248,7 +334,7 @@ with col1:
 
 with col2:
     action = st.selectbox("Action", ["Buy", "Sell"], key="tx_action")
-    currency = st.selectbox("Transaction Currency", SUPPORTED_CCY, key="tx_currency")
+    currency = st.selectbox("Transaction Currency", SUPPORTED_CCY, key="tx_currency", on_change=_forget_fetched_fx)
     st.caption("The currency the cash left your account in.")
 
     if detected and detected != currency:
@@ -290,10 +376,39 @@ with col2:
     fees = st.number_input("Fees", min_value=0.0, step=0.01, key="tx_fees")
     st.caption("Included in the cost basis.")
 
-    manual_fx = st.number_input(
-        f"FX override ({currency} per 1 EUR, 0 = look up automatically)",
-        min_value=0.0, step=0.0001, format="%.4f", key="tx_fx",
+    # Entered as USD per 1 EUR, or as EUR per 1 USD once turned around. A EUR trade has no
+    # rate, so the row is off for one; its buttons name the currency a rate would be for.
+    inverted = st.session_state.get("tx_fx_inverted", False)
+    euro_trade = currency == pm.BASE_CCY
+    fx_ccy = next(c for c in SUPPORTED_CCY if c != pm.BASE_CCY) if euro_trade else currency
+    unit, per = (pm.BASE_CCY, fx_ccy) if inverted else (fx_ccy, pm.BASE_CCY)
+    no_rate = f"A {pm.BASE_CCY} trade needs no exchange rate." if euro_trade else None
+    fx_row = st.container(horizontal=True, vertical_alignment="bottom")
+    fx_row.number_input(
+        f"FX override (none for a {pm.BASE_CCY} trade)" if euro_trade
+        else f"FX override ({unit} per 1 {per}, 0 = look up automatically)",
+        min_value=0.0, step=0.0001, format="%.4f", key="tx_fx", disabled=euro_trade,
     )
+    fx_row.button(
+        "", key="tx_fx_turn", icon=":material/swap_horiz:", on_click=_turn_fx, disabled=euro_trade,
+        help=no_rate or f"Enter the rate as {per} per 1 {unit} instead.",
+    )
+    fx_row.button(
+        f"Fetch {per} to {unit}", key="tx_fx_fetch", on_click=_fetch_fx, disabled=euro_trade,
+        help=no_rate or (
+            f"The {pm.BASE_CCY}{fx_ccy} close of the transaction date, or of the last day before it, from Yahoo Finance."
+        ),
+    )
+    manual_fx = _override_per_eur()
+    fx_error = st.session_state.pop("tx_fx_error", None)
+    if fx_error:
+        st.error(fx_error)
+    fetched_fx = st.session_state.get("tx_fx_fetched")
+    if fetched_fx and manual_fx == fetched_fx["rate"]:
+        st.caption(
+            f"Close of {fetched_fx['on']:%Y-%m-%d} on {fetched_fx['symbol']}: "
+            f"1 {pm.BASE_CCY} = {_decimals(fetched_fx['close'])} {currency}."
+        )
 
 # --- Total ---
 # Kept with what it was calculated from, so a total never outlives a change to any of it.
@@ -315,7 +430,7 @@ if st.session_state.get("tx_total_for") == total_inputs:
     else:
         total_eur = total / total_fx
         if currency != pm.BASE_CCY:
-            st.caption(f"€{total_eur:,.2f} at FX {total_fx:.4f}.")
+            st.caption(f"€{total_eur:,.2f} at FX {_rate_text(total_fx, currency)}.")
 
 # --- Dry Powder ---
 sync = st.checkbox(
@@ -426,7 +541,7 @@ def _save_trade() -> None:
     st.session_state["tx_flash"] = (
         f"Recorded {action} of {quantity:g} {saved_ticker or isin} "
         f"— {moved} €{trade_data['cost_eur']:,.2f} "
-        f"(FX {fx_rate:.4f}, {fx_source}).{synced}"
+        f"(FX {_rate_text(fx_rate, currency)}, {fx_source}).{synced}"
     )
     if not listing_ccy:
         st.session_state["tx_flash_warning"] = (
